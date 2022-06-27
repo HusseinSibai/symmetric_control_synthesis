@@ -212,12 +212,12 @@ def transform_to_frames(low_red, up_red, source_full_low, source_full_up):
 def find_frame(low_red, up_red, target_full_low, target_full_up):
     # reimplement using Z3? does it return a set of states instead of just a counter-example?
     # print(low_red, up_red, target_full_low, target_full_up)
-    if up_red[2] - low_red[2] > target_full_up[2] - target_full_low[2]:
+    if up_red[2] - low_red[2] > target_full_up[2] - target_full_low[2] + 0.01:  # The 0.01 is a tolerance value
         print("find_frame that put ", np.array([low_red, up_red]), " in the target ",
               np.array([target_full_low, target_full_up]), " failed.")
         return float('nan')
 
-    angle_step = 4 * (up_red[2] - low_red[2]);
+    angle_step = 2 * (up_red[2] - low_red[2]);
     rect_curr = [];
     if angle_step > 0:
         # print("int(np.floor(target_full_up[2] - target_full_low[2]) / angle_step): ",
@@ -285,6 +285,13 @@ def find_frame(low_red, up_red, target_full_low, target_full_up):
              y_target_up_1 - (up_red[0]) * math.sin(theta_low_sys) - (up_red[1]) * math.cos(theta_low_sys),
              theta_low_sys]);
 
+        # print("curr_low_1 x: ", (low_red[0]) * math.cos(theta_low_sys) - (low_red[1]) * math.sin(theta_low_sys))
+        # print("curr_low_1 y: ", (low_red[0]) * math.sin(theta_low_sys) + (low_red[1]) * math.cos(theta_low_sys))
+        # print("curr_up_1 x: ", (up_red[0]) * math.cos(theta_low_sys) - (up_red[1]) * math.sin(theta_low_sys))
+        # print("curr_up_1 y: ", (up_red[0]) * math.sin(theta_low_sys) + (up_red[1]) * math.cos(theta_low_sys))
+        # print("target_full_low: ", target_full_low)
+        # print("target_full_up: ", target_full_up)
+
         # sanity_check_transformed_rect = transform_to_frames(low_red, up_red, curr_low_1, curr_up_1);
         # print("curr_low_1, curr_up_1: ", curr_low_1, curr_up_1)
         # print("low_red, up_red: ", low_red, up_red)
@@ -339,16 +346,22 @@ def find_frame(low_red, up_red, target_full_low, target_full_up):
              y_target_up_2 - (up_red[0]) * math.sin(theta_up_sys) - (up_red[1]) * math.cos(theta_up_sys),
              theta_up_sys]);
 
-        curr_low_temp = np.maximum(curr_low_1, curr_low_2);
-        curr_up_temp = np.minimum(curr_up_1, curr_up_2);
-        curr_low = curr_low_temp;
-        curr_low[2] = curr_low_1[2];  # np.minimum(curr_low_temp[2], curr_up_temp[2]);
-        curr_up = curr_up_temp;
-        curr_up[2] = curr_up_2[2];  # np.maximum(curr_low_temp[2], curr_up_temp[2]);
-        # print("curr_low_1: ", curr_low_1, " curr_low_2: ", curr_low_2, " curr_up_1: ", curr_up_1, "curr_up_2: ",
-        #      curr_up_2)
-        if np.all(curr_low <= curr_up):
+        if np.all(curr_low_1 <= curr_up_1) and np.all(curr_low_2 <= curr_up_2) \
+                and do_rects_inter(np.array([curr_low_1[:2], curr_up_1[:2]]),
+                                   np.array([curr_low_2[:2], curr_up_2[:2]])):
+            curr_low_temp = np.maximum(curr_low_1, curr_low_2);
+            curr_up_temp = np.minimum(curr_up_1, curr_up_2);
+            curr_low = curr_low_temp;
+            curr_low[2] = curr_low_1[2];  # np.minimum(curr_low_temp[2], curr_up_temp[2]);
+            curr_up = curr_up_temp;
+            curr_up[2] = curr_up_2[2];  # np.maximum(curr_low_temp[2], curr_up_temp[2]);
+            # print("curr_low_1: ", curr_low_1, " curr_low_2: ", curr_low_2, " curr_up_1: ", curr_up_1, "curr_up_2: ",
+            #      curr_up_2)
+            # if np.all(curr_low <= curr_up):
             rect_curr.append([curr_low.tolist(), curr_up.tolist()]);
+        # else:
+        #    print("find_frame resulted in a rotated rectangle ", np.array([curr_low_1, curr_up_1]),
+        #          " that is non-intersecting the rotated rectangle  ", np.array([curr_low_2, curr_up_2]))
 
     if len(rect_curr) == 0:
         return float('nan');
@@ -400,24 +413,25 @@ def check_rect_empty(rect, allow_zero_dim):
 def do_rects_inter(rect1, rect2):
     assert len(rect1.shape) == 2 and len(rect2.shape) == 2, print("Dimensions of,", rect1, " or ", rect2,
                                                                   " do not match!")
+    '''
     if check_rect_empty(rect1, 1) or check_rect_empty(rect2, 1):
         rect1
         rect2
         print("Do not pass empty rectangles to intersect function")
         return False;
     else:
-        for i in range(rect1.shape[1]):
-            if rect1[0, i] >= rect2[1, i] or rect1[1, i] <= rect2[0, i]:
-                return False;
-    print("do_rects_inter version: the rectangle ", rect1, " intersects the obstacle ", rect2, ". Does it?")
+    '''
+    for i in range(rect1.shape[1]):
+        if rect1[0, i] > rect2[1, i] + 0.01 or rect1[1, i] + 0.01 < rect2[0, i]:
+            return False;
     return True;
 
 
 def does_rect_contain(rect1, rect2):  # does rect2 contains rect1
     for i in range(rect1.shape[1]):
         if rect1[0, i] + 0.01 < rect2[0, i] or rect1[1, i] - 0.01 > rect2[1, i]:
-            # print(rect2, " does not contain ", rect1, " since ", rect1[0, i], "<", rect2[0, i], " or ", rect1[1, i],
-            #      ">", rect2[1, i])
+            print(rect2, " does not contain ", rect1, " since ", rect1[0, i], "<", rect2[0, i], " or ", rect1[1, i],
+                  ">", rect2[1, i])
             return False
     return True
 
@@ -615,6 +629,7 @@ def build_unified_abstraction(Symbolic_reduced, state_dimensions):
             transformed_rect = transform_to_frame(np.array([Symbolic_reduced[s_ind, u_ind, np.arange(n), -1],
                                                             Symbolic_reduced[s_ind, u_ind, n + np.arange(n), -1]]),
                                                   transformation_vec[0, 0, :]);
+
             '''
             print("transformation_vec: ", transformation_vec)
             print("specific center: ", specific_center)
@@ -648,9 +663,12 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
     discovered_rect = [];  # a list version of rtree_idx3d
     obstacles_intersecting_rect = [];
 
+    # tracking_rtree_idx3d = index.Index('3d_index_tracking', properties=p);
+    tracking_rect_global_cntr = 0;
+    tracking_rects = [];  # this should contain also the corresponding control and the abstract discrete state.
+
     # rtree_idx3d_control = index.Index('3d_index_control', properties=p);
 
-    '''
     abstract_rect_global_cntr = 0;
     abstract_rtree_idx3d = index.Index('3d_index_abstract',
                                        properties=p);  # contains the reachsets of the abstract system.
@@ -663,10 +681,14 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
                                                                     abstract_rect_up[1], abstract_rect_up[2]),
                                         obj=(s_ind, u_ind));
             abstract_rect_global_cntr = abstract_rect_global_cntr + 1;
-    '''
 
     unified_reachable_sets, unifying_transformation_list = build_unified_abstraction(Symbolic_reduced,
                                                                                      state_dimensions);
+
+    # TODO in the case of the existence of non-symmetric coordinates, the following line may need to be changed to be
+    #  the max over all the radii of the unified reachable sets over all cells in the grid over the
+    #  non-symmetric coordinates
+    init_radius = unified_reachable_sets[-1][1, :] - unified_reachable_sets[-1][0, :];
 
     plt.figure("Reduced coordinates with transformed reachable sets")
     color = 'orange'
@@ -710,9 +732,9 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
 
     # defining the z3 solver that we'll use to check if a rectangle is in a set of rectangles
     # cur_solver = Solver();
-    # var_dict = [];
-    # for dim in range(n):
-    #    var_dict.append(Real("x" + str(dim)));
+    var_dict = [];
+    for dim in range(n):
+        var_dict.append(Real("x" + str(dim)));
 
     '''
     for rect_ind in range(Target_low.shape[0]):
@@ -772,8 +794,9 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
     sampling_rectangle = np.array([sampling_rectangle_low, sampling_rectangle_up]);
     '''
     sampling_rectangle = np.array([X_low, X_up]);
+
     while itr < num_trials:  # or len(initial_sets_to_explore):
-        targets_temp = [];
+        # targets_temp = [];
         progress_indicator = False;
         useless = True;
         while useless and itr < num_trials:  # or len(initial_sets_to_explore)):
@@ -786,6 +809,7 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
             # itr = 0;
             # sampled_state = initial_sets_to_explore.pop(random.randint(0, len(initial_sets_to_explore) - 1));
 
+            # if len(tracking_rects) == 0:
             hit = list(rtree_idx3d.nearest((sampled_state[0], sampled_state[1], sampled_state[2],
                                             sampled_state[0], sampled_state[1], sampled_state[2]), 1,
                                            objects=True));
@@ -808,6 +832,17 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
             # print("Nearest rectangle after enlarging: ", nearest_rect, " and before enlarging: ", );
             useless = does_rect_contain(np.array([sampled_state, sampled_state]), nearest_rect);
             if not useless:
+                '''
+                rect = nearest_rect;
+                hits = list(rtree_idx3d.intersection((rect[0,0], rect[0,1], rect[0,2],
+                                                rect[1, 0], rect[1, 1], rect[1, 2]),
+                                               objects=True));
+                union_rect = get_convex_union([np.array([hit.bbox[:n],hit.bbox[n:]]) for hit in hits]);
+                rtree_idx3d.insert(rect_global_cntr, (union_rect[0, 0], union_rect[0, 1], union_rect[0, 2],
+                                                      union_rect[1, 0], union_rect[1, 1], union_rect[1, 2]),
+                                   obj=(s_ind, u_ind, 1));
+                rect_global_cntr +=1;
+                '''
                 # check if it belongs to the obstacles
                 for i in range(Obstacle_up.shape[0]):  # and np.any(rect_curr):
                     rect_obs = np.array([Obstacle_low[i, :], Obstacle_up[i, :]]);
@@ -900,7 +935,7 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
             # print("path_state: ", sampled_state + step_idx * path_vector)
             path.append(sampled_state + step_idx * path_vector);
 
-        # nearest_poly = pc.box2poly(nearest_rect.T);
+        nearest_poly = pc.box2poly(nearest_rect.T);
 
         # Hussein: we might need to steer the system to there, can we check if there is a control input with a
         # reachable set that intersects the line from the center of the nearest rectangle to the sampled point?
@@ -911,22 +946,140 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
                                   path_state[0] + 0.01, path_state[1] + 0.01, path_state[2] + 0.01)) > 0:
                 continue
             # print("path state: ", path_state)
-            # abstract_nearest_poly = transform_poly_to_abstract(nearest_poly, path_state);
-            # abstract_nearest_rect = np.column_stack(abstract_nearest_poly.bounding_box).T;
-            # hits = list(abstract_rtree_idx3d.intersection(
-            #    (abstract_nearest_rect[0, 0], abstract_nearest_rect[0, 1], abstract_nearest_rect[0, 2],
-            #     abstract_nearest_rect[1, 0], abstract_nearest_rect[1, 1], abstract_nearest_rect[1, 2]),
-            #    objects=True));
-            # hits = [np.array([hit.bbox[:n], hit.bbox[n:]]) for hit in hits];
+            abstract_nearest_poly = transform_poly_to_abstract(nearest_poly, path_state);
+            abstract_nearest_rect = np.column_stack(abstract_nearest_poly.bounding_box).T;
+            hits = list(abstract_rtree_idx3d.nearest(
+                (abstract_nearest_rect[0, 0], abstract_nearest_rect[0, 1], abstract_nearest_rect[0, 2],
+                 abstract_nearest_rect[1, 0] + 0.01, abstract_nearest_rect[1, 1] + 0.01, abstract_nearest_rect[1, 2]
+                 + 0.01), 1, objects=True));
+            u_ind = hits[0].id[1];
+            # this is the control that corresponds to the reachable set that is nearest to
+            # the nearest target set # [np.array([hit.bbox[:n], hit.bbox[n:]]) for hit in hits];
             # print("Number of symbolic control signals that can drive the system from state ", path_state,
             #      " to the box ", nearest_rect, " is ", len(hits))
             # for hit in hits:
             # rects_curr = find_frame(hit.bbox[:n], hit.bbox[n:],
             #                        nearest_rect[0, :], nearest_rect[1, :]);
             # TODO: change the following line to a for loop that iterates over all abstract states.
-            rects_curr = find_frame(unified_reachable_sets[0][0, :], unified_reachable_sets[0][1, :],
-                                    nearest_rect[0, :], nearest_rect[1, :]);
+            # rects_curr = find_frame(unified_reachable_sets[0][0, :], unified_reachable_sets[0][1, :],
+            #                        nearest_rect[0, :], nearest_rect[1, :]);
+            rect_curr = np.array([sampled_state - init_radius, sampled_state + init_radius]);
+            tracking_rects.append(rect_curr);
+            # tracking_rtree_idx3d.insert(tracking_rect_global_cntr, (
+            #    rects_curr[0,0], rects_curr[0,1], rects_curr[0,2],
+            #    rects_curr[1, 0], rects_curr[1, 1], rects_curr[1, 2]),
+            #                   obj=(s_ind, u_ind, 1));
+            tracking_rect_global_cntr += 1;
+            # TODO: implement an RRT that grows the
+            while tracking_rect_global_cntr > 0:
+                # check if the last rect in tracking_rects is covered
+                hits = list(rtree_idx3d.intersection((rect_low[0], rect_low[1], rect_low[2],
+                                                      rect_up[0], rect_up[1], rect_up[2]),
+                                                     objects=True));
+                # inter_num = rtree_idx3d.count((rect_low[0], rect_low[1], rect_low[2],
+                #                               rect_up[0], rect_up[1], rect_up[2]));
+                hits = [np.array([hit.bbox[:n], hit.bbox[n:]]) for hit in hits];
+                intersection_time += time.time() - time_before;
+                cur_solver.reset();
+                inter_num = len(hits);
+                if inter_num >= 20:
+                    sampled_indices = np.linspace(0, len(hits), num=20, endpoint=False).astype(int);
+                    hits = np.array(hits)[sampled_indices];
+                cur_solver = add_rects_to_solver(hits, var_dict, cur_solver);
+                # print("rectangle being searched for:", rect_curr[j, :, :])
+                # print("hits: ", [hit.bbox for hit in hits])
 
+                # print("hits len", len(hits))
+                time_before = time.time();
+                # not_useful = len(hits) > 0 and do_rects_list_contain(rect_curr[j, :, :],
+                #                                                     [hit.bbox for hit in hits]);
+                rrt_done = inter_num > 0 and do_rects_list_contain_smt(tracking_rects[-1], var_dict, cur_solver);
+                # rrt_done = do_rects_list_contain_smt(tracking_rects[-1], var_dict=var_dict, cur_solver=cur_solver);
+                if not rrt_done:
+                    # here we use a simple version of RRT to find a path from the sampled state towards rtree_idx3d.
+                    sampled_state = sampling_rectangle[0, :] + np.array([random.random() * ub for ub in
+                                                                         sampling_rectangle[1, :].tolist()]);
+                    hits = list(rtree_idx3d.nearest(
+                        (sampled_state[0, 0], sampled_state[0, 1], sampled_state[0, 2],
+                         sampled_state[1, 0] + 0.01, sampled_state[1, 1] + 0.01,
+                         sampled_state[1, 2] + 0.01), 1, objects=True));
+                    nearest_rect = np.array([hits[0].bbox[:n], hits[0].bbox[n:]]);  # TODO: this should be changed if
+                    # number of nearest rectangles in the previous command is larger than 1.
+                    nearest_poly = pc.box2poly(nearest_rect.T);
+                    # if rtree_idx3d.count((sampled_state[0], sampled_state[1], sampled_state[2],
+                    #                      sampled_state[0] + 0.01,  sampled_state[1] + 0.01, sampled_state[2] + 0.01)) > 0:
+                    #    continue
+                    # print("path state: ", path_state)
+                    abstract_nearest_poly = transform_poly_to_abstract(nearest_poly, rect_curr);
+                    abstract_nearest_rect = np.column_stack(abstract_nearest_poly.bounding_box).T;
+                    hits = list(abstract_rtree_idx3d.nearest(
+                        (abstract_nearest_rect[0, 0], abstract_nearest_rect[0, 1], abstract_nearest_rect[0, 2],
+                         abstract_nearest_rect[1, 0] + 0.01, abstract_nearest_rect[1, 1] + 0.01,
+                         abstract_nearest_rect[1, 2]
+                         + 0.01), 1, objects=True));
+                    s_ind = hits[0].id[0];
+                    u_ind = hits[0].id[1];
+                    reachable_set = [];
+                    for t_ind in range(Symbolic_reduced.shape[3]):
+                        reachable_set.append(transform_to_frames(Symbolic_reduced[s_ind, u_ind, np.arange(n), t_ind],
+                                                                 Symbolic_reduced[
+                                                                     s_ind, u_ind, n + np.arange(n), t_ind],
+                                                                 tracking_rects[-1][0, :], tracking_rects[-1][1, :]));
+                    # check if the reachable set intersects the unsafe sets.
+                    # if not, define rect_curr to be the initial set of the reachable set.
+                    # below code is for checking
+                    rect_curr = reachable_set[0];  # or tracking_rects[-1];
+                    if np.any(rect_curr[0, :] < X_low):
+                        if np.all(rect_curr[1, :] > X_low):
+                            curr_low = np.maximum(rect_curr[0, :], X_low);
+                        else:
+                            continue
+                    else:
+                        curr_low = rect_curr[0, :];
+                    if np.any(rect_curr[0, :] > X_up) or np.any(rect_curr[1, :] < X_low):
+                        continue
+                    if np.any(rect_curr[1, :] > X_up):
+                        if np.all(rect_curr[0, :] < X_up):
+                            curr_up = np.minimum(rect_curr[1, :], X_up);
+                        else:
+                            continue
+                    else:
+                        curr_up = rect_curr[1, :];
+                    rect_curr = np.array([curr_low, curr_up]);
+                    intersects_obstacle = False;
+                    for reachable_rect in reachable_set:
+                        i = 0
+                        while i < Obstacle_up.shape[0]:  # and np.any(rect_curr):
+                            rect_obs = np.array([Obstacle_low[i, :], Obstacle_up[i, :]]);
+                            if do_rects_inter(reachable_rect,  # TODO: change it back.
+                                              rect_obs):
+                                obstacles_intersecting_rect.append(reachable_rect);
+                                intersects_obstacle = True;
+                                break
+                            i = i + 1;
+                        if intersects_obstacle:
+                            print("The reachable rect ", reachable_rect, " intersects obstacle ", rect_obs, " :/")
+                            break
+                    if not intersects_obstacle:
+                        print("Adding ", rect_curr, " to tracking_rects")
+                        tracking_rect_global_cntr += 1;
+                        tracking_rects.append(rect_curr);
+                else:
+                    for rect in tracking_rects:
+                        rtree_idx3d.insert(rect_global_cntr, (rect[0, 0], rect[0, 1], rect[0, 2],
+                                                              rect[1, 0], rect[1, 1], rect[1, 2]),
+                                           obj=(s_ind, u_ind, 1))  # TODO: this should change to the correct u_ind,
+                        # s_ind
+                    tracking_rects = [];
+                    tracking_rect_global_cntr = 0;
+                    progress_indicator = True;
+
+                # hits = list(rtree_idx3d.intersection(
+                #    (rect_curr_center[0], rect_curr_center[1], rect_curr_center[2],
+                #     rect_curr_center[0] + 0.01, rect_curr_center[1] + 0.01,
+                #     rect_curr_center[2] + 0.01), objects=True));
+
+            rects_curr = np.array([rects_curr]);
             print("rects_curr: ", rects_curr)
             # print("rects_curr_shape: ", rects_curr.shape)
             rects_curr_extended = [];
@@ -958,6 +1111,9 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
                                                   Symbolic_reduced[s_ind, u_ind, n + np.arange(n), t_ind]]),
                                         unifying_transformation_list[s_ind][u_ind],
                                         overapproximate=True));
+
+                            print("The last reachable set ", rects_curr_extended[-1][-1],
+                                  " before the second transformation ");
                             # Second, transform the obtained full reachable set according to the transformation
                             # that sets the last set in the full reachable set to align its center with the center
                             # of the unified reachable set.
@@ -967,6 +1123,10 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
                                     rects_curr_extended[-1][t_ind][1, :],
                                     rects_curr[rect_ind, 0, :],
                                     rects_curr[rect_ind, 1, :]);
+
+                            if not does_rect_contain(rects_curr_extended[-1][-1], nearest_rect):
+                                print("The last reachable set ", rects_curr_extended[-1][-1],
+                                      " is not in the target ", nearest_rect, "!!!!");
 
                             # print("initial_set before transformation: ",
                             #      np.array([rects_curr[rect_ind, 0, :],
@@ -985,9 +1145,6 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
                             # print("transformed_initial_set: ", transformed_initial_set)
                             potential_initial_sets.append(transformed_initial_set);
 
-                            if not does_rect_contain(rects_curr_extended[-1][-1], nearest_rect):
-                                print("The last reachable set ", rects_curr_extended[-1][-1],
-                                      " is not in the target ", nearest_rect, "!!!!");
 
                             # TODO: update the following line to take into account s_ind and thus the non-symmetric
                             #  coordinates.
@@ -1000,6 +1157,7 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
                 # rects_curr = np.array([rects_curr]);  # just to turn it to 3-dimensional array again.
                 # print("rects_curr_extended: ", rects_curr_extended)
                 #  for rect_ind in range(rects_curr_extended.shape[0]):
+                print("potential_initial_sets: ", potential_initial_sets)
                 for idx, reachable_set in enumerate(rects_curr_extended):
                     intersects_obstacle = False;
                     rect_curr = potential_initial_sets[idx];  # reachable_set[0];
@@ -1082,13 +1240,14 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
                                                             smaller_curr_up[2]]]), s_ind, u_ind, nearest_rect));
                                     '''
 
-                                    # This for loop partitions the target to smaller ones to avoid obstacles.
-                                    # TODO: Maybe partitioning the source set might better?
-                                    # print("rect_curr[j, :, :] after: ", rect_curr[j, :, :])
-                                    # print("The rectangle ", rect_curr[j,:,:], " intersects the obstacle ", rect_obs, ". Does it?")
-                                    # obstacles_intersecting_rect.append(rect_curr[j, :, :]);
+                                    # This for loop partitions the target to smaller ones to avoid obstacles. TODO:
+                                    #  Maybe partitioning the source set might better? print("rect_curr[j, :,
+                                    #  :] after: ", rect_curr[j, :, :]) print("The rectangle ", rect_curr[j,:,:],
+                                    #  " intersects the obstacle ", rect_obs, ". Does it?")
+                                    #  obstacles_intersecting_rect.append(rect_curr[j, :, :]);
                                     obstacles_intersecting_rect.append(reachable_rect);
                                     intersects_obstacle = True;
+                                    '''
                                     for dim in range(n):
                                         smaller_target_low = nearest_rect[0, :];
                                         smaller_target_low[dim] = (nearest_rect[0, dim] + nearest_rect[1, dim]) / 2;
@@ -1105,6 +1264,7 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
                                                             smaller_target_up[2]),
                                                            obj=(s_ind, u_ind, 1));
                                         rect_global_cntr += 1;
+                                    '''
                                     break
                                 '''
                                 else:
@@ -1144,7 +1304,7 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
                                 curr_average = np.average(rect_curr[rect_ind, :, :], axis=0);
                                 if rtree_idx3d.count((curr_average[0], curr_average[1], curr_average[2],
                                                       curr_average[0] + 0.01, curr_average[1] + 0.01,
-                                                      curr_average[2] + 0.01)) > 0:
+                                                      curr_average[2] + 0.01)) > 10:
                                     continue
                                 print("Adding ", np.array([curr_low, curr_up]), " to rtree")
                                 rtree_idx3d.insert(rect_global_cntr, (curr_low[0], curr_low[1], curr_low[2],
@@ -1213,6 +1373,17 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
                 rect_global_cntr += 1;
                 # print("The following states are to be explored in the future: ", vertices);
                 # TODO: keep track the list of targets that were not covered yet.
+            else:
+                hits = list(rtree_idx3d.nearest((nearest_rect[0, 0], nearest_rect[0, 1], nearest_rect[0, 2],
+                                                 nearest_rect[1, 0], nearest_rect[1, 1], nearest_rect[1, 2]), 5,
+                                                objects=True));
+                for hit in hits:
+                    enlarged_rect = get_convex_union([np.array([hit.bbox[0:n], hit.bbox[n:]]), nearest_rect]);
+                    rtree_idx3d.insert(rect_global_cntr, (enlarged_rect[0, 0], enlarged_rect[0, 1], enlarged_rect[0, 2],
+                                                          enlarged_rect[1, 0], enlarged_rect[1, 1],
+                                                          enlarged_rect[1, 2]),
+                                       obj=(s_ind, u_ind, 1));
+                    rect_global_cntr += 1;
 
         # if valid_hit:
         #    break
@@ -1375,7 +1546,7 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
                     new_targets_temp.append(targets_temp);
             '''
             ####
-            targets = targets_temp;  # np.array(new_targets_temp);
+            # targets = targets_temp;  # np.array(new_targets_temp);
             # print("targets: ", targets)
             print("intersection_time, contain_time, insert_time, nearest_time)", intersection_time, contain_time,
                   insert_time, nearest_time)
