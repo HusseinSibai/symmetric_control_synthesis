@@ -60,7 +60,7 @@ sym_x[0, 2] = 10;
 
 sym_u = 3 * np.ones((1, n_u));
 
-time_step = np.linspace(0, 10, 10).reshape((1,10));
+time_step = np.linspace(0, 1, 5).reshape((1,5));
 
 state_dimensions = np.zeros((1, n_x));
 
