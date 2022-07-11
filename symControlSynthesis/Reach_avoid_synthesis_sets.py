@@ -738,7 +738,7 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
     # tracking_rtree_idx3d = index.Index('3d_index_tracking', properties=p);
     tracking_rect_global_cntr = 0;
     tracking_rects = [];
-    tracking_abstract_state_control = []; # this tracks the corresponding control and the
+    tracking_abstract_state_control = [];  # this tracks the corresponding control and the
     # abstract discrete state of tracking_rects.
 
     # rtree_idx3d_control = index.Index('3d_index_control', properties=p);
@@ -766,7 +766,7 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
     # TODO in the case of the existence of non-symmetric coordinates, the following line may need to be changed to be
     #  the max over all the radii of the unified reachable sets over all cells in the grid over the
     #  non-symmetric coordinates
-    init_radius = n * [0.1]; # unified_reachable_sets[-1][1, :] - unified_reachable_sets[-1][0, :];
+    init_radius = n * [0.1];  # unified_reachable_sets[-1][1, :] - unified_reachable_sets[-1][0, :];
 
     # plt.figure("Reduced coordinates with transformed reachable sets")
     # color = 'orange'
@@ -995,22 +995,22 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
         nearest_rect_center = np.average(nearest_rect, axis=0);
         # print("nearest_rect_center is: ", nearest_rect_center)
         path = [];
-        path_resolution = 0.1;
+        # path_resolution = 0.1;
         # TODO: make it half the distance from the center of any cell in X to the center
         # of the last reachable set.
         # path_vector = [];
-        num_steps = 50;
         path_distance = np.linalg.norm(sampled_state - nearest_rect_center);
         # for dim in range(nearest_rect_center.shape[0]):
         #    path_vector.append((nearest_rect_center[dim] - sampled_state[dim]) / num_steps);
         path_vector = (sampled_state - nearest_rect_center) / path_distance;  # np.array(path_vector);
         # sampled_state = nearest_rect_center + num_steps * max_reachable_distance * path_vector;
         # print("path distance is: ", path_distance)
-        for step_idx in range(num_steps):  # step_idx in range(math.floor(path_distance / path_resolution)):
+        num_steps = math.ceil(path_distance / max_reachable_distance);
+        for step_idx in range(1, num_steps):  # step_idx in range(math.floor(path_distance / path_resolution)):
             # print("sampled_state: ", sampled_state)
             # print("path_vector: ", step_idx * path_vector)
             # print("path_state: ", sampled_state + step_idx * path_vector)
-            path.append(nearest_rect_center + step_idx * path_vector);
+            path.append(nearest_rect_center + step_idx * max_reachable_distance * path_vector);
 
         # nearest_poly = pc.box2poly(nearest_rect.T);
 
@@ -1058,8 +1058,17 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
             while not rrt_done and sample_cntr < 2 * num_steps:  # this should depend on the step size
                 # here we use a simple version of RRT to find a path from the sampled state towards rtree_idx3d.
                 sample_cntr += 1;
-                sampled_state = sampling_rectangle[0, :] + np.array([random.random() * ub for ub in
-                                                                     sampling_rectangle[1, :].tolist()]);
+                if random.random() < 0.8:  # self.goal_sample_rate:
+                    sampled_state = sampling_rectangle[0, :] + np.array([random.random() * ub for ub in
+                                                                         sampling_rectangle[1, :].tolist()]);
+                else:
+                    # Change this to sample randomly from the targets / rects in rtree_id3d.
+                    #  Actually, I'm already doing that with the nearest rectangle search but the following helps
+                    #  in directing the search towards the original target. Actually, it should be directed larger
+                    # constellations with large sizes.
+                    sampled_state = np.average(np.array([Target_low[0, :].tolist(),
+                                                         Target_up[0, :].tolist()]), axis=0);
+
                 hits = list(rtree_idx3d.nearest(
                     (sampled_state[0], sampled_state[1], sampled_state[2],
                      sampled_state[0] + 0.01, sampled_state[1] + 0.01,
@@ -1167,7 +1176,8 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
                     rect_global_cntr += 1;
                 progress_indicator = True;
             else:
-                print("Maximum number of ", 2 * num_steps, " steps has been taken and the target has not been reached :(")
+                print("Maximum number of ", 2 * num_steps,
+                      " steps has been taken and the target has not been reached :(")
 
             tracking_rects = [];
             tracking_rect_global_cntr = 0;
