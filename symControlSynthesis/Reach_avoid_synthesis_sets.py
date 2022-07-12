@@ -9,12 +9,25 @@ import polytope as pc
 from yices import *
 import random
 import copy
+import os
 
 import matplotlib
 
 matplotlib.use("macOSX")
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle, Polygon
+
+
+class Node:
+    """
+    RRT Node
+    """
+
+    def __init__(self, reachable_set: List[np.array], s_ind: int, u_ind: int):
+        self.reachable_set = reachable_set
+        self.s_ind = s_ind
+        self.u_ind = u_ind
+        self.parent = None
 
 
 def transform_poly_to_abstract(poly: pc.polytope, state: np.array):
@@ -32,28 +45,28 @@ def transform_rect_to_abstract(rect: np.array, state: np.array):
     ang = -1 * state[2];  # psi = 0 is North, psi = pi/2 is east
 
     while ang < 0:
-        ang += 2 * math.pi;
+        ang += 2 * math.pi
     while ang > 2 * math.pi:
-        ang -= 2 * math.pi;
+        ang -= 2 * math.pi
 
     low_red = np.array(
         [(rect[0, 0] - state[0]) * math.cos(ang) -
          (rect[0, 1] - state[1]) * math.sin(ang),
          (rect[0, 0] - state[0]) * math.sin(ang) +
          (rect[0, 1] - state[1]) * math.cos(ang),
-         rect[0, 2] + state[2]]);
+         rect[0, 2] + state[2]])
     up_red = np.array(
         [(rect[1, 0] - state[0]) * math.cos(ang) -
          (rect[1, 1] - state[1]) * math.sin(ang),
          (rect[1, 0] - state[0]) * math.sin(ang) +
          (rect[1, 1] - state[1]) * math.cos(ang),
-         rect[1, 2] + state[2]]);
+         rect[1, 2] + state[2]])
 
     if 0 <= ang <= math.pi / 2:
-        x_bb_up = up_red[0] + (rect[1, 1] - rect[0, 1]) * math.sin(ang);
-        y_bb_up = up_red[1];
-        x_bb_low = low_red[0] - (rect[1, 1] - rect[0, 1]) * math.sin(ang);
-        y_bb_low = low_red[1];
+        x_bb_up = up_red[0] + (rect[1, 1] - rect[0, 1]) * math.sin(ang)
+        y_bb_up = up_red[1]
+        x_bb_low = low_red[0] - (rect[1, 1] - rect[0, 1]) * math.sin(ang)
+        y_bb_low = low_red[1]
     elif math.pi / 2 <= ang <= math.pi:
         x_bb_up = low_red[0];
         y_bb_up = low_red[1] + (rect[1, 0] - rect[0, 0]) * math.cos(ang - math.pi / 2);
@@ -476,17 +489,16 @@ def do_rects_inter(rect1, rect2):
 def does_rect_contain(rect1, rect2):  # does rect2 contains rect1
     for i in range(rect1.shape[1]):
         if rect1[0, i] + 0.01 < rect2[0, i] or rect1[1, i] - 0.01 > rect2[1, i]:
-            print(rect2, " does not contain ", rect1, " since ", rect1[0, i], "<", rect2[0, i], " or ", rect1[1, i],
-                  ">", rect2[1, i])
+            # print(rect2, " does not contain ", rect1, " since ", rect1[0, i], "<", rect2[0, i], " or ", rect1[1, i],
+            #      ">", rect2[1, i])
             return False
     return True
 
 
 def add_rects_to_solver(rects, var_dict, cur_solver):
-    print("Adding the following rectangles to solver: ", rects.shape)
+    # print("Adding the following rectangles to solver: ", rects.shape)
     for rect_ind in range(rects.shape[0]):
         rect = rects[rect_ind, :, :];
-        print(rect)
         c = [];
         for dim in range(rect.shape[1]):
             c.append(var_dict[dim] < rect[0, dim]);
@@ -497,7 +509,7 @@ def add_rects_to_solver(rects, var_dict, cur_solver):
 
 def do_rects_list_contain_smt(rect1, var_dict, cur_solver):
     # adding the rectangle to the z3 solver
-    print("The rectangles in the solver do not contain ", rect1)
+    # print("The rectangles in the solver do not contain ", rect1)
     cur_solver.push();
     for dim in range(rect1.shape[1]):
         cur_solver.add(var_dict[dim] >= rect1[0, dim]);
@@ -735,11 +747,12 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
     discovered_rect = [];  # a list version of rtree_idx3d
     obstacles_intersecting_rect = [];
 
-    # tracking_rtree_idx3d = index.Index('3d_index_tracking', properties=p);
+    tracking_rtree_idx3d = index.Index('3d_index_tracking', properties=p);
     tracking_rect_global_cntr = 0;
-    tracking_rects = [];
+    # tracking_rects = [];
     tracking_abstract_state_control = [];  # this tracks the corresponding control and the
     # abstract discrete state of tracking_rects.
+    # tracking_rrt_nodes = [] # this should replace the previous two variables.
 
     # rtree_idx3d_control = index.Index('3d_index_control', properties=p);
 
@@ -1046,15 +1059,18 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
             # rects_curr = find_frame(unified_reachable_sets[0][0, :], unified_reachable_sets[0][1, :],
             #                        nearest_rect[0, :], nearest_rect[1, :]);
             rect_curr = np.array([path_state - init_radius, path_state + init_radius]);
-            # tracking_rects.append(rect_curr);
-            # tracking_rtree_idx3d.insert(tracking_rect_global_cntr, (
-            #    rects_curr[0,0], rects_curr[0,1], rects_curr[0,2],
-            #    rects_curr[1, 0], rects_curr[1, 1], rects_curr[1, 2]),
-            #                   obj=(s_ind, u_ind, 1));
+            '''
+            tracking_rects.append(rect_curr);
+            tracking_rrt_nodes.append(Node(reachable_set=rect_curr, s_ind=None))
+            tracking_rtree_idx3d.insert(tracking_rect_global_cntr, (
+                rects_curr[0, 0], rects_curr[0, 1], rects_curr[0, 2],
+                rects_curr[1, 0], rects_curr[1, 1], rects_curr[1, 2]),
+                                        obj=(s_ind, u_ind, 1));
+            '''
             # tracking_rect_global_cntr += 1;
             # TODO: implement an RRT that grows the tracking tree then do a backward breadth-first-search
             #  to add the reachable initial sets
-            sample_cntr = 0;
+            sample_cntr = 0
             while not rrt_done and sample_cntr < 2 * num_steps:  # this should depend on the step size
                 # here we use a simple version of RRT to find a path from the sampled state towards rtree_idx3d.
                 sample_cntr += 1;
@@ -1072,8 +1088,20 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
                 hits = list(rtree_idx3d.nearest(
                     (sampled_state[0], sampled_state[1], sampled_state[2],
                      sampled_state[0] + 0.01, sampled_state[1] + 0.01,
-                     sampled_state[2] + 0.01), 1, objects=True));
-                nearest_rect = np.array([hits[0].bbox[:n], hits[0].bbox[n:]]);  # TODO: this should be changed if
+                     sampled_state[2] + 0.01), 1, objects=True))
+                nearest_rect = np.array([hits[0].bbox[:n], hits[0].bbox[n:]])  # TODO: this should be changed if
+                nearest_rect_center = np.average(nearest_rect, axis=0)
+                hits_tracking = list(tracking_rtree_idx3d.nearest(
+                    (nearest_rect_center[0], nearest_rect_center[1], nearest_rect_center[2],
+                     nearest_rect_center[0] + 0.01, nearest_rect_center[1] + 0.01,
+                     nearest_rect_center[2] + 0.01), 1, objects=True))
+                if sample_cntr >= 2:
+                    nearest_tracking_rect = np.array([hits_tracking[0].bbox[:n], hits_tracking[0].bbox[n:]])
+                    nearest_node = hits_tracking[0].object
+                else:
+                    nearest_tracking_rect = rect_curr
+                    nearest_node = None
+
                 # number of nearest rectangles in the previous command is larger than 1.
                 # print("nearest_rect: ", nearest_rect)
                 # nearest_poly = pc.box2poly(nearest_rect.T);
@@ -1099,7 +1127,7 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
                     reachable_set.append(transform_to_frames(Symbolic_reduced[s_ind, u_ind, np.arange(n), t_ind],
                                                              Symbolic_reduced[
                                                                  s_ind, u_ind, n + np.arange(n), t_ind],
-                                                             rect_curr[0, :], rect_curr[1, :]));
+                                                             nearest_tracking_rect[0, :], nearest_tracking_rect[1, :]))
                     # discovered_rect.append(reachable_set[-1]);
                 # check if the reachable set intersects the unsafe sets.
                 # if not, define rect_curr to be the initial set of the reachable set.
@@ -1116,25 +1144,36 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
                             intersects_obstacle = True;
                             break
                         i = i + 1;
-                    if intersects_obstacle:
-                        # print("The reachable rect ", reachable_rect, " intersects obstacle ", rect_obs, " :/")
-                        break
-                if not intersects_obstacle:
-                    # print("Adding ", rect_curr, " to tracking_rects")
-                    tracking_rect_global_cntr += 1;
-                    tracking_rects.append(rect_curr);
-                    tracking_abstract_state_control.append((s_ind, u_ind));
-                    # discovered_rect.append(rect_curr);
-                    # rect_curr = reachable_set[-1];
-                    if np.any(reachable_set[-1][0, :] < X_low) or np.any(reachable_set[-1][0, :] > X_up) \
-                            or np.any(reachable_set[-1][1, :] < X_low) or np.any(reachable_set[-1][1, :] > X_up):
+                    if not intersects_obstacle and np.any(reachable_rect[0, :] < X_low) or np.any(reachable_rect[0, :] > X_up) \
+                            or np.any(reachable_rect[1, :] < X_low) or np.any(reachable_rect[1, :] > X_up):
                         # if np.all(rect_curr[1, :] > X_low):
                         #    curr_low = np.maximum(rect_curr[0, :], X_low);
                         # else:
-                        continue
-                    else:
-                        curr_low = reachable_set[-1][0, :];
-                        curr_up = reachable_set[-1][1, :];
+                        intersects_obstacle = True
+                    if intersects_obstacle:
+                        # print("The reachable rect ", reachable_rect, " intersects obstacle ", rect_obs, " :/")
+                        break
+                    # else:
+                    #    curr_low = reachable_set[-1][0, :];
+                    #    curr_up = reachable_set[-1][1, :];
+                if not intersects_obstacle:
+                    # print("Adding ", rect_curr, " to tracking_rects")
+                    tracking_rect_global_cntr += 1;
+                    new_node = Node(reachable_set=reachable_set, s_ind=s_ind, u_ind=u_ind)
+                    new_node.parent = nearest_node
+                    # tracking_rrt_nodes.append()
+                    # tracking_rrt_nodes[-1].parent = nearest_node
+                    tracking_rtree_idx3d.insert(tracking_rect_global_cntr, (
+                        reachable_set[-1][0, 0], reachable_set[-1][0, 1], reachable_set[-1][0, 2],
+                        reachable_set[-1][1, 0], reachable_set[-1][1, 1], reachable_set[-1][1, 2]),
+                                                obj=new_node);
+                    # TODO: set the parent of the node.
+                    # if len(tracking_rrt_nodes) == 1:
+                    #    tracking_rrt_nodes[-1].parent = None
+                    # tracking_rects.append(rect_curr);
+                    # tracking_abstract_state_control.append((s_ind, u_ind));
+                    # discovered_rect.append(rect_curr);
+                    # rect_curr = reachable_set[-1];
                     # if np.any(reachable_set[-1][0, :] > X_up) or np.any(reachable_set[-1][1, :] < X_low):
                     #    continue
                     # if np.any(rect_curr[1, :] > X_up):
@@ -1144,7 +1183,7 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
                     #        continue
                     # else:
                     #    curr_up = rect_curr[1, :];
-                    rect_curr = np.array([curr_low, curr_up]);
+                    # rect_curr = np.array([curr_low, curr_up]);
                     # check if the last rect in tracking_rects is covered
                     hits = list(
                         rtree_idx3d.intersection(
@@ -1165,22 +1204,39 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
                     cur_solver = add_rects_to_solver(hits, var_dict, cur_solver);
                     # not_useful = len(hits) > 0 and do_rects_list_contain(rect_curr[j, :, :],
                     #                                                     [hit.bbox for hit in hits]);
-                    rrt_done = do_rects_list_contain_smt(tracking_rects[-1], var_dict, cur_solver);
-                    # rrt_done = do_rects_list_contain_smt(tracking_rects[-1], var_dict=var_dict, cur_solver=cur_solver);
+                    rrt_done = do_rects_list_contain_smt(reachable_set[-1], var_dict, cur_solver);
+                    # rrt_done = do_rects_list_contain_smt(tracking_rects[-1], var_dict=var_dict,
+                    # cur_solver=cur_solver);
             if rrt_done:
+                '''
                 for rect in tracking_rects:
                     rtree_idx3d.insert(rect_global_cntr, (rect[0, 0], rect[0, 1], rect[0, 2],
                                                           rect[1, 0], rect[1, 1], rect[1, 2]),
                                        obj=(s_ind, u_ind, 1))  # TODO: this should change to the correct u_ind,
                     discovered_rect.append(rect);
                     rect_global_cntr += 1;
-                progress_indicator = True;
+                '''
+                curr_node = new_node # tracking_rrt_nodes[-1];
+                while curr_node is not None:
+                    rect = curr_node.reachable_set[0];
+                    rtree_idx3d.insert(rect_global_cntr, (rect[0, 0], rect[0, 1], rect[0, 2],
+                                                          rect[1, 0], rect[1, 1], rect[1, 2]),
+                                       obj=(s_ind, u_ind, 1))  # TODO: this should change to the correct u_ind,
+                    discovered_rect.append(rect)
+                    rect_global_cntr += 1
+                    curr_node = curr_node.parent
+                progress_indicator = True
             else:
                 print("Maximum number of ", 2 * num_steps,
                       " steps has been taken and the target has not been reached :(")
 
-            tracking_rects = [];
-            tracking_rect_global_cntr = 0;
+            # tracking_rects = []
+            # tracking_abstract_state_control = []
+            # tracking_rect_global_cntr = 0
+            # os.remove("3d_index_tracking.data")
+            # os.remove("3d_index_tracking.index")
+            tracking_rect_global_cntr = 0
+            # TODO: reset the tracking_rtree or do not add existing rectangles to rtree_idx3d again.
             if rrt_done:
                 break
 
@@ -1650,8 +1706,8 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
             ####
             # targets = targets_temp;  # np.array(new_targets_temp);
             # print("targets: ", targets)
-            print("intersection_time, contain_time, insert_time, nearest_time)", intersection_time, contain_time,
-                  insert_time, nearest_time)
+            # print("intersection_time, contain_time, insert_time, nearest_time)", intersection_time, contain_time,
+            #      insert_time, nearest_time)
         else:
             print('%s\tNo new controllable state has been found in this synthesis iteration\n', time.time() - t_start)
             itr += 1;
