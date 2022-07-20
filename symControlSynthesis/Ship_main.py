@@ -28,9 +28,9 @@ n_x = len(X_up);
 # yaw rate: [-0.1, 0.1] rad / s
 # U_up = [0.18; 0.1; 0.1];
 # U_low = [-0.18; -0.1; -0.1];
-U_up = np.array([0.18, 0.05, 0.1]);
-U_low = np.array([-0.18, -0.05, -0.1]);
-n_u = len(U_up);
+U_up = np.array([0.18, 0.05, 0.1])
+U_low = np.array([-0.18, -0.05, -0.1])
+n_u = len(U_up)
 
 # Disturbance space: current velocity
 W_up = np.array([0.01, 0.01, 0.01]);  # assume low currents around the docks
@@ -60,7 +60,7 @@ sym_x[0, 2] = 10;
 
 sym_u = 3 * np.ones((1, n_u));
 
-time_step = np.linspace(0, 1, 5).reshape((1,5));
+time_step = np.linspace(0, 5, 5).reshape((1,5));
 
 state_dimensions = np.zeros((1, n_x));
 
