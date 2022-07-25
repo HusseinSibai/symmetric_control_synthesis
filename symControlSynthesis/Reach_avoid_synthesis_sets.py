@@ -29,7 +29,8 @@ class Node:
         self.u_ind = u_ind
         self.parent = None
         self.discovered = 0
-        self.id_in_tracking_rtree = -1;
+        self.id_in_tracking_rtree = -1
+        self.uncovered_state = None
 
 
 def transform_poly_to_abstract(poly: pc.polytope, state: np.array):
@@ -512,16 +513,23 @@ def add_rects_to_solver(rects, var_dict, cur_solver):
 def do_rects_list_contain_smt(rect1, var_dict, cur_solver):
     # adding the rectangle to the z3 solver
     # print("The rectangles in the solver do not contain ", rect1)
-    cur_solver.push();
+    cur_solver.push()
     for dim in range(rect1.shape[1]):
-        cur_solver.add(var_dict[dim] >= rect1[0, dim]);
-        cur_solver.add(var_dict[dim] <= rect1[1, dim]);
-    res = cur_solver.check();
-    cur_solver.pop();
+        cur_solver.add(var_dict[dim] >= rect1[0, dim])
+        cur_solver.add(var_dict[dim] <= rect1[1, dim])
+    res = cur_solver.check()
+    cur_solver.pop()
     if res == sat:
-        return False;
+        m = cur_solver.model()
+        uncovered_state_frac = []
+        for var in var_dict:
+            uncovered_state_frac.append(m[var].as_fraction())
+        uncovered_state = []
+        for frac in uncovered_state_frac:
+            uncovered_state.append(float(frac.numerator) / float(frac.denominator))
+        return np.array(uncovered_state)
     # print("rect1: ", rect1, " is already contained by previous rectangles");
-    return True;
+    return None
 
 
 def do_rects_list_contain(rect1, list_rects):  # reimplement using z3
@@ -752,6 +760,14 @@ def build_global_unified_abstraction(Symbolic_reduced, state_dimensions):
 
 def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Target_up,
                                Obstacle_low, Obstacle_up, X_low, X_up, U_low, U_up):
+    n = state_dimensions.shape[1]
+    init_radius = n * [0.5]  # unified_reachable_sets[-1][1, :] - unified_reachable_sets[-1][0, :];
+    itr = 0
+    num_trials = 100
+    target_aiming_prob = 0.8
+    tracking_start_prob = 0.2
+
+
     t_start = time.time()
 
     global_transformation_list, global_unified_reachable_sets = \
@@ -762,7 +778,6 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
     color_initial = 'g'
     color_reach = 'b'
     color_target = 'm'
-    n = state_dimensions.shape[1]
     p = index.Property()
     p.dimension = 3
     p.dat_extension = 'data'
@@ -774,6 +789,7 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
     obstacles_intersecting_rect = []
 
     tracking_rtree_idx3d = index.Index('3d_index_tracking', properties=p)
+    tracking_rect_global_cntr_ids = 0
     tracking_rect_global_cntr = 0
     # tracking_rects = [];
     # tracking_abstract_state_control = []  # this tracks the corresponding control and the
@@ -855,9 +871,6 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
     # TODO in the case of the existence of non-symmetric coordinates, the following line may need to be changed to be
     #  the max over all the radii of the unified reachable sets over all cells in the grid over the
     #  non-symmetric coordinates
-    init_radius = n * [0.5]  # unified_reachable_sets[-1][1, :] - unified_reachable_sets[-1][0, :];
-    itr = 0
-    num_trials = 10000
 
     # plt.figure("Reduced coordinates with transformed reachable sets")
     # color = 'orange'
@@ -899,10 +912,10 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
     nearest_time = 0
 
     # defining the z3 solver that we'll use to check if a rectangle is in a set of rectangles
-    cur_solver = Solver();
-    var_dict = [];
+    cur_solver = Solver()
+    var_dict = []
     for dim in range(n):
-        var_dict.append(Real("x" + str(dim)));
+        var_dict.append(Real("x" + str(dim)))
 
     '''
     for rect_ind in range(Target_low.shape[0]):
@@ -941,10 +954,10 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
         rtree_idx3d.insert(rect_global_cntr, (Target_low[target_idx, 0], Target_low[target_idx, 1],
                                               Target_low[target_idx, 2], Target_up[target_idx, 0],
                                               Target_up[target_idx, 1], Target_up[target_idx, 2]),
-                           obj=(-1, -1, 1));
+                           obj=(-1, -1, 1))
 
     # targets = np.array(targets);
-    print('\n%s\tStart of the control synthesis\n', time.time() - t_start);
+    print('\n%s\tStart of the control synthesis\n', time.time() - t_start)
 
     # initial_sets_to_explore = [];  # contains tuples of initial sets, s_ind, u_ind, and target sets because of which
     # they were partitioned.
@@ -958,18 +971,20 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
     sampling_rectangle_up = np.maximum(sampling_rectangle_up, X_low);
     sampling_rectangle = np.array([sampling_rectangle_low, sampling_rectangle_up]);
     '''
-    sampling_rectangle = np.array([X_low, X_up]);
+    sampling_rectangle = np.array([X_low, X_up])
 
     while itr < num_trials:  # or len(initial_sets_to_explore):
         # targets_temp = [];
-        progress_indicator = False;
-        useless = True;
+        progress_indicator = False
+        useless = True
+        tracking_start = False
         while useless and itr < num_trials:  # or len(initial_sets_to_explore)):
             # print("sampling_rectangle[1,:].tolist(): ", sampling_rectangle, sampling_rectangle[1,:].tolist())
             # if len(initial_sets_to_explore) == 0:
+
             sampled_state = sampling_rectangle[0, :] + np.array(
                 [random.random() * ub for ub in
-                 sampling_rectangle[1, :].tolist()]);  # sample_random_state(X_low, X_up);
+                 sampling_rectangle[1, :].tolist()])  # sample_random_state(X_low, X_up);
 
             # itr = 0;
             # sampled_state = initial_sets_to_explore.pop(random.randint(0, len(initial_sets_to_explore) - 1));
@@ -977,13 +992,13 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
             # if len(tracking_rects) == 0:
             hit = list(rtree_idx3d.nearest((sampled_state[0], sampled_state[1], sampled_state[2],
                                             sampled_state[0], sampled_state[1], sampled_state[2]), 1,
-                                           objects=True));
+                                           objects=True))
             if len(hit) == 0:
-                useless = False;
+                useless = False
                 break
 
             nearest_rect = np.array(
-                [hit[0].bbox[:n], hit[0].bbox[n:]]);  # TODO: change when considering multiple neighbors
+                [hit[0].bbox[:n], hit[0].bbox[n:]])  # TODO: change when considering multiple neighbors
             # hits = list(rtree_idx3d.intersection((nearest_rect[0, 0], nearest_rect[0, 1], nearest_rect[0, 2],
             #                                      nearest_rect[1, 0], nearest_rect[1, 1], nearest_rect[1, 2]),
             #                                     objects=True));
@@ -995,7 +1010,12 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
             #    nearest_rect[0, :] = np.minimum(nearest_rect[0, :], hit.bbox[:n])
             #    nearest_rect[1, :] = np.maximum(nearest_rect[1, :], hit.bbox[n:])
             # print("Nearest rectangle after enlarging: ", nearest_rect, " and before enlarging: ", );
-            useless = does_rect_contain(np.array([sampled_state, sampled_state]), nearest_rect);
+
+            if tracking_rect_global_cntr and random.random() < tracking_start_prob:
+                tracking_start = True
+                break
+
+            useless = does_rect_contain(np.array([sampled_state, sampled_state]), nearest_rect)
             if not useless:
                 '''
                 rect = nearest_rect;
@@ -1010,10 +1030,10 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
                 '''
                 # check if it belongs to the obstacles
                 for i in range(Obstacle_up.shape[0]):  # and np.any(rect_curr):
-                    rect_obs = np.array([Obstacle_low[i, :], Obstacle_up[i, :]]);
+                    rect_obs = np.array([Obstacle_low[i, :], Obstacle_up[i, :]])
                     # TODO: replace this with R-tree intersection call, much faster when many obstacles exist.
                     if does_rect_contain(np.array([sampled_state, sampled_state]), rect_obs):
-                        useless = True;
+                        useless = True
                         # print("Sampled state ", sampled_state, " is not useless.")
                         break
             if useless:
@@ -1026,7 +1046,8 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
                 sampling_rectangle_up = np.maximum(sampling_rectangle_up, X_low);
                 sampling_rectangle = np.array([sampling_rectangle_low, sampling_rectangle_up]);
                 '''
-                itr += 1;
+                itr += 1
+
             '''
             else:
                 # this exists a part of a previously investigated initial set from whcih t
@@ -1075,19 +1096,19 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
                         break
                     itr += 1;
             '''
-        if useless:
+        if useless and not tracking_start:
             print("Couldn't find non-explored state in ", num_trials, " uniformly random samples")
             break
         # if not progress_indicator:
         # steer #
-        nearest_rect_center = np.average(nearest_rect, axis=0);
+        nearest_rect_center = np.average(nearest_rect, axis=0)
         # print("nearest_rect_center is: ", nearest_rect_center)
-        path = [];
+        path = []
         # path_resolution = 0.1;
         # TODO: make it half the distance from the center of any cell in X to the center
         # of the last reachable set.
         # path_vector = [];
-        path_distance = np.linalg.norm(sampled_state - nearest_rect_center);
+        path_distance = np.linalg.norm(sampled_state - nearest_rect_center)
         # for dim in range(nearest_rect_center.shape[0]):
         #    path_vector.append((nearest_rect_center[dim] - sampled_state[dim]) / num_steps);
         path_vector = (sampled_state - nearest_rect_center) / path_distance;  # np.array(path_vector);
@@ -1110,7 +1131,7 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
 
         # valid_hit = False;
 
-        rrt_done = False;
+        rrt_done = False
         for path_state in path:
             # this for loop searches for a good initial point to start the RRT
             # in search for the target
@@ -1136,7 +1157,7 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
             # TODO: change the following line to a for loop that iterates over all abstract states.
             # rects_curr = find_frame(unified_reachable_sets[0][0, :], unified_reachable_sets[0][1, :],
             #                        nearest_rect[0, :], nearest_rect[1, :]);
-            rect_curr = np.array([path_state - init_radius, path_state + init_radius]);
+            rect_curr = np.array([path_state - init_radius, path_state + init_radius])
             '''
             tracking_rects.append(rect_curr);
             tracking_rrt_nodes.append(Node(reachable_set=rect_curr, s_ind=None))
@@ -1154,7 +1175,7 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
                 sample_cntr += 1;
                 # if random.random() < 0.8:  # self.goal_sample_rate:
                 sampled_state = sampling_rectangle[0, :] + np.array([random.random() * ub for ub in
-                                                                     sampling_rectangle[1, :].tolist()]);
+                                                                     sampling_rectangle[1, :].tolist()])
                 # else:
                 #    # Change this to sample randomly from the targets / rects in rtree_id3d.
                 #  Actually, I'm already doing that with the nearest rectangle search but the following helps
@@ -1167,21 +1188,26 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
                     (nearest_rect_center[0], nearest_rect_center[1], nearest_rect_center[2],
                      nearest_rect_center[0] + 0.01, nearest_rect_center[1] + 0.01,
                      nearest_rect_center[2] + 0.01), 1, objects=True))
-                if sample_cntr >= 2 and len(hits_tracking):
+                if (sample_cntr >= 2 or (sample_cntr == 1 and tracking_start)) and len(hits_tracking):
                     nearest_tracking_rect = np.array([hits_tracking[0].bbox[:n], hits_tracking[0].bbox[n:]])
                     nearest_node = hits_tracking[0].object
+                    nearest_tracking_rect_center = copy.deepcopy(nearest_node.uncovered_state)
+                    nearest_tracking_rect = np.array([np.maximum(nearest_tracking_rect_center - init_radius,
+                                                                 nearest_tracking_rect[0, :]),
+                                                      np.minimum(nearest_tracking_rect_center + init_radius,
+                                                                 nearest_tracking_rect[1, :])])
                 else:
+                    nearest_tracking_rect_center = path_state
                     nearest_tracking_rect = rect_curr
                     nearest_node = None
-                nearest_tracking_rect_center = nearest_tracking_rect[0, :] + np.array([random.random() * ub for ub in
-                                                                                       nearest_tracking_rect[1,
-                                                                                       :].tolist()])
-                nearest_tracking_rect = np.array([np.maximum(nearest_tracking_rect_center - init_radius,
-                                                             nearest_tracking_rect[0, :]),
-                                                  np.minimum(nearest_tracking_rect_center + init_radius,
-                                                             nearest_tracking_rect[1, :])])
+
+                # nearest_tracking_rect_center =
+                # nearest_tracking_rect[0, :] + np.array([random.random() * ub for ub in
+                #                                                                       nearest_tracking_rect[1,
+                #                                                                       :].tolist()])
+
                 # np.average(nearest_tracking_rect, axis=0)
-                if random.random() < 0.8:  # self.goal_sample_rate:
+                if random.random() < target_aiming_prob:  # self.goal_sample_rate:
                     hits = list(rtree_idx3d.nearest(
                         (nearest_tracking_rect_center[0], nearest_tracking_rect_center[1],
                          nearest_tracking_rect_center[2],
@@ -1207,11 +1233,11 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
                     (abstract_nearest_rect[0, 0], abstract_nearest_rect[0, 1], abstract_nearest_rect[0, 2],
                      abstract_nearest_rect[1, 0] + 0.01, abstract_nearest_rect[1, 1] + 0.01,
                      abstract_nearest_rect[1, 2]
-                     + 0.01), 1, objects=True));
+                     + 0.01), 1, objects=True))
                 # print("nearest abstract reachable set: ", hits[0].bbox)
-                s_ind = hits[0].object[0];
-                u_ind = hits[0].object[1];
-                reachable_set = [];
+                s_ind = hits[0].object[0]
+                u_ind = hits[0].object[1]
+                reachable_set = []
                 initial_set = nearest_tracking_rect  # np.array([nearest_tracking_rect_center - init_radius,
                 #          nearest_tracking_rect_center + init_radius]);
                 for t_ind in range(Symbolic_reduced.shape[3] - 1): # the last reachable_rect
@@ -1256,17 +1282,6 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
                     #    curr_up = reachable_set[-1][1, :];
                 if not intersects_obstacle:
                     # print("Adding ", rect_curr, " to tracking_rects")
-                    new_node = Node(reachable_set=reachable_set, s_ind=s_ind, u_ind=u_ind)
-                    new_node.parent = nearest_node
-                    new_node.id_in_tracking_rtree = tracking_rect_global_cntr
-                    # tracking_rrt_nodes.append()
-                    # tracking_rrt_nodes[-1].parent = nearest_node
-                    for reachable_rect in reachable_set:
-                        tracking_rtree_idx3d.insert(tracking_rect_global_cntr, (
-                            reachable_rect[0, 0], reachable_rect[0, 1], reachable_rect[0, 2],
-                            reachable_rect[1, 0], reachable_rect[1, 1], reachable_rect[1, 2]),
-                                                    obj=new_node)
-                    tracking_rect_global_cntr += 1
                     # TODO: set the parent of the node.
                     # if len(tracking_rrt_nodes) == 1:
                     #    tracking_rrt_nodes[-1].parent = None
@@ -1296,15 +1311,31 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
                         continue
                     # inter_num = rtree_idx3d.count((rect_low[0], rect_low[1], rect_low[2],
                     #                               rect_up[0], rect_up[1], rect_up[2]));
-                    hits = np.array([np.array([hit.bbox[:n], hit.bbox[n:]]) for hit in hits]);
-                    cur_solver.reset();
+                    hits = np.array([np.array([hit.bbox[:n], hit.bbox[n:]]) for hit in hits])
+                    cur_solver.reset()
                     # if inter_num >= 20:
                     #    sampled_indices = np.linspace(0, len(hits), num=20, endpoint=False).astype(int);
                     #    hits = np.array(hits)[sampled_indices];
-                    cur_solver = add_rects_to_solver(hits, var_dict, cur_solver);
+                    cur_solver = add_rects_to_solver(hits, var_dict, cur_solver)
                     # not_useful = len(hits) > 0 and do_rects_list_contain(rect_curr[j, :, :],
                     #                                                     [hit.bbox for hit in hits]);
-                    rrt_done = do_rects_list_contain_smt(reachable_set[-1], var_dict, cur_solver);
+                    uncovered_state = do_rects_list_contain_smt(reachable_set[-1], var_dict, cur_solver)
+                    rrt_done = uncovered_state is None
+                    if not rrt_done: # only add to the RRT if the last reachable set is not in the target.
+                        new_node = Node(reachable_set=reachable_set, s_ind=s_ind, u_ind=u_ind)
+                        new_node.parent = nearest_node
+                        new_node.id_in_tracking_rtree = tracking_rect_global_cntr_ids
+                        new_node.uncovered_state = copy.deepcopy(uncovered_state)
+                        # tracking_rrt_nodes.append()
+                        # tracking_rrt_nodes[-1].parent = nearest_node
+                        # for reachable_rect in reachable_set:
+                        reachable_rect = reachable_set[-1]
+                        tracking_rtree_idx3d.insert(tracking_rect_global_cntr_ids, (
+                            reachable_rect[0, 0], reachable_rect[0, 1], reachable_rect[0, 2],
+                            reachable_rect[1, 0], reachable_rect[1, 1], reachable_rect[1, 2]),
+                                                    obj=new_node)
+                        tracking_rect_global_cntr += 1
+                        tracking_rect_global_cntr_ids += 1
                     # rrt_done = do_rects_list_contain_smt(tracking_rects[-1], var_dict=var_dict,
                     # cur_solver=cur_solver);
             if rrt_done:
@@ -1316,13 +1347,12 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
                     discovered_rect.append(rect);
                     rect_global_cntr += 1;
                 '''
-                curr_node = new_node  # tracking_rrt_nodes[-1];
                 while curr_node.discovered == 0:
-                    for rect_idx in range(len(curr_node.reachable_set)):
-                        rect = curr_node.reachable_set[rect_idx];
+                    for rect_idx in range(len(reachable_set)):
+                        rect = reachable_set[rect_idx]
                         rtree_idx3d.insert(rect_global_cntr, (rect[0, 0], rect[0, 1], rect[0, 2],
                                                               rect[1, 0], rect[1, 1], rect[1, 2]),
-                                           obj=(curr_node.s_ind, curr_node.u_ind, 1))
+                                           obj=(s_ind, u_ind, 1))
                         if rect_idx == 0:
                             initial_discovered_rect.append(rect)
                         elif rect_idx == len(curr_node.reachable_set) -1:
@@ -1335,6 +1365,7 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
                                                 (curr_node.reachable_set[-1][0, 0], curr_node.reachable_set[-1][0, 1],
                                                  curr_node.reachable_set[-1][0, 2], curr_node.reachable_set[-1][1, 0],
                                                  curr_node.reachable_set[-1][1, 1], curr_node.reachable_set[-1][1, 2]))
+                    tracking_rect_global_cntr -= 1
 
                     ####################################
                     for other_u_ind in range(len(global_transformation_list[s_ind])):
@@ -1407,6 +1438,10 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
                     if not (curr_node is not None and do_rects_list_contain_smt(curr_node.reachable_set[-1], var_dict,
                                                                                 cur_solver)):
                         break
+                curr_node = nearest_node  # tracking_rrt_nodes[-1];
+                reachable_set = curr_node.reachable_set
+                s_ind = curr_node.s_ind
+                u_ind = curr_node.u_ind
                 progress_indicator = True
             else:
                 print("Maximum number of ", 2 * num_steps,
