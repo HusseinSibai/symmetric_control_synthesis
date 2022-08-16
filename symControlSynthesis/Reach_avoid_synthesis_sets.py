@@ -135,68 +135,68 @@ def rotatedRectWithMaxArea(w, h, angle):
 def transform_to_frame(rect: np.array, state: np.array, overapproximate=True):
     # print("rect: ", rect)
     # print("state: ", state)
-    ang = state[2];  # psi = 0 is North, psi = pi/2 is east
+    ang = state[2]  # psi = 0 is North, psi = pi/2 is east
 
     while ang < 0:
-        ang += 2 * math.pi;
+        ang += 2 * math.pi
     while ang > 2 * math.pi:
-        ang -= 2 * math.pi;
+        ang -= 2 * math.pi
 
     low_red = np.array(
         [(rect[0, 0]) * math.cos(ang) -
          (rect[0, 1]) * math.sin(ang) + state[0],
          (rect[0, 0]) * math.sin(ang) +
          (rect[0, 1]) * math.cos(ang) + state[1],
-         rect[0, 2] + state[2]]);
+         rect[0, 2] + state[2]])
     up_red = np.array(
         [(rect[1, 0]) * math.cos(ang) -
          (rect[1, 1]) * math.sin(ang) + state[0],
          (rect[1, 0]) * math.sin(ang) +
          (rect[1, 1]) * math.cos(ang) + state[1],
-         rect[1, 2] + state[2]]);
+         rect[1, 2] + state[2]])
 
     if 0 <= ang <= math.pi / 2:
-        x_bb_up = up_red[0] + (rect[1, 1] - rect[0, 1]) * math.sin(ang);
-        y_bb_up = up_red[1];
-        x_bb_low = low_red[0] - (rect[1, 1] - rect[0, 1]) * math.sin(ang);
-        y_bb_low = low_red[1];
+        x_bb_up = up_red[0] + (rect[1, 1] - rect[0, 1]) * math.sin(ang)
+        y_bb_up = up_red[1]
+        x_bb_low = low_red[0] - (rect[1, 1] - rect[0, 1]) * math.sin(ang)
+        y_bb_low = low_red[1]
     elif math.pi / 2 <= ang <= math.pi:
-        x_bb_up = low_red[0];
-        y_bb_up = low_red[1] + (rect[1, 0] - rect[0, 0]) * math.cos(ang - math.pi / 2);
-        x_bb_low = up_red[0];
-        y_bb_low = up_red[1] - (rect[1, 0] - rect[0, 0]) * math.cos(ang - math.pi / 2);
+        x_bb_up = low_red[0]
+        y_bb_up = low_red[1] + (rect[1, 0] - rect[0, 0]) * math.cos(ang - math.pi / 2)
+        x_bb_low = up_red[0]
+        y_bb_low = up_red[1] - (rect[1, 0] - rect[0, 0]) * math.cos(ang - math.pi / 2)
     elif math.pi <= ang <= 3 * math.pi / 2.0:
-        x_bb_up = low_red[0] + (rect[1, 1] - rect[0, 1]) * math.cos(3 * math.pi / 2 - ang);
-        y_bb_up = low_red[1];
+        x_bb_up = low_red[0] + (rect[1, 1] - rect[0, 1]) * math.cos(3 * math.pi / 2 - ang)
+        y_bb_up = low_red[1]
         x_bb_low = up_red[0] - (rect[1, 1] - rect[0, 1]) * math.cos(3 * math.pi / 2 - ang)
-        y_bb_low = up_red[1];
+        y_bb_low = up_red[1]
     else:
-        x_bb_up = up_red[0];
-        y_bb_up = up_red[1] + (rect[1, 0] - rect[0, 0]) * math.cos(ang - 3 * math.pi / 2);
-        x_bb_low = low_red[0];
-        y_bb_low = low_red[1] - (rect[1, 0] - rect[0, 0]) * math.cos(ang - 3 * math.pi / 2);
+        x_bb_up = up_red[0]
+        y_bb_up = up_red[1] + (rect[1, 0] - rect[0, 0]) * math.cos(ang - 3 * math.pi / 2)
+        x_bb_low = low_red[0]
+        y_bb_low = low_red[1] - (rect[1, 0] - rect[0, 0]) * math.cos(ang - 3 * math.pi / 2)
 
-    bb = np.array([[x_bb_low, y_bb_low, low_red[2]], [x_bb_up, y_bb_up, up_red[2]]]);
-    w = bb[1, 0] - bb[0, 0];
-    h = bb[1, 1] - bb[0, 1];
+    bb = np.array([[x_bb_low, y_bb_low, low_red[2]], [x_bb_up, y_bb_up, up_red[2]]])
+    w = bb[1, 0] - bb[0, 0]
+    h = bb[1, 1] - bb[0, 1]
 
     if overapproximate:
-        return bb;
+        return bb
 
-    bb_center = np.average(bb, axis=0);
+    bb_center = np.average(bb, axis=0)
 
-    new_w, new_h = rotatedRectWithMaxArea(w, h, state[2]);
+    new_w, new_h = rotatedRectWithMaxArea(w, h, state[2])
 
     low_new_rect = np.array([bb_center[0] - new_w / 2.0,
                              bb_center[1] - new_h / 2.0,
-                             bb[0, 2]]);
+                             bb[0, 2]])
     up_new_rect = np.array([bb_center[0] + new_w / 2.0,
                             bb_center[1] + new_h / 2.0,
-                            bb[1, 2]]);
+                            bb[1, 2]])
 
     # print("low_new_rect: ", low_new_rect)
     # print("up_new_rect: ", up_new_rect)
-    result = np.array([low_new_rect, up_new_rect]);
+    result = np.array([low_new_rect, up_new_rect])
 
     return result
 
@@ -234,9 +234,13 @@ def transform_to_frames(low_red, up_red, source_full_low, source_full_up):
     # poly_1 = transform_poly_to_abstract(poly_1, source_full_low);
     # poly_2 = pc.box2poly(np.column_stack((low_red, up_red)));
     # poly_2 = transform_poly_to_abstract(poly_2, source_full_up);
-    box_1 = transform_to_frame(np.array([low_red, up_red]), source_full_low, overapproximate=True);
-    box_2 = transform_to_frame(np.array([low_red, up_red]), source_full_up, overapproximate=True);
-    result = get_convex_union([box_1, box_2]);
+    box_1 = transform_to_frame(np.array([low_red, up_red]), source_full_low, overapproximate=True)
+    box_2 = transform_to_frame(np.array([low_red, up_red]), source_full_up, overapproximate=True)
+    box_3 = transform_to_frame(np.array([low_red, up_red]), np.array([source_full_low[0], source_full_low[1],
+                                                                      source_full_up[2]]), overapproximate=True)
+    box_4 = transform_to_frame(np.array([low_red, up_red]), np.array([source_full_up[0], source_full_up[1],
+                                                                      source_full_low[2]]), overapproximate=True)
+    result = get_convex_union([box_1, box_2, box_3, box_4])
     # result = get_convex_union([np.column_stack(poly_1.bounding_box).T, np.column_stack(poly_2.bounding_box).T]);
     '''
     low_red_1 = np.array(
@@ -279,73 +283,73 @@ def find_frame(low_red, up_red, target_full_low, target_full_up):
               np.array([target_full_low, target_full_up]), " failed.")
         return float('nan')
 
-    angle_step = 2 * (up_red[2] - low_red[2]);
-    rect_curr = [];
+    angle_step = 2 * (up_red[2] - low_red[2])
+    rect_curr = []
     if angle_step > 0:
         # print("int(np.floor(target_full_up[2] - target_full_low[2]) / angle_step): ",
         #      int(np.floor(target_full_up[2] - target_full_low[2]) / angle_step));
-        itr_num = int(np.ceil(target_full_up[2] - target_full_low[2]) / angle_step);
+        itr_num = int(np.ceil(target_full_up[2] - target_full_low[2]) / angle_step)
     else:
-        itr_num = 1;
+        itr_num = 1
     for idx in range(itr_num):
-        low_angle = target_full_low[2] + idx * angle_step;
-        high_angle = min(target_full_low[2] + (idx + 1) * angle_step, target_full_up[2]);
-        theta_low_sys = low_angle - low_red[2];
-        theta_up_sys = high_angle - up_red[2];
+        low_angle = target_full_low[2] + idx * angle_step
+        high_angle = min(target_full_low[2] + (idx + 1) * angle_step, target_full_up[2])
+        theta_low_sys = low_angle - low_red[2]
+        theta_up_sys = high_angle - up_red[2]
 
-        theta_low = theta_low_sys;
+        theta_low = theta_low_sys
         while theta_low < -math.pi:
-            theta_low += 2 * math.pi;
+            theta_low += 2 * math.pi
         while theta_low > math.pi:
-            theta_low -= 2 * math.pi;
-        theta_up = theta_up_sys;
+            theta_low -= 2 * math.pi
+        theta_up = theta_up_sys
         while theta_up < -math.pi:
-            theta_up += 2 * math.pi;
+            theta_up += 2 * math.pi
         while theta_up > math.pi:
-            theta_up -= 2 * math.pi;
+            theta_up -= 2 * math.pi
 
         if 0 <= theta_low <= math.pi / 2:
-            x_target_up_1 = target_full_up[0] - (up_red[1] - low_red[1]) * math.cos(math.pi / 2 - theta_low);
-            y_target_up_1 = target_full_up[1];
+            x_target_up_1 = target_full_up[0] - (up_red[1] - low_red[1]) * math.cos(math.pi / 2 - theta_low)
+            y_target_up_1 = target_full_up[1]
         elif math.pi / 2 <= theta_low <= math.pi:
             x_target_up_1 = target_full_up[0] - (up_red[0] - low_red[0]) * math.sin(theta_low - math.pi / 2) - (
-                    up_red[1] - low_red[1]) * math.cos(theta_low - math.pi / 2);
-            y_target_up_1 = target_full_up[1] - (up_red[1] - low_red[1]) * math.sin(theta_low - math.pi / 2);
+                    up_red[1] - low_red[1]) * math.cos(theta_low - math.pi / 2)
+            y_target_up_1 = target_full_up[1] - (up_red[1] - low_red[1]) * math.sin(theta_low - math.pi / 2)
         elif 0 > theta_low >= - math.pi / 2:
-            x_target_up_1 = target_full_up[0];
-            y_target_up_1 = target_full_up[1] - (up_red[0] - low_red[0]) * math.sin(-1 * theta_low);
+            x_target_up_1 = target_full_up[0]
+            y_target_up_1 = target_full_up[1] - (up_red[0] - low_red[0]) * math.sin(-1 * theta_low)
         else:
-            x_target_up_1 = target_full_up[0];
-            y_target_up_1 = target_full_up[1] - (up_red[1] - low_red[1]) * math.sin(-1 * theta_low - math.pi / 2);
-            x_target_up_1 = x_target_up_1 - (up_red[0] - low_red[0]) * math.sin(-1 * theta_low - math.pi / 2);
-            y_target_up_1 = y_target_up_1 - (up_red[0] - low_red[0]) * math.cos(-1 * theta_low - math.pi / 2);
+            x_target_up_1 = target_full_up[0]
+            y_target_up_1 = target_full_up[1] - (up_red[1] - low_red[1]) * math.sin(-1 * theta_low - math.pi / 2)
+            x_target_up_1 = x_target_up_1 - (up_red[0] - low_red[0]) * math.sin(-1 * theta_low - math.pi / 2)
+            y_target_up_1 = y_target_up_1 - (up_red[0] - low_red[0]) * math.cos(-1 * theta_low - math.pi / 2)
 
         if 0 <= theta_low <= math.pi / 2:
-            x_target_low_1 = target_full_low[0] + (up_red[1] - low_red[1]) * math.cos(math.pi / 2 - theta_low);
-            y_target_low_1 = target_full_low[1];
+            x_target_low_1 = target_full_low[0] + (up_red[1] - low_red[1]) * math.cos(math.pi / 2 - theta_low)
+            y_target_low_1 = target_full_low[1]
 
         elif math.pi / 2 <= theta_low <= math.pi:
             x_target_low_1 = target_full_low[0] + (up_red[0] - low_red[0]) * math.cos(math.pi - theta_low) + (
-                    up_red[1] - low_red[1]) * math.cos(theta_low - math.pi / 2);
-            y_target_low_1 = target_full_low[1] + (up_red[1] - low_red[1]) * math.sin(theta_low - math.pi / 2);
+                    up_red[1] - low_red[1]) * math.cos(theta_low - math.pi / 2)
+            y_target_low_1 = target_full_low[1] + (up_red[1] - low_red[1]) * math.sin(theta_low - math.pi / 2)
 
         elif 0 > theta_low >= -math.pi / 2:
-            x_target_low_1 = target_full_low[0];
-            y_target_low_1 = target_full_low[1] + (up_red[0] - low_red[0]) * math.cos(math.pi / 2 + theta_low);
+            x_target_low_1 = target_full_low[0]
+            y_target_low_1 = target_full_low[1] + (up_red[0] - low_red[0]) * math.cos(math.pi / 2 + theta_low)
 
         else:
-            x_target_low_1 = target_full_low[0] + (up_red[0] - low_red[0]) * math.cos(math.pi + theta_low);
+            x_target_low_1 = target_full_low[0] + (up_red[0] - low_red[0]) * math.cos(math.pi + theta_low)
             y_target_low_1 = target_full_low[1] + (up_red[0] - low_red[0]) * math.sin(math.pi + theta_low) + \
-                             (up_red[1] - low_red[1]) * math.cos(math.pi + theta_low);
+                             (up_red[1] - low_red[1]) * math.cos(math.pi + theta_low)
 
         curr_low_1 = np.array(
             [x_target_low_1 - (low_red[0]) * math.cos(theta_low_sys) + (low_red[1]) * math.sin(theta_low_sys),
              y_target_low_1 - (low_red[0]) * math.sin(theta_low_sys) - (low_red[1]) * math.cos(theta_low_sys),
-             theta_low_sys]);
+             theta_low_sys])
         curr_up_1 = np.array(
             [x_target_up_1 - (up_red[0]) * math.cos(theta_low_sys) + (up_red[1]) * math.sin(theta_low_sys),
              y_target_up_1 - (up_red[0]) * math.sin(theta_low_sys) - (up_red[1]) * math.cos(theta_low_sys),
-             theta_low_sys]);
+             theta_low_sys])
 
         # print("curr_low_1 x: ", (low_red[0]) * math.cos(theta_low_sys) - (low_red[1]) * math.sin(theta_low_sys))
         # print("curr_low_1 y: ", (low_red[0]) * math.sin(theta_low_sys) + (low_red[1]) * math.cos(theta_low_sys))
@@ -364,112 +368,112 @@ def find_frame(low_red, up_red, target_full_low, target_full_up):
         #####################################
 
         if 0 <= theta_up <= math.pi / 2:
-            x_target_up_2 = target_full_up[0] - (up_red[1] - low_red[1]) * math.cos(math.pi / 2 - theta_up);
-            y_target_up_2 = target_full_up[1];
+            x_target_up_2 = target_full_up[0] - (up_red[1] - low_red[1]) * math.cos(math.pi / 2 - theta_up)
+            y_target_up_2 = target_full_up[1]
         elif math.pi / 2 <= theta_up <= math.pi:
             x_target_up_2 = target_full_up[0] - (up_red[0] - low_red[0]) * math.sin(theta_up - math.pi / 2) - (
-                    up_red[1] - low_red[1]) * math.cos(theta_up - math.pi / 2);
-            y_target_up_2 = target_full_up[1] - (up_red[1] - low_red[1]) * math.sin(theta_up - math.pi / 2);
+                    up_red[1] - low_red[1]) * math.cos(theta_up - math.pi / 2)
+            y_target_up_2 = target_full_up[1] - (up_red[1] - low_red[1]) * math.sin(theta_up - math.pi / 2)
         elif 0 > theta_up >= - math.pi / 2:
-            x_target_up_2 = target_full_up[0];
-            y_target_up_2 = target_full_up[1] - (up_red[0] - low_red[0]) * math.sin(-1 * theta_up);
+            x_target_up_2 = target_full_up[0]
+            y_target_up_2 = target_full_up[1] - (up_red[0] - low_red[0]) * math.sin(-1 * theta_up)
         else:
-            x_target_up_2 = target_full_up[0];
-            y_target_up_2 = target_full_up[1] - (up_red[1] - low_red[1]) * math.sin(-1 * theta_up - math.pi / 2);
-            x_target_up_2 = x_target_up_2 - (up_red[0] - low_red[0]) * math.sin(-1 * theta_up - math.pi / 2);
-            y_target_up_2 = y_target_up_2 - (up_red[0] - low_red[0]) * math.cos(-1 * theta_up - math.pi / 2);
+            x_target_up_2 = target_full_up[0]
+            y_target_up_2 = target_full_up[1] - (up_red[1] - low_red[1]) * math.sin(-1 * theta_up - math.pi / 2)
+            x_target_up_2 = x_target_up_2 - (up_red[0] - low_red[0]) * math.sin(-1 * theta_up - math.pi / 2)
+            y_target_up_2 = y_target_up_2 - (up_red[0] - low_red[0]) * math.cos(-1 * theta_up - math.pi / 2)
 
         if 0 <= theta_up <= math.pi / 2:
-            x_target_low_2 = target_full_low[0] + (up_red[1] - low_red[1]) * math.cos(math.pi / 2 - theta_up);
-            y_target_low_2 = target_full_low[1];
+            x_target_low_2 = target_full_low[0] + (up_red[1] - low_red[1]) * math.cos(math.pi / 2 - theta_up)
+            y_target_low_2 = target_full_low[1]
 
         elif math.pi / 2 <= theta_up <= math.pi:
             x_target_low_2 = target_full_low[0] + (up_red[0] - low_red[0]) * math.cos(math.pi - theta_up) + (
                     up_red[1] - low_red[1]) * math.cos(
-                theta_up - math.pi / 2);
-            y_target_low_2 = target_full_low[1] + (up_red[1] - low_red[1]) * math.sin(theta_up - math.pi / 2);
+                theta_up - math.pi / 2)
+            y_target_low_2 = target_full_low[1] + (up_red[1] - low_red[1]) * math.sin(theta_up - math.pi / 2)
 
         elif 0 > theta_up >= - math.pi / 2:
-            x_target_low_2 = target_full_low[0];
-            y_target_low_2 = target_full_low[1] + (up_red[0] - low_red[0]) * math.cos(math.pi / 2 + theta_up);
+            x_target_low_2 = target_full_low[0]
+            y_target_low_2 = target_full_low[1] + (up_red[0] - low_red[0]) * math.cos(math.pi / 2 + theta_up)
 
         else:
-            x_target_low_2 = target_full_low[0] + (up_red[0] - low_red[0]) * math.cos(math.pi + theta_up);
+            x_target_low_2 = target_full_low[0] + (up_red[0] - low_red[0]) * math.cos(math.pi + theta_up)
             y_target_low_2 = target_full_low[1] + (up_red[0] - low_red[0]) * math.sin(math.pi + theta_up) + (
                     up_red[1] - low_red[1]) * math.cos(
-                math.pi + theta_up);
+                math.pi + theta_up)
 
         curr_low_2 = np.array(
             [x_target_low_2 - (low_red[0]) * math.cos(theta_up_sys) + (low_red[1]) * math.sin(theta_up_sys),
              y_target_low_2 - (low_red[0]) * math.sin(theta_up_sys) - (low_red[1]) * math.cos(theta_up_sys),
-             theta_up_sys]);
+             theta_up_sys])
         curr_up_2 = np.array(
             [x_target_up_2 - (up_red[0]) * math.cos(theta_up_sys) + (up_red[1]) * math.sin(theta_up_sys),
              y_target_up_2 - (up_red[0]) * math.sin(theta_up_sys) - (up_red[1]) * math.cos(theta_up_sys),
-             theta_up_sys]);
+             theta_up_sys])
 
         if np.all(curr_low_1 <= curr_up_1) and np.all(curr_low_2 <= curr_up_2) \
                 and do_rects_inter(np.array([curr_low_1[:2], curr_up_1[:2]]),
                                    np.array([curr_low_2[:2], curr_up_2[:2]])):
-            curr_low_temp = np.maximum(curr_low_1, curr_low_2);
-            curr_up_temp = np.minimum(curr_up_1, curr_up_2);
-            curr_low = curr_low_temp;
-            curr_low[2] = curr_low_1[2];  # np.minimum(curr_low_temp[2], curr_up_temp[2]);
-            curr_up = curr_up_temp;
-            curr_up[2] = curr_up_2[2];  # np.maximum(curr_low_temp[2], curr_up_temp[2]);
+            curr_low_temp = np.maximum(curr_low_1, curr_low_2)
+            curr_up_temp = np.minimum(curr_up_1, curr_up_2)
+            curr_low = curr_low_temp
+            curr_low[2] = curr_low_1[2]  # np.minimum(curr_low_temp[2], curr_up_temp[2]);
+            curr_up = curr_up_temp
+            curr_up[2] = curr_up_2[2]  # np.maximum(curr_low_temp[2], curr_up_temp[2]);
             # print("curr_low_1: ", curr_low_1, " curr_low_2: ", curr_low_2, " curr_up_1: ", curr_up_1, "curr_up_2: ",
             #      curr_up_2)
             # if np.all(curr_low <= curr_up):
-            rect_curr.append([curr_low.tolist(), curr_up.tolist()]);
+            rect_curr.append([curr_low.tolist(), curr_up.tolist()])
         # else:
         #    print("find_frame resulted in a rotated rectangle ", np.array([curr_low_1, curr_up_1]),
         #          " that is non-intersecting the rotated rectangle  ", np.array([curr_low_2, curr_up_2]))
 
     if len(rect_curr) == 0:
-        return float('nan');
+        return float('nan')
 
-    rect_curr = np.array(rect_curr);
+    rect_curr = np.array(rect_curr)
 
     # Note: the following block of code was removed since find_frame is now used also for single states instead of boxes.
     # if check_rect_empty(rect_curr[0, :, :], 1):
     #    print('Result is an empty rectangle!!', rect_curr)
     #    return float('nan');
     # rect_curr = np.concatenate((rect_curr, [curr_low, curr_up]), 0);
-    return rect_curr;
+    return rect_curr
 
 
 def gray(xi, n, k):
     # From: Guan, Dah - Jyh(1998). "Generalized Gray Codes with Applications".
     # Proc.Natl.Sci.Counc.Repub.Of China(A) 22: 841???848.
     # http: // nr.stpi.org.tw / ejournal / ProceedingA / v22n6 / 841 - 848.pdf.
-    x = np.zeros((n, int(pow(k, n))));  # The matrix with all combinations
-    a = np.zeros((n + 1, 1));  # The current combination following(k, n) - Gray code
-    b = np.ones((n + 1, 1));  # +1 or -1
-    c = k * np.ones((n + 1, 1));  # The maximum for each digit
-    j = 0;
+    x = np.zeros((n, int(pow(k, n))))  # The matrix with all combinations
+    a = np.zeros((n + 1, 1)) # The current combination following(k, n) - Gray code
+    b = np.ones((n + 1, 1))  # +1 or -1
+    c = k * np.ones((n + 1, 1))  # The maximum for each digit
+    j = 0
     while a[n] == 0:
         # Write current combination in the output
-        x[:, j] = xi[np.reshape(a[0:n], (n,)).astype(int)];
-        j = j + 1;
+        x[:, j] = xi[np.reshape(a[0:n], (n,)).astype(int)]
+        j = j + 1
 
         # Compute the next combination
-        i = 0;
-        l = a[0] + b[0];
+        i = 0
+        l = a[0] + b[0]
         while (l >= c[i]) or (l < 0):
-            b[i] = -b[i];
-            i = i + 1;
-            l = a[i] + b[i];
-        a[i] = int(l);
-    return x;
+            b[i] = -b[i]
+            i = i + 1
+            l = a[i] + b[i]
+        a[i] = int(l)
+    return x
 
 
 def check_rect_empty(rect, allow_zero_dim):
     if allow_zero_dim and np.all(rect[0, :] <= rect[1, :]) and np.any(rect[0, :] < rect[1, :]):
-        return False;
+        return False
     elif (not allow_zero_dim) and np.all(rect[0, :] < rect[1, :]):
-        return False;
+        return False
     else:
-        return True;
+        return True
 
 
 def do_rects_inter(rect1, rect2):
@@ -485,8 +489,8 @@ def do_rects_inter(rect1, rect2):
     '''
     for i in range(rect1.shape[1]):
         if rect1[0, i] > rect2[1, i] + 0.01 or rect1[1, i] + 0.01 < rect2[0, i]:
-            return False;
-    return True;
+            return False
+    return True
 
 
 def does_rect_contain(rect1, rect2):  # does rect2 contains rect1
@@ -501,13 +505,13 @@ def does_rect_contain(rect1, rect2):  # does rect2 contains rect1
 def add_rects_to_solver(rects, var_dict, cur_solver):
     # print("Adding the following rectangles to solver: ", rects.shape)
     for rect_ind in range(rects.shape[0]):
-        rect = rects[rect_ind, :, :];
-        c = [];
+        rect = rects[rect_ind, :, :]
+        c = []
         for dim in range(rect.shape[1]):
-            c.append(var_dict[dim] < rect[0, dim]);
-            c.append(var_dict[dim] > rect[1, dim]);
-        cur_solver.add(Or(c));
-    return cur_solver;
+            c.append(var_dict[dim] < rect[0, dim])
+            c.append(var_dict[dim] > rect[1, dim])
+        cur_solver.add(Or(c))
+    return cur_solver
 
 
 def do_rects_list_contain_smt(rect1, var_dict, cur_solver):
@@ -518,8 +522,8 @@ def do_rects_list_contain_smt(rect1, var_dict, cur_solver):
         cur_solver.add(var_dict[dim] >= rect1[0, dim])
         cur_solver.add(var_dict[dim] <= rect1[1, dim])
     res = cur_solver.check()
-    cur_solver.pop()
     if res == sat:
+        '''
         m = cur_solver.model()
         uncovered_state_frac = []
         for var in var_dict:
@@ -527,7 +531,11 @@ def do_rects_list_contain_smt(rect1, var_dict, cur_solver):
         uncovered_state = []
         for frac in uncovered_state_frac:
             uncovered_state.append(float(frac.numerator) / float(frac.denominator))
+        '''
+        uncovered_state = np.average(rect1, axis=0)
+        cur_solver.pop()
         return np.array(uncovered_state)
+    cur_solver.pop()
     # print("rect1: ", rect1, " is already contained by previous rectangles");
     return None
 
@@ -542,49 +550,49 @@ def do_rects_list_contain(rect1, list_rects):  # reimplement using z3
             if curr_key[dim] < quantized_key_range[dim]:
                 next_key[dim] += 1
                 for reset_dim in range(dim + 1, curr_key.shape[0]):
-                    next_key[reset_dim] = 0;  # quantized_key_range[0, reset_dim]
+                    next_key[reset_dim] = 0  # quantized_key_range[0, reset_dim]
                 return next_key
         raise ValueError("curr_key should not exceed the bounds of the bounding box.")
 
-    n = rect1.shape[1];
+    n = rect1.shape[1]
     list_rects = [np.array([rect[:n], rect[n:]]) for rect in list_rects]
-    rect2 = get_convex_union(list_rects);
+    rect2 = get_convex_union(list_rects)
     if not does_rect_contain(rect1, rect2):
         return False
     if check_rect_empty(rect1, 1) or len(list_rects) == 0:
         print(rect1)
         print("Do not pass empty rectangles to cover function")
-        return 0;
+        return 0
     else:
-        partition_list = [];
+        partition_list = []
         for dim in range(n):
-            dim_partition_list = [rect1[0, dim], rect1[1, dim]];
+            dim_partition_list = [rect1[0, dim], rect1[1, dim]]
             for rect_item in list_rects:
                 if rect1[0, dim] <= rect_item[0, dim] <= rect1[1, dim]:
-                    dim_partition_list.append(rect_item[0, dim]);
+                    dim_partition_list.append(rect_item[0, dim])
                 if rect1[0, dim] <= rect_item[1, dim] <= rect1[1, dim]:
-                    dim_partition_list.append(rect_item[1, dim]);
-            dim_partition_list = np.sort(np.array(dim_partition_list));
-            partition_list.append(dim_partition_list);
+                    dim_partition_list.append(rect_item[1, dim])
+            dim_partition_list = np.sort(np.array(dim_partition_list))
+            partition_list.append(dim_partition_list)
 
-        curr_key = np.zeros((n,));
+        curr_key = np.zeros((n,))
         quantized_key_range = np.array([len(dim_partition_list) - 2 for dim_partition_list in partition_list])
         while True:
-            cell_covered = False;
+            cell_covered = False
             for rect_item in list_rects:
                 if does_rect_contain(np.array([[partition_list[dim][int(curr_key[dim])] for dim in range(n)],
                                                [partition_list[dim][int(curr_key[dim]) + 1] for dim in range(n)]]),
                                      np.array([rect_item[0, :], rect_item[1, :]])):
-                    cell_covered = True;
-                    break;
+                    cell_covered = True
+                    break
             if not cell_covered:
                 # print("ending do_rects_list_contain with cell not covered")
-                return False;
+                return False
             if np.all(curr_key == quantized_key_range):
                 break
-            curr_key = next_quantized_key(curr_key, quantized_key_range).astype(int);
+            curr_key = next_quantized_key(curr_key, quantized_key_range).astype(int)
     # print("ending do_rects_list_contain")
-    return True;
+    return True
 
 
 # This function is useless for the meantime (Hussein: June 5th, 2022)
@@ -724,29 +732,27 @@ def build_unified_abstraction(Symbolic_reduced, state_dimensions):
 
 
 def build_unified_abstraction(Symbolic_reduced, state_dimensions, s_ind, u_ind):
-    transformation_list = [];
-    n = state_dimensions.shape[1];
+    transformation_list = []
+    n = state_dimensions.shape[1]
     unified_reachable_set = np.vstack(
         (Symbolic_reduced[s_ind, u_ind, np.arange(n), -1], Symbolic_reduced[s_ind, u_ind, n + np.arange(n), -1]))
     unified_center = (Symbolic_reduced[s_ind, u_ind, np.arange(n), -1] + Symbolic_reduced[
-        s_ind, u_ind, n + np.arange(n), -1]) / 2;
+        s_ind, u_ind, n + np.arange(n), -1]) / 2
     for other_u_ind in range(Symbolic_reduced.shape[1]):
         specific_center = (Symbolic_reduced[s_ind, other_u_ind, np.arange(n), -1] + Symbolic_reduced[
-            s_ind, other_u_ind, n + np.arange(n), -1]) / 2;
-        transformation_vec = find_frame(specific_center, specific_center, unified_center, unified_center);
-        # TODO: this should be replaced by transform_to_frame
+            s_ind, other_u_ind, n + np.arange(n), -1]) / 2
+        transformation_vec = find_frame(specific_center, specific_center, unified_center, unified_center)
         transformed_rect = transform_to_frame(np.array([Symbolic_reduced[s_ind, other_u_ind, np.arange(n), -1],
                                                         Symbolic_reduced[s_ind, other_u_ind, n + np.arange(n), -1]]),
-                                              transformation_vec[0, 0, :]);
-        unified_reachable_set = get_convex_union([unified_reachable_set, transformed_rect]);
-        transformation_list.append(transformation_vec[0, 0, :]);
-    # print("transformation_list: ", transformation_list)
+                                              transformation_vec[0, 0, :])
+        unified_reachable_set = get_convex_union([unified_reachable_set, transformed_rect])
+        transformation_list.append(transformation_vec[0, 0, :])
     return unified_reachable_set, transformation_list
 
 
 def build_global_unified_abstraction(Symbolic_reduced, state_dimensions):
-    global_transformation_list = [];
-    global_unified_reachable_sets = [];
+    global_transformation_list = []
+    global_unified_reachable_sets = []
     for s_ind in range(Symbolic_reduced.shape[0]):
         global_transformation_list.append([])
         global_unified_reachable_sets.append([])
@@ -765,8 +771,7 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
     itr = 0
     num_trials = 100
     target_aiming_prob = 0.8
-    tracking_start_prob = 0.2
-
+    tracking_start_prob = 0.0
 
     t_start = time.time()
 
@@ -775,7 +780,7 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
 
     # print("global_transformation_list: ", global_transformation_list)
     # print("global_unified_reachable_sets: ", global_unified_reachable_sets)
-    color_initial = 'g'
+    color_initial = 'y'
     color_reach = 'b'
     color_target = 'm'
     p = index.Property()
@@ -798,28 +803,28 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
 
     # rtree_idx3d_control = index.Index('3d_index_control', properties=p);
 
-    abstract_rect_global_cntr = 0;
+    abstract_rect_global_cntr = 0
     abstract_rtree_idx3d = index.Index('3d_index_abstract',
-                                       properties=p);  # contains the reachsets of the abstract system.
-    max_reachable_distance = 0;
+                                       properties=p)  # contains the reachsets of the abstract system.
+    max_reachable_distance = 0
     for s_ind in range(Symbolic_reduced.shape[0]):
         for u_ind in range(Symbolic_reduced.shape[1]):
-            abstract_rect_low = Symbolic_reduced[s_ind, u_ind, np.arange(n), -1];
-            abstract_rect_up = Symbolic_reduced[s_ind, u_ind, n + np.arange(n), -1];
+            abstract_rect_low = Symbolic_reduced[s_ind, u_ind, np.arange(n), -1]
+            abstract_rect_up = Symbolic_reduced[s_ind, u_ind, n + np.arange(n), -1]
             abstract_rtree_idx3d.insert(abstract_rect_global_cntr, (abstract_rect_low[0], abstract_rect_low[1],
                                                                     abstract_rect_low[2], abstract_rect_up[0],
                                                                     abstract_rect_up[1], abstract_rect_up[2]),
-                                        obj=(s_ind, u_ind));
+                                        obj=(s_ind, u_ind))
             max_reachable_distance = max(max_reachable_distance,
                                          np.linalg.norm(np.average(np.array([abstract_rect_low.tolist(),
-                                                                             abstract_rect_up.tolist()]))));
-            abstract_rect_global_cntr = abstract_rect_global_cntr + 1;
+                                                                             abstract_rect_up.tolist()]))))
+            abstract_rect_global_cntr = abstract_rect_global_cntr + 1
 
     transformed_symbolic_rects = []
     initial_transformed_symbolic_rects = []
     target_transformed_symbolic_rects = []
-    initial_set = np.array([[1, 1, 1.5],[1.2, 1.2, 1.6]])
-    rect = initial_set # np.array([[1, 1, 1.5],[1.2, 1.2, 1.6]])
+    initial_set = np.array([[1, 1, 1.5], [1.2, 1.2, 1.6]])
+    rect = initial_set  # np.array([[1, 1, 1.5],[1.2, 1.2, 1.6]])
     for s_ind in range(Symbolic_reduced.shape[0]):
         for u_ind in range(Symbolic_reduced.shape[1]):
             for t_ind in range(Symbolic_reduced.shape[3]):
@@ -827,7 +832,7 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
                     np.array([Symbolic_reduced[s_ind, u_ind, np.arange(n), t_ind],
                               Symbolic_reduced[s_ind, u_ind, n + np.arange(n), t_ind]]),
                     global_transformation_list[s_ind][0][u_ind],
-                    overapproximate=True)
+                    overapproximate=False)
                 reachable_rect = transform_to_frames(
                     reachable_rect[0, :],
                     reachable_rect[1, :],
@@ -863,7 +868,6 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
     plt.ylim([-1, 2])
     plt.xlim([0, 2.5])
     plt.show()
-
 
     # unified_reachable_sets, unifying_transformation_list = build_unified_abstraction(Symbolic_reduced,
     #                                                                                 state_dimensions);
@@ -972,6 +976,10 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
     sampling_rectangle = np.array([sampling_rectangle_low, sampling_rectangle_up]);
     '''
     sampling_rectangle = np.array([X_low, X_up])
+
+    checking_covered_tracking_ctr = 0
+    tracking_start_ctr = 0
+    new_start_ctr = 0
 
     while itr < num_trials:  # or len(initial_sets_to_explore):
         # targets_temp = [];
@@ -1111,17 +1119,18 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
         path_distance = np.linalg.norm(sampled_state - nearest_rect_center)
         # for dim in range(nearest_rect_center.shape[0]):
         #    path_vector.append((nearest_rect_center[dim] - sampled_state[dim]) / num_steps);
-        path_vector = (sampled_state - nearest_rect_center) / path_distance;  # np.array(path_vector);
+        path_vector = (sampled_state - nearest_rect_center) / path_distance  # np.array(path_vector);
         # sampled_state = nearest_rect_center + num_steps * max_reachable_distance * path_vector;
         # print("path distance is: ", path_distance)
-        num_steps = math.ceil(path_distance / max_reachable_distance);
+        num_steps = math.ceil(path_distance / max_reachable_distance)
         # for step_idx in range(1, num_steps):  # step_idx in range(math.floor(path_distance / path_resolution)):
         # print("sampled_state: ", sampled_state)
         # print("path_vector: ", step_idx * path_vector)
         # print("path_state: ", sampled_state + step_idx * path_vector)
         # path.append(nearest_rect_center + step_idx * max_reachable_distance * path_vector);
 
-        path = [sampled_state]  # July 14th, 2022, since we are considering initial sets with fixed size, we don't have
+        path = [sampled_state]
+        # July 14th, 2022, since we are considering initial sets with fixed size, we don't have
         # to start near the target
 
         # nearest_poly = pc.box2poly(nearest_rect.T);
@@ -1130,7 +1139,6 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
         # reachable set that intersects the line from the center of the nearest rectangle to the sampled point?
 
         # valid_hit = False;
-
         rrt_done = False
         for path_state in path:
             # this for loop searches for a good initial point to start the RRT
@@ -1172,7 +1180,7 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
             sample_cntr = 0
             while not rrt_done and sample_cntr < 2 * num_steps:  # this should depend on the step size
                 # here we use a simple version of RRT to find a path from the sampled state towards rtree_idx3d.
-                sample_cntr += 1;
+                sample_cntr += 1
                 # if random.random() < 0.8:  # self.goal_sample_rate:
                 sampled_state = sampling_rectangle[0, :] + np.array([random.random() * ub for ub in
                                                                      sampling_rectangle[1, :].tolist()])
@@ -1188,25 +1196,90 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
                     (nearest_rect_center[0], nearest_rect_center[1], nearest_rect_center[2],
                      nearest_rect_center[0] + 0.01, nearest_rect_center[1] + 0.01,
                      nearest_rect_center[2] + 0.01), 1, objects=True))
-                if (sample_cntr >= 2 or (sample_cntr == 1 and tracking_start)) and len(hits_tracking):
+                if tracking_start and len(hits_tracking):
+                    # July 25th, 2022: get all the RRT nodes that intersect with the currently added rectangle
+                    # and check if their last reachable sets is now contained in the discovered ones.
+                    # One can also move this further down to check intersection with rotated
+                    '''
+                    tracking_hits = list(
+                        tracking_rtree_idx3d.intersection(
+                            (sampled_state[0], sampled_state[1], sampled_state[2],
+                             sampled_state[0] + 0.01, sampled_state[1] + 0.01, sampled_state[2] + 0.01),
+                            objects=True))
+                    '''
+                    # inter_num = len(tracking_hits)
+                    # if inter_num == 0:
+                    #    break
+                    # hits = np.array([np.array([hit.bbox[:n], hit.bbox[n:]]) for hit in hits])
+                    # July 26th, 2022, the following line is to reduce the number of checks,
+                    # most of which might not be covered.
+                    hits_tracking = [random.choice(hits_tracking)]
+                    for tracking_hit in hits_tracking:
+                        cur_solver.reset()
+                        tracked_rect = np.array([tracking_hit.bbox[:n], tracking_hit.bbox[n:]])
+                        discovered_hits = list(
+                            rtree_idx3d.intersection(
+                                (tracked_rect[0, 0], tracked_rect[0, 1], tracked_rect[0, 2],
+                                 tracked_rect[1, 0], tracked_rect[1, 1], tracked_rect[1, 2]),
+                                objects=True))
+                        discovered_hits = np.array(
+                            [np.array([hit.bbox[:n], hit.bbox[n:]]) for hit in discovered_hits])
+                        cur_solver = add_rects_to_solver(discovered_hits, var_dict, cur_solver)
+                        uncovered_state = do_rects_list_contain_smt(tracked_rect, var_dict, cur_solver)
+                        if uncovered_state is None:  # then tracked_rect is covered now
+                            reachable_set = tracking_hit.object.reachable_set  # reachable_set_list.append(
+                            s_ind = tracking_hit.object.s_ind
+                            u_ind = tracking_hit.object.u_ind
+                            # abstract_state_control_list.append(
+                            #    (tracking_hit.object.s_ind, tracking_hit.object.u_ind))
+                            # curr_node_list.append(tracking_hit.object)
+                            # curr_node.discovered = 1
+                            nearest_node = tracking_hit.object
+                            tracking_rtree_idx3d.delete(nearest_node.id_in_tracking_rtree,
+                                                        (nearest_node.reachable_set[-1][0, 0],
+                                                         nearest_node.reachable_set[-1][0, 1],
+                                                         nearest_node.reachable_set[-1][0, 2],
+                                                         nearest_node.reachable_set[-1][1, 0],
+                                                         nearest_node.reachable_set[-1][1, 1],
+                                                         nearest_node.reachable_set[-1][1, 2]))
+                            tracking_rect_global_cntr -= 1
+                            rrt_done = True
+                            checking_covered_tracking_ctr += 1
+                            break
+                        else:
+                            tracking_hit.object.uncovered_state = copy.deepcopy(uncovered_state)
+                    break
+                elif sample_cntr >= 2 and len(hits_tracking):  # or (sample_cntr == 1 and tracking_start))
                     nearest_tracking_rect = np.array([hits_tracking[0].bbox[:n], hits_tracking[0].bbox[n:]])
                     nearest_node = hits_tracking[0].object
-                    nearest_tracking_rect_center = copy.deepcopy(nearest_node.uncovered_state)
+                    nearest_tracking_rect_center = \
+                        nearest_tracking_rect[0, :] + np.array([random.random() * ub for ub in nearest_tracking_rect[1,
+                                                                                               :].tolist()])
+                    # nearest_tracking_rect_center = copy.deepcopy(nearest_node.uncovered_state)
                     nearest_tracking_rect = np.array([np.maximum(nearest_tracking_rect_center - init_radius,
                                                                  nearest_tracking_rect[0, :]),
                                                       np.minimum(nearest_tracking_rect_center + init_radius,
                                                                  nearest_tracking_rect[1, :])])
+                    tracking_start_ctr += 1
                 else:
+                    # TODO: check if path_state is already in a node.
                     nearest_tracking_rect_center = path_state
                     nearest_tracking_rect = rect_curr
-                    nearest_node = None
-
+                    if len(hits_tracking) and \
+                            does_rect_contain(np.array([path_state.tolist(), path_state.tolist()]),
+                                                  np.array([hits_tracking[0].bbox[:n], hits_tracking[0].bbox[n:]])):
+                        nearest_node = hits_tracking[0].object
+                        tracking_start_ctr += 1
+                    else:
+                        nearest_node = None
+                        new_start_ctr += 1
                 # nearest_tracking_rect_center =
                 # nearest_tracking_rect[0, :] + np.array([random.random() * ub for ub in
                 #                                                                       nearest_tracking_rect[1,
                 #                                                                       :].tolist()])
 
                 # np.average(nearest_tracking_rect, axis=0)
+
                 if random.random() < target_aiming_prob:  # self.goal_sample_rate:
                     hits = list(rtree_idx3d.nearest(
                         (nearest_tracking_rect_center[0], nearest_tracking_rect_center[1],
@@ -1225,7 +1298,7 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
                 # print("path state: ", path_state)
                 # abstract_nearest_poly = transform_poly_to_abstract(nearest_poly, np.average(tracking_rects[-1], axis=0));
                 abstract_nearest_rect = transform_rect_to_abstract(nearest_rect,
-                                                                   np.average(nearest_tracking_rect, axis=0));
+                                                                   np.average(nearest_tracking_rect, axis=0))
                 # np.column_stack(
                 # abstract_nearest_poly.bounding_box).T;
                 # print("abstract_nearest_rect: ", abstract_nearest_rect)
@@ -1240,7 +1313,7 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
                 reachable_set = []
                 initial_set = nearest_tracking_rect  # np.array([nearest_tracking_rect_center - init_radius,
                 #          nearest_tracking_rect_center + init_radius]);
-                for t_ind in range(Symbolic_reduced.shape[3] - 1): # the last reachable_rect
+                for t_ind in range(Symbolic_reduced.shape[3] - 1):  # the last reachable_rect
                     # we get from the unified one to make sure all transformed reachable sets end up in the target.
                     reachable_set.append(transform_to_frames(Symbolic_reduced[s_ind, u_ind, np.arange(n), t_ind],
                                                              Symbolic_reduced[
@@ -1256,17 +1329,17 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
                 # if not, define rect_curr to be the initial set of the reachable set.
                 # below code is for checking
                 # rect_curr = reachable_set[0];  # or tracking_rects[-1];
-                intersects_obstacle = False;
+                intersects_obstacle = False
                 for reachable_rect in reachable_set:
                     i = 0
                     while i < Obstacle_up.shape[0]:  # and np.any(rect_curr):
-                        rect_obs = np.array([Obstacle_low[i, :], Obstacle_up[i, :]]);
+                        rect_obs = np.array([Obstacle_low[i, :], Obstacle_up[i, :]])
                         if do_rects_inter(reachable_rect,  # TODO: change it back.
                                           rect_obs):
-                            obstacles_intersecting_rect.append(reachable_rect);
-                            intersects_obstacle = True;
+                            obstacles_intersecting_rect.append(reachable_rect)
+                            intersects_obstacle = True
                             break
-                        i = i + 1;
+                        i = i + 1
                     if not intersects_obstacle and np.any(reachable_rect[0, :] < X_low) or np.any(
                             reachable_rect[0, :] > X_up) \
                             or np.any(reachable_rect[1, :] < X_low) or np.any(reachable_rect[1, :] > X_up):
@@ -1305,23 +1378,26 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
                             (reachable_set[-1][0, 0], reachable_set[-1][0, 1], reachable_set[-1][0, 2],
                              reachable_set[-1][1, 0], reachable_set[-1][1, 1],
                              reachable_set[-1][1, 2]),
-                            objects=True));
-                    inter_num = len(hits);
-                    if inter_num == 0:
-                        continue
-                    # inter_num = rtree_idx3d.count((rect_low[0], rect_low[1], rect_low[2],
-                    #                               rect_up[0], rect_up[1], rect_up[2]));
-                    hits = np.array([np.array([hit.bbox[:n], hit.bbox[n:]]) for hit in hits])
-                    cur_solver.reset()
-                    # if inter_num >= 20:
-                    #    sampled_indices = np.linspace(0, len(hits), num=20, endpoint=False).astype(int);
-                    #    hits = np.array(hits)[sampled_indices];
-                    cur_solver = add_rects_to_solver(hits, var_dict, cur_solver)
-                    # not_useful = len(hits) > 0 and do_rects_list_contain(rect_curr[j, :, :],
-                    #                                                     [hit.bbox for hit in hits]);
-                    uncovered_state = do_rects_list_contain_smt(reachable_set[-1], var_dict, cur_solver)
-                    rrt_done = uncovered_state is None
-                    if not rrt_done: # only add to the RRT if the last reachable set is not in the target.
+                            objects=True))
+                    inter_num = len(hits)
+                    if inter_num > 0:
+                        # continue
+                        # inter_num = rtree_idx3d.count((rect_low[0], rect_low[1], rect_low[2],
+                        #                               rect_up[0], rect_up[1], rect_up[2]));
+                        hits = np.array([np.array([hit.bbox[:n], hit.bbox[n:]]) for hit in hits])
+                        cur_solver.reset()
+                        # if inter_num >= 20:
+                        #    sampled_indices = np.linspace(0, len(hits), num=20, endpoint=False).astype(int);
+                        #    hits = np.array(hits)[sampled_indices];
+                        cur_solver = add_rects_to_solver(hits, var_dict, cur_solver)
+                        # not_useful = len(hits) > 0 and do_rects_list_contain(rect_curr[j, :, :],
+                        #                                                     [hit.bbox for hit in hits]);
+                        uncovered_state = do_rects_list_contain_smt(reachable_set[-1], var_dict, cur_solver)
+                        rrt_done = uncovered_state is None
+                    else:
+                        rrt_done = False
+                        uncovered_state = np.average(reachable_set[-1], axis=0)
+                    if not rrt_done:  # only add to the RRT if the last reachable set is not in the target.
                         new_node = Node(reachable_set=reachable_set, s_ind=s_ind, u_ind=u_ind)
                         new_node.parent = nearest_node
                         new_node.id_in_tracking_rtree = tracking_rect_global_cntr_ids
@@ -1347,35 +1423,39 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
                     discovered_rect.append(rect);
                     rect_global_cntr += 1;
                 '''
-                while curr_node.discovered == 0:
+                # while curr_node.discovered == 0:
+                # reachable_rect_list = copy.deepcopy(reachable_set)
+                # abstract_state_control_list = [(s_ind,u_ind)] * len(reachable_set)
+                # if nearest_node is not None:
+                reachable_set_list = [reachable_set]
+                abstract_state_control_list = [(s_ind, u_ind)]
+                curr_node_list = [None]
+                while len(reachable_set_list) > 0:
+                    reachable_set = reachable_set_list.pop()
+                    s_ind, u_ind = abstract_state_control_list.pop()
+                    curr_node = curr_node_list.pop()
                     for rect_idx in range(len(reachable_set)):
                         rect = reachable_set[rect_idx]
                         rtree_idx3d.insert(rect_global_cntr, (rect[0, 0], rect[0, 1], rect[0, 2],
                                                               rect[1, 0], rect[1, 1], rect[1, 2]),
                                            obj=(s_ind, u_ind, 1))
+                        rect_global_cntr += 1
                         if rect_idx == 0:
                             initial_discovered_rect.append(rect)
-                        elif rect_idx == len(curr_node.reachable_set) -1:
+                        elif rect_idx == len(reachable_set) - 1:
                             target_discovered_rect.append(rect)
                         else:
                             discovered_rect.append(rect)
-                        rect_global_cntr += 1
-                    curr_node.discovered = 1
-                    tracking_rtree_idx3d.delete(curr_node.id_in_tracking_rtree,
-                                                (curr_node.reachable_set[-1][0, 0], curr_node.reachable_set[-1][0, 1],
-                                                 curr_node.reachable_set[-1][0, 2], curr_node.reachable_set[-1][1, 0],
-                                                 curr_node.reachable_set[-1][1, 1], curr_node.reachable_set[-1][1, 2]))
-                    tracking_rect_global_cntr -= 1
 
                     ####################################
                     for other_u_ind in range(len(global_transformation_list[s_ind])):
                         intersects_obstacle = False
                         for t_ind in range(Symbolic_reduced.shape[3]):
                             reachable_rect = transform_to_frame(
-                                    np.array([Symbolic_reduced[s_ind, other_u_ind, np.arange(n), t_ind],
-                                              Symbolic_reduced[s_ind, other_u_ind, n + np.arange(n), t_ind]]),
-                                    global_transformation_list[s_ind][u_ind][other_u_ind],
-                                    overapproximate=True)
+                                np.array([Symbolic_reduced[s_ind, other_u_ind, np.arange(n), t_ind],
+                                          Symbolic_reduced[s_ind, other_u_ind, n + np.arange(n), t_ind]]),
+                                global_transformation_list[s_ind][u_ind][other_u_ind],
+                                overapproximate=True)
                             reachable_rect = transform_to_frames(
                                 reachable_rect[0, :],
                                 reachable_rect[1, :],
@@ -1409,39 +1489,50 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
                                                                       initial_set[0, 2],
                                                                       initial_set[1, 0], initial_set[1, 1],
                                                                       initial_set[1, 2]),
-                                                   obj=(curr_node.s_ind, other_u_ind, t_ind))
+                                                   obj=(s_ind, other_u_ind, t_ind))
                                 rect_global_cntr += 1
                                 if t_ind == 0:
                                     initial_discovered_rect.append(initial_set)
-                                elif t_ind == Symbolic_reduced.shape[3] -1:
+                                elif t_ind == Symbolic_reduced.shape[3] - 1:
                                     target_discovered_rect.append(initial_set)
                                 else:
                                     discovered_rect.append(initial_set)
                     ####################################
-
-                    curr_node = curr_node.parent
                     if curr_node is None:
-                        break
-                    hits = list(
-                        rtree_idx3d.intersection(
-                            (curr_node.reachable_set[-1][0, 0], curr_node.reachable_set[-1][0, 1],
-                             curr_node.reachable_set[-1][0, 2],
-                             curr_node.reachable_set[-1][1, 0], curr_node.reachable_set[-1][1, 1],
-                             curr_node.reachable_set[-1][1, 2]),
-                            objects=True))
-                    inter_num = len(hits)
-                    if inter_num == 0:
-                        break
-                    cur_solver.reset()
-                    hits = np.array([np.array([hit.bbox[:n], hit.bbox[n:]]) for hit in hits])
-                    cur_solver = add_rects_to_solver(hits, var_dict, cur_solver)
-                    if not (curr_node is not None and do_rects_list_contain_smt(curr_node.reachable_set[-1], var_dict,
-                                                                                cur_solver)):
-                        break
-                curr_node = nearest_node  # tracking_rrt_nodes[-1];
-                reachable_set = curr_node.reachable_set
-                s_ind = curr_node.s_ind
-                u_ind = curr_node.u_ind
+                        if tracking_start:
+                            curr_node = nearest_node.parent
+                        elif nearest_node is not None:
+                            curr_node = nearest_node
+                        else:
+                            break
+                    else:
+                        curr_node = curr_node.parent
+                    if not tracking_start and not curr_node is None:
+                        reachable_set = curr_node.reachable_set
+                        hits = list(
+                            rtree_idx3d.intersection(
+                                (reachable_set[-1][0, 0], reachable_set[-1][0, 1], reachable_set[-1][0, 2],
+                                 reachable_set[-1][1, 0], reachable_set[-1][1, 1],
+                                 reachable_set[-1][1, 2]),
+                                objects=True))
+                        inter_num = len(hits)
+                        if inter_num > 0:
+                            hits = np.array([np.array([hit.bbox[:n], hit.bbox[n:]]) for hit in hits])
+                            cur_solver.reset()
+                            cur_solver = add_rects_to_solver(hits, var_dict, cur_solver)
+                            uncovered_state = do_rects_list_contain_smt(reachable_set[-1], var_dict, cur_solver)
+                            if uncovered_state is None:
+                                reachable_set_list.append(reachable_set)
+                                abstract_state_control_list.append((curr_node.s_ind, curr_node.u_ind))
+                                curr_node_list.append(curr_node)
+                        else:
+                            rrt_done = False
+                            # uncovered_state = np.average(reachable_set[-1], axis=0)
+
+                # curr_node = nearest_node  # tracking_rrt_nodes[-1];
+                # reachable_set = curr_node.reachable_set
+                # s_ind = curr_node.s_ind
+                # u_ind = curr_node.u_ind
                 progress_indicator = True
             else:
                 print("Maximum number of ", 2 * num_steps,
@@ -1892,10 +1983,16 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
         '''
 
         if progress_indicator:
-            print('%s\t%d new controllable states have been found in this synthesis iteration\n',
-                  time.time() - t_start, rect_global_cntr - rect_curr_cntr)
+            print(time.time() - t_start," ", rect_global_cntr - rect_curr_cntr,
+                  " new controllable states have been found in this synthesis iteration\n")
             rect_curr_cntr = rect_global_cntr;
+            print(rect_global_cntr, ' symbols are controllable to satisfy the reach-avoid specification\n')
             # trying to enlarge each of the rectangles in rect_curr
+            print("itr: ", itr)
+            print("checking_covered_tracking_ctr: ", checking_covered_tracking_ctr)
+            print("tracking_start_ctr: ", tracking_start_ctr)
+            print("new_start_ctr: ", new_start_ctr)
+            print("tracking_rect_global_cntr: ", tracking_rect_global_cntr)
 
             '''
             new_targets_temp = [];
@@ -1926,14 +2023,14 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
             # print("intersection_time, contain_time, insert_time, nearest_time)", intersection_time, contain_time,
             #      insert_time, nearest_time)
         else:
-            print('%s\tNo new controllable state has been found in this synthesis iteration\n', time.time() - t_start)
+            print('No new controllable state has been found in this synthesis iteration\n', time.time() - t_start)
             itr += 1;
             # break;
 
     print(['Controller synthesis for reach-avoid specification: ', time.time() - t_start, ' seconds'])
     # controllable_states = np.nonzero(Controller);
     if rect_global_cntr:
-        print('%d symbols are controllable to satisfy the reach-avoid specification\n', rect_global_cntr)
+        print(rect_global_cntr, ' symbols are controllable to satisfy the reach-avoid specification\n')
     else:
         print('The reach-avoid specification cannot be satisfied from any initial state\n')
 
@@ -1945,24 +2042,24 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
     # print("discovered rect: ", discovered_rect)
     plt.figure("Original coordinates")
     currentAxis = plt.gca()
-    color = 'r';
+    color = 'r'
     for i in range(Obstacle_up.shape[0]):  # and np.any(rect_curr):
-        rect = np.array([Obstacle_low[i, :], Obstacle_up[i, :]]);
+        rect = np.array([Obstacle_low[i, :], Obstacle_up[i, :]])
         rect_patch = Rectangle(rect[0, [0, 1]], rect[1, 0] - rect[0, 0],
                                rect[1, 1] - rect[0, 1], linewidth=1,
                                edgecolor=color, facecolor=color)
         currentAxis.add_patch(rect_patch)
 
-    color = 'g';
+    color = 'g'
     for target_idx in range(Target_low.shape[0]):
-        rect = np.array([Target_low[target_idx, :], Target_up[target_idx, :]]);
+        rect = np.array([Target_low[target_idx, :], Target_up[target_idx, :]])
         rect_patch = Rectangle(rect[0, [0, 1]], rect[1, 0] - rect[0, 0],
                                rect[1, 1] - rect[0, 1], linewidth=1,
                                edgecolor=color, facecolor=color)
         currentAxis.add_patch(rect_patch)
 
-    color = 'b';
-    edge_color = 'k';
+    color = 'b'
+    edge_color = 'k'
     for rect in discovered_rect:
         rect_patch = Rectangle(rect[0, [0, 1]], rect[1, 0] - rect[0, 0],
                                rect[1, 1] - rect[0, 1], linewidth=1,
@@ -1980,7 +2077,6 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
                                rect[1, 1] - rect[0, 1], linewidth=1,
                                edgecolor=edge_color, facecolor=color_target)
         currentAxis.add_patch(rect_patch)
-
 
     color = 'y';
     print("obstacles_intersecting_rect: ", obstacles_intersecting_rect)
