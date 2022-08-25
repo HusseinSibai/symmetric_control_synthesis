@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle, Polygon
 
 from Reach_avoid_synthesis_sets import reach_avoid_synthesis_sets
+from Reach_avoid_synthesis_sets_forward_pass import reach_avoid_synthesis_sets_forward_pass
 
 ## Initialization of the problem
 
@@ -60,7 +61,7 @@ sym_x[0, 2] = 10
 
 sym_u = 3 * np.ones((1, n_u))
 
-time_step = np.array([0,0.5,1,2,3]) # np.linspace(0, 3, 5).reshape((1,5));
+time_step = np.linspace(0, 5, 5).reshape((1, 5))  # np.array([0,0.5,1,2,3]) #
 
 state_dimensions = np.zeros((1, n_x))
 
@@ -71,7 +72,7 @@ X_up = X_up  # - error_6D(1:n_x);
 X_low = X_low  # + error_6D(1:n_x);
 
 # Shrink target set
-Target_up = Target_up # - error_6D(1:n_x);
+Target_up = Target_up  # - error_6D(1:n_x);
 Target_low = Target_low  # + error_6D(1:n_x);
 
 # Moved this from being the first step in Control synthesis to here
@@ -158,4 +159,7 @@ U_discrete = np.array(U_discrete)
 # Synthesize a controller
 
 Controller = reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low,
-                                         Target_up, Obstacle_low, Obstacle_up, X_low, X_up, U_low, U_up)
+                                        Target_up, Obstacle_low, Obstacle_up, X_low, X_up, U_low, U_up)
+# initial_set = np.array([[4.5, 0.5, 0.5], [5, 1, 1]]) Controller = reach_avoid_synthesis_sets_forward_pass(
+# initial_set, Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Target_up, Obstacle_low, Obstacle_up,
+# X_low, X_up, U_low, U_up)
