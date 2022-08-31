@@ -776,9 +776,9 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
     var_dict = []
     for dim in range(n):
         var_dict.append(Real("x" + str(dim)))
-    init_radius = n * [0.5]  # unified_reachable_sets[-1][1, :] - unified_reachable_sets[-1][0, :];
-    init_radius[0] = 0.5
-    init_radius[1] = 0.5
+    init_radius = n * [0.01]  # unified_reachable_sets[-1][1, :] - unified_reachable_sets[-1][0, :];
+    init_radius[0] = 0.1
+    init_radius[1] = 0.1
     # TODO: design an optimization procedure or make init_radius an array with increasing radii.
     itr = 0
     fail_itr = 0
@@ -936,19 +936,68 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
     #  Iterate over the reachtube and check if the transformed selected target to align (centerwise) with the
     #  current reachable set is included in all the intersecting rectangle, requires calls to Z3 and rtree.
 
-
     init_radius = np.array(init_radius)
     initial_set = np.array([-init_radius, init_radius])
     rect = initial_set
+
+    ########### plot abstraction starting from a set of initial states ###############
+    transformed_symbolic_rects = []
+    initial_transformed_symbolic_rects = []
+    target_transformed_symbolic_rects = []
     for s_ind in range(Symbolic_reduced.shape[0]):
         for u_ind in range(Symbolic_reduced.shape[1]):
-            for target_t_ind in range(Symbolic_reduced.shape[3] -1, Symbolic_reduced.shape[3]):  # the -1 is there because obviously the
+            for t_ind in range(Symbolic_reduced.shape[3]):  # the -1 is there because obviously the
+                reachable_rect = transform_to_frames(
+                Symbolic_reduced[s_ind, u_ind, np.arange(n), t_ind],
+                Symbolic_reduced[s_ind, u_ind, n + np.arange(n), t_ind],
+                rect[0, :],
+                rect[1, :])
+                if t_ind == 0:
+                    initial_transformed_symbolic_rects.append(reachable_rect)
+                elif t_ind == Symbolic_reduced.shape[3] - 1:
+                    target_transformed_symbolic_rects.append(reachable_rect)
+                else:
+                    transformed_symbolic_rects.append(reachable_rect)
+
+    plt.figure("Abstract reachable sets")
+    currentAxis = plt.gca()
+    for rect in transformed_symbolic_rects:
+        rect_patch = Rectangle(rect[0, [0, 1]], rect[1, 0] - rect[0, 0],
+                               rect[1, 1] - rect[0, 1], linewidth=1,
+                               edgecolor='k', facecolor=color_reach)
+        # currentAxis.add_patch(rect_patch)
+
+    for rect in initial_transformed_symbolic_rects:
+        rect_patch = Rectangle(rect[0, [0, 1]], rect[1, 0] - rect[0, 0],
+                               rect[1, 1] - rect[0, 1], linewidth=1,
+                               edgecolor='k', facecolor=color_initial)
+        currentAxis.add_patch(rect_patch)
+
+    for rect in target_transformed_symbolic_rects:
+        rect_patch = Rectangle(rect[0, [0, 1]], rect[1, 0] - rect[0, 0],
+                               rect[1, 1] - rect[0, 1], linewidth=1,
+                               edgecolor='k', facecolor=color_target)
+        currentAxis.add_patch(rect_patch)
+
+    plt.ylim([-5, 5])
+    plt.xlim([-5, 5])
+    plt.show()
+    plt.close()
+    currentAxis.clear()
+
+    #########################################
+    for s_ind in range(Symbolic_reduced.shape[0]):
+        for u_ind in range(Symbolic_reduced.shape[1]):
+            for target_t_ind in range(Symbolic_reduced.shape[3] - 3,
+                                      Symbolic_reduced.shape[3] - 2):  # the -1 is there because obviously the
                 # last reachable set is covered.
                 all_rects = []
                 transformed_symbolic_rects = []
                 initial_transformed_symbolic_rects = []
                 target_transformed_symbolic_rects = []
                 new_initial_sets = []
+                could_have_been_new_initial_sets = []
+                target_reachtube = []
                 for other_u_ind in range(Symbolic_reduced.shape[1]):
                     for t_ind in range(target_t_ind + 1):
                         reachable_rect = transform_to_frame(
@@ -959,8 +1008,8 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
                         reachable_rect = transform_to_frames(
                             reachable_rect[0, :],
                             reachable_rect[1, :],
-                            rect[0, :],
-                            rect[1, :])
+                            initial_set[0, :],
+                            initial_set[1, :])
                         if t_ind == 0:
                             initial_transformed_symbolic_rects.append(reachable_rect)
                         elif t_ind == target_t_ind:  # Symbolic_reduced.shape[3] - 1:
@@ -968,27 +1017,60 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
                         else:
                             transformed_symbolic_rects.append(reachable_rect)
                         all_rects.append(reachable_rect)
+                        if other_u_ind == u_ind:
+                            reachable_rect = transform_to_frame(
+                                np.array([Symbolic_reduced[s_ind, other_u_ind, np.arange(n), t_ind],
+                                          Symbolic_reduced[s_ind, other_u_ind, n + np.arange(n), t_ind]]),
+                                global_transformation_list[s_ind][u_ind][target_t_ind][other_u_ind],
+                                overapproximate=True)
+                            reachable_rect = transform_to_frames(
+                                reachable_rect[0, :],
+                                reachable_rect[1, :],
+                                initial_set[0, :],
+                                initial_set[1, :])
+                            target_reachtube.append(reachable_rect)
                 cur_solver.reset()
                 cur_solver = add_rects_to_solver(np.array(all_rects), var_dict, cur_solver)
-                specific_center = np.average(global_unified_reachable_sets[s_ind][u_ind][target_t_ind], axis=0)
+                specific_center = np.average(target_reachtube[-1], axis=0)
+                # (Symbolic_reduced[s_ind, u_ind, np.arange(n), target_t_ind]
+                # + Symbolic_reduced[s_ind, u_ind, n + np.arange(n), target_t_ind]) / 2
+                # np.average(global_unified_reachable_sets[s_ind][u_ind][target_t_ind], axis=0)
+                interval_partition = np.linspace(0,1,9).tolist()
+                interval_partition.pop()
+                interval_partition.pop(0)
                 for t_ind in range(target_t_ind):  # the -1 is there because obviously the
                     # last reachable set is covered.
-                    unified_center = np.average(global_unified_reachable_sets[s_ind][u_ind][t_ind], axis=0)
-                    transformation_vec = find_frame(specific_center, specific_center, unified_center, unified_center)
-                    transformed_rect = transform_to_frame(global_unified_reachable_sets[s_ind][u_ind][target_t_ind],
-                                                          transformation_vec[0, 0, :], overapproximate=True)
-                    uncovered_state = do_rects_list_contain_smt(transformed_rect, var_dict,
-                                                                cur_solver)
-                    large_initial_set_found = uncovered_state is None
-                    if large_initial_set_found:
-                        print(transformed_rect, " is a new initial set that can reach ",
-                              global_unified_reachable_sets[s_ind][u_ind][target_t_ind], " at t_ind ", t_ind)
-                        new_initial_sets.append(transformed_rect)
-                        # print("Contracting!!!", transformed_rect, ", the transformed version of ",
-                        # global_unified_reachable_sets[0][0][-1], " to the frame ", unified_center, "using the
-                        # transformation vector", transformation_vec[0, 0, :], " at t_ind ", t_ind, "is inside the
-                        # set of rects ", all_rects) return
-                plt.figure("Example transformed coordinates" + str(s_ind) + "_" + str(u_ind) + "_" + str(t_ind))
+                    for step in interval_partition:
+                        unified_center = (np.average(target_reachtube[t_ind], axis=0) * step + \
+                                         np.average(target_reachtube[t_ind + 1], axis=0)) * (1 - step)
+                        # np.average(target_reachtube[t_ind], axis=0)
+                        #(Symbolic_reduced[s_ind, u_ind, np.arange(n), t_ind]
+                        # + Symbolic_reduced[s_ind, u_ind, n + np.arange(n), t_ind]) / 2
+                        # np.average(global_unified_reachable_sets[s_ind][u_ind][t_ind], axis=0)
+                        transformation_vec = find_frame(specific_center, specific_center, unified_center, unified_center)
+                        # transformed_rect = transform_to_frame(global_unified_reachable_sets[s_ind][u_ind][target_t_ind],
+                        #                                       transformation_vec[0, 0, :], overapproximate=True)
+                        transformed_rect = transform_to_frame(target_reachtube[-1], transformation_vec[0, 0, :],
+                                                              overapproximate=True)
+                        #np.array([Symbolic_reduced[s_ind, u_ind, np.arange(n), target_t_ind],
+                        #          Symbolic_reduced[s_ind, u_ind, n + np.arange(n), target_t_ind]]),
+                        print("unified_center: ", unified_center)
+                        print("specific_center: ", specific_center)
+                        print("transformed_rect_center: ", np.average(transformed_rect, axis=0))
+                        uncovered_state = do_rects_list_contain_smt(transformed_rect, var_dict,
+                                                                    cur_solver)
+                        large_initial_set_found = uncovered_state is None
+                        if large_initial_set_found:
+                            print(transformed_rect, " is a new initial set that can reach ",
+                                  global_unified_reachable_sets[s_ind][u_ind][target_t_ind], " at t_ind ", t_ind)
+                            new_initial_sets.append(transformed_rect)
+                        else:
+                            could_have_been_new_initial_sets.append(transformed_rect)
+                            # print("Contracting!!!", transformed_rect, ", the transformed version of ",
+                            # global_unified_reachable_sets[0][0][-1], " to the frame ", unified_center, "using the
+                            # transformation vector", transformation_vec[0, 0, :], " at t_ind ", t_ind, "is inside the
+                            # set of rects ", all_rects) return
+                plt.figure("Example transformed coordinates" + str(s_ind) + "_" + str(u_ind) + "_" + str(target_t_ind))
                 currentAxis = plt.gca()
                 for rect in transformed_symbolic_rects:
                     rect_patch = Rectangle(rect[0, [0, 1]], rect[1, 0] - rect[0, 0],
@@ -1014,12 +1096,17 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
                                            edgecolor='k', facecolor='r')
                     currentAxis.add_patch(rect_patch)
 
-                plt.ylim([-5, 5])
-                plt.xlim([-7, 7])
+                for rect in could_have_been_new_initial_sets:
+                    rect_patch = Rectangle(rect[0, [0, 1]], rect[1, 0] - rect[0, 0],
+                                           rect[1, 1] - rect[0, 1], linewidth=1,
+                                           edgecolor='k', facecolor='c')
+                    currentAxis.add_patch(rect_patch)
+
+                plt.ylim([-50, 50])
+                plt.xlim([-50, 50])
                 plt.show()
                 plt.close()
                 currentAxis.clear()
-
 
     rect_curr_cntr = 0
     rect_global_cntr = 0

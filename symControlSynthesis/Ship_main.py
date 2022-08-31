@@ -59,9 +59,9 @@ Obstacle_low = np.array([[2, 0, -100], [5, 3.5, -100]])
 sym_x = 30 * np.ones((1, n_x))
 sym_x[0, 2] = 10
 
-sym_u = 3 * np.ones((1, n_u))
+sym_u = 5 * np.ones((1, n_u))
 
-time_step = np.linspace(0, 5, 5).reshape((1, 5))  # np.array([0,0.5,1,2,3]) #
+time_step = np.linspace(0, 5, 10).reshape((1, 10))  # np.array([0,0.5,1,2,3]) #
 
 state_dimensions = np.zeros((1, n_x))
 
