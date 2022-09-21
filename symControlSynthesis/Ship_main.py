@@ -10,6 +10,7 @@ matplotlib.use("macOSX")
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle, Polygon
 
+from abstraction_reach_avoid_synthesis import synthesize
 from Reach_avoid_synthesis_sets import reach_avoid_synthesis_sets
 from Reach_avoid_synthesis_sets_forward_pass import reach_avoid_synthesis_sets_forward_pass
 
@@ -42,10 +43,10 @@ W_low = -W_up
 # with the ship facing East (+ / -30° around 90° = >[pi / 3, 2 * pi / 3])
 # Target_up = [10; 6.5; 2 * pi / 3];
 # Target_low = [6; 0; pi / 3];
-# Target_up = np.array([[10, 6.5, 2 * math.pi / 3]]);
-# Target_low = np.array([[7, 0, math.pi / 3]]);
-Target_up = np.array([[10, 2, 2 * math.pi / 3], [10, 4, 2 * math.pi / 3], [10, 6.5, 2 * math.pi / 3]])
-Target_low = np.array([[7, 0, math.pi / 3], [7, 2, math.pi / 3], [7, 4, math.pi / 3]])
+Target_up = np.array([[10, 6.5, 2 * math.pi / 3]])
+Target_low = np.array([[7, 0, math.pi / 3]])
+# Target_up = np.array([[10, 2, 2 * math.pi / 3], [10, 4, 2 * math.pi / 3], [10, 6.5, 2 * math.pi / 3]])
+# Target_low = np.array([[7, 0, math.pi / 3], [7, 2, math.pi / 3], [7, 4, math.pi / 3]])
 
 # Obstacles
 # Obstacle_up = [[5; 2; pi] [3; 6; pi]];
@@ -61,7 +62,7 @@ sym_x[0, 2] = 10
 
 sym_u = 5 * np.ones((1, n_u))
 
-time_step = np.linspace(0, 5, 10).reshape((1, 10))  # np.array([0,0.5,1,2,3]) #
+time_step = np.linspace(0, 5, 5).reshape((1, 5))  # np.array([0,0.5,1,2,3]) #
 
 state_dimensions = np.zeros((1, n_x))
 
@@ -158,8 +159,13 @@ U_discrete = np.array(U_discrete)
 
 # Synthesize a controller
 
-Controller = reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low,
-                                        Target_up, Obstacle_low, Obstacle_up, X_low, X_up, U_low, U_up)
+# Controller = reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low,
+#                                        Target_up, Obstacle_low, Obstacle_up, X_low, X_up, U_low, U_up)
+
+N = 20
+M = 10
+synthesize(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Target_up,
+               Obstacle_low, Obstacle_up, X_low, X_up, U_low, U_up, N, M)
 # initial_set = np.array([[4.5, 0.5, 0.5], [5, 1, 1]]) Controller = reach_avoid_synthesis_sets_forward_pass(
 # initial_set, Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Target_up, Obstacle_low, Obstacle_up,
 # X_low, X_up, U_low, U_up)

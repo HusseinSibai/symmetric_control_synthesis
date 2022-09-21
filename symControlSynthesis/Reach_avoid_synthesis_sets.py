@@ -39,9 +39,9 @@ def transform_poly_to_abstract(poly: pc.polytope, state: np.array):
     # this should be provided by the user as it depends on the symmetries
     # Hussein: unlike the work in SceneChecker, we here rotate then translate, non-ideal, I prefer translation
     # then rotation but this requires changing find_frame which would take time.
-    translation_vector = state;
-    rot_angle = state[2];
-    poly_out: pc.Polytope = poly.rotation(i=0, j=1, theta=rot_angle);
+    translation_vector = state
+    rot_angle = state[2]
+    poly_out: pc.Polytope = poly.rotation(i=0, j=1, theta=rot_angle)
     return poly_out.translation(translation_vector)
 
 
@@ -777,8 +777,8 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
     for dim in range(n):
         var_dict.append(Real("x" + str(dim)))
     init_radius = n * [0.01]  # unified_reachable_sets[-1][1, :] - unified_reachable_sets[-1][0, :];
-    init_radius[0] = 0.1
-    init_radius[1] = 0.1
+    init_radius[0] = 0.3
+    init_radius[1] = 0.3
     # TODO: design an optimization procedure or make init_radius an array with increasing radii.
     itr = 0
     fail_itr = 0
@@ -938,9 +938,13 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
 
     init_radius = np.array(init_radius)
     initial_set = np.array([-init_radius, init_radius])
+    bloated_initial_set = initial_set
+    # np.array([[initial_set[0,0] * math.sqrt(2), initial_set[0,1] * math.sqrt(2), initial_set[0,2]],
+    #                                [initial_set[1,0] * math.sqrt(2), initial_set[1,1] * math.sqrt(2), initial_set[0,2]]])
     rect = initial_set
 
     ########### plot abstraction starting from a set of initial states ###############
+
     transformed_symbolic_rects = []
     initial_transformed_symbolic_rects = []
     target_transformed_symbolic_rects = []
@@ -948,10 +952,10 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
         for u_ind in range(Symbolic_reduced.shape[1]):
             for t_ind in range(Symbolic_reduced.shape[3]):  # the -1 is there because obviously the
                 reachable_rect = transform_to_frames(
-                Symbolic_reduced[s_ind, u_ind, np.arange(n), t_ind],
-                Symbolic_reduced[s_ind, u_ind, n + np.arange(n), t_ind],
-                rect[0, :],
-                rect[1, :])
+                    Symbolic_reduced[s_ind, u_ind, np.arange(n), t_ind],
+                    Symbolic_reduced[s_ind, u_ind, n + np.arange(n), t_ind],
+                    rect[0, :],
+                    rect[1, :])
                 if t_ind == 0:
                     initial_transformed_symbolic_rects.append(reachable_rect)
                 elif t_ind == Symbolic_reduced.shape[3] - 1:
@@ -965,7 +969,7 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
         rect_patch = Rectangle(rect[0, [0, 1]], rect[1, 0] - rect[0, 0],
                                rect[1, 1] - rect[0, 1], linewidth=1,
                                edgecolor='k', facecolor=color_reach)
-        # currentAxis.add_patch(rect_patch)
+        currentAxis.add_patch(rect_patch)
 
     for rect in initial_transformed_symbolic_rects:
         rect_patch = Rectangle(rect[0, [0, 1]], rect[1, 0] - rect[0, 0],
@@ -986,90 +990,161 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
     currentAxis.clear()
 
     #########################################
+    # for s_ind in range(Symbolic_reduced.shape[0]):
+    #    for u_ind in range(Symbolic_reduced.shape[1]):
+    #        for target_t_ind in range(Symbolic_reduced.shape[3] - 3,
+    #                                  Symbolic_reduced.shape[3] - 2):  # the -1 is there because obviously the
+    # last reachable set is covered.
+    '''
     for s_ind in range(Symbolic_reduced.shape[0]):
         for u_ind in range(Symbolic_reduced.shape[1]):
-            for target_t_ind in range(Symbolic_reduced.shape[3] - 3,
-                                      Symbolic_reduced.shape[3] - 2):  # the -1 is there because obviously the
-                # last reachable set is covered.
+            for target_t_ind in range(Symbolic_reduced.shape[3] - 5,
+                                      Symbolic_reduced.shape[3]-4):
                 all_rects = []
                 transformed_symbolic_rects = []
                 initial_transformed_symbolic_rects = []
                 target_transformed_symbolic_rects = []
                 new_initial_sets = []
                 could_have_been_new_initial_sets = []
-                target_reachtube = []
+                # target_reachtubes = []
+                transformed_reachtubes = []
+                # unified_center = np.zeros((n,))
+                # unified_center[2] = math.pi / 2
+                reachable_rect = np.array([Symbolic_reduced[s_ind, u_ind, np.arange(n), target_t_ind],
+                                                      Symbolic_reduced[s_ind, u_ind, n + np.arange(n), target_t_ind]])
+                reachable_rect = transform_to_frames(
+                    reachable_rect[0, :],
+                    reachable_rect[1, :],
+                    initial_set[0, :],
+                    initial_set[1, :])
+                unified_center = np.average(reachable_rect, axis=0)
+                target_rect = reachable_rect
+                # np.average(np.array([Symbolic_reduced[s_ind, u_ind, np.arange(n), target_t_ind],
+                #                                      Symbolic_reduced[s_ind, u_ind, n + np.arange(n), target_t_ind]]),
+                #                            axis=0)
                 for other_u_ind in range(Symbolic_reduced.shape[1]):
+                    # target_reachtube = []
+                    transformed_reachtube = []
                     for t_ind in range(target_t_ind + 1):
-                        reachable_rect = transform_to_frame(
-                            np.array([Symbolic_reduced[s_ind, other_u_ind, np.arange(n), t_ind],
-                                      Symbolic_reduced[s_ind, other_u_ind, n + np.arange(n), t_ind]]),
-                            global_transformation_list[s_ind][u_ind][target_t_ind][other_u_ind],
-                            overapproximate=False)
+                        # reachable_rect = transform_to_frame(
+                        #    np.array([Symbolic_reduced[s_ind, other_u_ind, np.arange(n), t_ind],
+                        #              Symbolic_reduced[s_ind, other_u_ind, n + np.arange(n), t_ind]]),
+                        #    global_transformation_list[s_ind][u_ind][target_t_ind][other_u_ind],
+                        #    overapproximate=False)
+                        reachable_rect = np.array([Symbolic_reduced[s_ind, other_u_ind, np.arange(n), t_ind],
+                                                   Symbolic_reduced[s_ind, other_u_ind, n + np.arange(n), t_ind]])
                         reachable_rect = transform_to_frames(
                             reachable_rect[0, :],
                             reachable_rect[1, :],
                             initial_set[0, :],
                             initial_set[1, :])
+                        transformed_reachtube.append(reachable_rect)
+                        
+                        # if t_ind == 0:
+                        #    initial_transformed_symbolic_rects.append(reachable_rect)
+                        # elif t_ind == target_t_ind:  # Symbolic_reduced.shape[3] - 1:
+                        #    target_transformed_symbolic_rects.append(reachable_rect)
+                        # else:
+                        #    transformed_symbolic_rects.append(reachable_rect)
+                        # transformed_reachtube.append(reachable_rect)
+                        # all_rects.append(reachable_rect)
+                    specific_center = np.average(transformed_reachtube[-1], axis=0)
+                    transformation_vec = find_frame(specific_center, specific_center, unified_center,
+                                                    unified_center)
+                    new_target_rect = np.array([Symbolic_reduced[s_ind, u_ind, np.arange(n), target_t_ind],
+                                                Symbolic_reduced[s_ind, u_ind, n + np.arange(n), target_t_ind]])
+                    new_target_rect = transform_to_frames(
+                        new_target_rect[0, :],
+                        new_target_rect[1, :],
+                        bloated_initial_set[0, :],
+                        bloated_initial_set[1, :])
+                    new_target_rect = transform_to_frame(
+                        new_target_rect,
+                        transformation_vec[0, 0, :], overapproximate=False)
+                    # if other_u_ind == 0:
+                    #    target_rect = new_target_rect
+                    #else:
+                    # target_rect[0, 2] = min(target_rect[0, 2], new_target_rect[0, 2]) # get_convex_union([target_rect,
+                    # new_target_rect])
+                    # target_rect[1, 2] = max(target_rect[1, 2], new_target_rect[1, 2])
+                    for t_ind in range(target_t_ind + 1):
+                        transformed_reachtube[t_ind] = transform_to_frame(
+                            transformed_reachtube[t_ind],
+                            transformation_vec[0, 0, :], overapproximate=False)
+                        #    global_transformation_list[s_ind][u_ind][target_t_ind][other_u_ind],
+                        #    overapproximate=False)
+                        all_rects.append(transformed_reachtube[t_ind])
                         if t_ind == 0:
-                            initial_transformed_symbolic_rects.append(reachable_rect)
+                            initial_transformed_symbolic_rects.append(transformed_reachtube[t_ind])
                         elif t_ind == target_t_ind:  # Symbolic_reduced.shape[3] - 1:
-                            target_transformed_symbolic_rects.append(reachable_rect)
+                            target_transformed_symbolic_rects.append(transformed_reachtube[t_ind])
                         else:
-                            transformed_symbolic_rects.append(reachable_rect)
-                        all_rects.append(reachable_rect)
-                        if other_u_ind == u_ind:
-                            reachable_rect = transform_to_frame(
-                                np.array([Symbolic_reduced[s_ind, other_u_ind, np.arange(n), t_ind],
-                                          Symbolic_reduced[s_ind, other_u_ind, n + np.arange(n), t_ind]]),
-                                global_transformation_list[s_ind][u_ind][target_t_ind][other_u_ind],
-                                overapproximate=True)
-                            reachable_rect = transform_to_frames(
-                                reachable_rect[0, :],
-                                reachable_rect[1, :],
-                                initial_set[0, :],
-                                initial_set[1, :])
-                            target_reachtube.append(reachable_rect)
+                            transformed_symbolic_rects.append(transformed_reachtube[t_ind])
+                    transformed_reachtubes.append(transformed_reachtube)
+                    # if other_u_ind == u_ind:
+
+                # reachable_rect = transform_to_frame(
+                # np.array([Symbolic_reduced[s_ind, other_u_ind, np.arange(n), t_ind],
+                #           Symbolic_reduced[s_ind, other_u_ind, n + np.arange(n), t_ind]]),
+                # global_unified_reachable_sets[s_ind, u_ind, target_t_ind],
+                # global_transformation_list[s_ind][u_ind][target_t_ind][other_u_ind],
+                # overapproximate=True)
+                #target_rect = transform_to_frames(
+                #    global_unified_reachable_sets[s_ind][u_ind][target_t_ind][0, :],
+                #    global_unified_reachable_sets[s_ind][u_ind][target_t_ind][1, :],
+                #    initial_set[0, :],
+                #    initial_set[1, :])
+                
+                # target_reachtube.append(reachable_rect)
+                # target_reachtubes.append(target_reachtube)
                 cur_solver.reset()
                 cur_solver = add_rects_to_solver(np.array(all_rects), var_dict, cur_solver)
-                specific_center = np.average(target_reachtube[-1], axis=0)
                 # (Symbolic_reduced[s_ind, u_ind, np.arange(n), target_t_ind]
                 # + Symbolic_reduced[s_ind, u_ind, n + np.arange(n), target_t_ind]) / 2
                 # np.average(global_unified_reachable_sets[s_ind][u_ind][target_t_ind], axis=0)
-                interval_partition = np.linspace(0,1,9).tolist()
+                interval_partition = np.linspace(0, 1, 9).tolist()
                 interval_partition.pop()
-                interval_partition.pop(0)
-                for t_ind in range(target_t_ind):  # the -1 is there because obviously the
-                    # last reachable set is covered.
-                    for step in interval_partition:
-                        unified_center = (np.average(target_reachtube[t_ind], axis=0) * step + \
-                                         np.average(target_reachtube[t_ind + 1], axis=0)) * (1 - step)
-                        # np.average(target_reachtube[t_ind], axis=0)
-                        #(Symbolic_reduced[s_ind, u_ind, np.arange(n), t_ind]
-                        # + Symbolic_reduced[s_ind, u_ind, n + np.arange(n), t_ind]) / 2
-                        # np.average(global_unified_reachable_sets[s_ind][u_ind][t_ind], axis=0)
-                        transformation_vec = find_frame(specific_center, specific_center, unified_center, unified_center)
-                        # transformed_rect = transform_to_frame(global_unified_reachable_sets[s_ind][u_ind][target_t_ind],
-                        #                                       transformation_vec[0, 0, :], overapproximate=True)
-                        transformed_rect = transform_to_frame(target_reachtube[-1], transformation_vec[0, 0, :],
-                                                              overapproximate=True)
-                        #np.array([Symbolic_reduced[s_ind, u_ind, np.arange(n), target_t_ind],
-                        #          Symbolic_reduced[s_ind, u_ind, n + np.arange(n), target_t_ind]]),
-                        print("unified_center: ", unified_center)
-                        print("specific_center: ", specific_center)
-                        print("transformed_rect_center: ", np.average(transformed_rect, axis=0))
-                        uncovered_state = do_rects_list_contain_smt(transformed_rect, var_dict,
-                                                                    cur_solver)
-                        large_initial_set_found = uncovered_state is None
-                        if large_initial_set_found:
-                            print(transformed_rect, " is a new initial set that can reach ",
-                                  global_unified_reachable_sets[s_ind][u_ind][target_t_ind], " at t_ind ", t_ind)
-                            new_initial_sets.append(transformed_rect)
-                        else:
-                            could_have_been_new_initial_sets.append(transformed_rect)
-                            # print("Contracting!!!", transformed_rect, ", the transformed version of ",
-                            # global_unified_reachable_sets[0][0][-1], " to the frame ", unified_center, "using the
-                            # transformation vector", transformation_vec[0, 0, :], " at t_ind ", t_ind, "is inside the
-                            # set of rects ", all_rects) return
+                # interval_partition.pop(0)
+                specific_center = np.average(target_rect, axis=0)  # target_reachtube[-1]
+                for other_u_ind in range(Symbolic_reduced.shape[1]):
+                    # target_reachtube = target_reachtubes.pop(0)
+                    transformed_reachtube = transformed_reachtubes.pop(0)
+                    for t_ind in range(target_t_ind):
+                        for step in interval_partition:
+                            # target_reachtube[t_ind]
+                            # target_reachtube[t_ind + 1]
+                            unified_center = (np.average(transformed_reachtube[t_ind], axis=0) * step +
+                                              np.average(transformed_reachtube[t_ind + 1], axis=0)) * (1 - step)
+                            # np.average(target_reachtube[t_ind], axis=0)
+                            # (Symbolic_reduced[s_ind, u_ind, np.arange(n), t_ind]
+                            # + Symbolic_reduced[s_ind, u_ind, n + np.arange(n), t_ind]) / 2
+                            # np.average(global_unified_reachable_sets[s_ind][u_ind][t_ind], axis=0)
+                            transformation_vec = find_frame(specific_center, specific_center, unified_center,
+                                                            unified_center)
+                            # transformed_rect = transform_to_frame(global_unified_reachable_sets[s_ind][u_ind][target_t_ind],
+                            #                                       transformation_vec[0, 0, :], overapproximate=True)
+                            # target_reachtube[-1]
+                            transformed_rect = transform_to_frame(target_rect, transformation_vec[0, 0, :],
+                                                                  overapproximate=False)
+                            # np.array([Symbolic_reduced[s_ind, u_ind, np.arange(n), target_t_ind],
+                            #          Symbolic_reduced[s_ind, u_ind, n + np.arange(n), target_t_ind]]),
+                            # print("unified_center: ", unified_center)
+                            # print("specific_center: ", specific_center)
+                            # print("transformed_rect_center: ", np.average(transformed_rect, axis=0))
+                            uncovered_state = do_rects_list_contain_smt(transformed_rect, var_dict,
+                                                                        cur_solver)
+                            large_initial_set_found = uncovered_state is None
+                            if large_initial_set_found:
+                                print(transformed_rect, " is a new initial set that can reach ",
+                                      global_unified_reachable_sets[s_ind][u_ind][target_t_ind], "using u_ind ", u_ind,
+                                      "at t_ind ", t_ind + step)
+                                new_initial_sets.append(transformed_rect)
+                            else:
+                                could_have_been_new_initial_sets.append(transformed_rect)
+                                # print("Contracting!!!", transformed_rect, ", the transformed version of ",
+                                # global_unified_reachable_sets[0][0][-1], " to the frame ", unified_center, "using the
+                                # transformation vector", transformation_vec[0, 0, :], " at t_ind ", t_ind, "is inside the
+                                # set of rects ", all_rects) return
                 plt.figure("Example transformed coordinates" + str(s_ind) + "_" + str(u_ind) + "_" + str(target_t_ind))
                 currentAxis = plt.gca()
                 for rect in transformed_symbolic_rects:
@@ -1100,14 +1175,14 @@ def reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions,
                     rect_patch = Rectangle(rect[0, [0, 1]], rect[1, 0] - rect[0, 0],
                                            rect[1, 1] - rect[0, 1], linewidth=1,
                                            edgecolor='k', facecolor='c')
-                    currentAxis.add_patch(rect_patch)
+                    # currentAxis.add_patch(rect_patch)
 
                 plt.ylim([-50, 50])
                 plt.xlim([-50, 50])
                 plt.show()
                 plt.close()
                 currentAxis.clear()
-
+    '''
     rect_curr_cntr = 0
     rect_global_cntr = 0
     good_targets_cntr = 0
