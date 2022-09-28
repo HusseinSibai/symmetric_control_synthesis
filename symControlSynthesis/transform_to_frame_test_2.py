@@ -1,6 +1,6 @@
 import math
 import numpy as np
-
+import polytope as pc
 
 # This is a code from https://stackoverflow.com/a/16778797
 def rotatedRectWithMaxArea(w, h, angle):
@@ -99,7 +99,23 @@ def transform_to_frame(rect: np.array, state: np.array, overapproximate=True):
 
     return result
 
+def transform_poly_to_abstract(poly: pc.polytope, state: np.array):
+    # this function takes a polytope in the state space and transforms it to the abstract coordinates.
+    # this should be provided by the user as it depends on the symmetries
+    # Hussein: unlike the work in SceneChecker, we here rotate then translate, non-ideal, I prefer translation
+    # then rotation but this requires changing find_frame which would take time.
+    translation_vector = np.array([-1 * state[0], -1 * state[1], -1 * state[2]])
+    rot_angle = -1 * state[2]
+    poly_out: pc.Polytope = poly.translation(translation_vector)
+    return poly_out.rotation(i=0, j=1, theta=rot_angle)
+
+
 rect = np.array([[5.55352, 0.56819, 2.0944],
                  [7.3257, 0.88228, 2.1944]]);
 state = [0, 0, 1.];
-print(transform_to_frame(rect, state, overapproximate=False));
+print(rect)
+result = transform_to_frame(rect, state, overapproximate=False)
+print(result)
+poly = transform_poly_to_abstract(pc.box2poly(result.T), state)
+box = np.column_stack(poly.bounding_box).T
+print(box)

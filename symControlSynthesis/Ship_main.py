@@ -54,15 +54,15 @@ Target_low = np.array([[7, 0, math.pi / 3]])
 # Hussein: change the angles bounds from -pi, pi to - 100, 100, respectively
 # Obstacle_up = [[[2.5], [5.5]], [[3],[6.5]], [[math.pi], [math.pi]]];
 # Obstacle_low = [[[2], [5]], [[0],[3.5]], [[-math.pi], [-math.pi]]];
-Obstacle_up = np.array([[2.5, 3, 100], [5.5, 6.5, 100]])
-Obstacle_low = np.array([[2, 0, -100], [5, 3.5, -100]])
+Obstacle_up = np.array([[2.5, 3, 100], [5.5, 6.5, 100], [0, 6.5, 100], [10, 0, 100], [10, 10, 100], [13, 6.5, 100]])
+Obstacle_low = np.array([[2, 0, -100], [5, 3.5, -100], [-3, 0, -100], [0, -3, -100], [0, 6.5, -100], [10, 0, -100]])
 
 sym_x = 30 * np.ones((1, n_x))
 sym_x[0, 2] = 10
 
 sym_u = 5 * np.ones((1, n_u))
 
-time_step = np.linspace(0, 5, 5).reshape((1, 5))  # np.array([0,0.5,1,2,3]) #
+time_step = np.linspace(0, 3, 3).reshape((1, 3))  # np.array([0,0.5,1,2,3]) #
 
 state_dimensions = np.zeros((1, n_x))
 
@@ -162,8 +162,8 @@ U_discrete = np.array(U_discrete)
 # Controller = reach_avoid_synthesis_sets(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low,
 #                                        Target_up, Obstacle_low, Obstacle_up, X_low, X_up, U_low, U_up)
 
-N = 20
-M = 10
+N = 30
+M = 5
 synthesize(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Target_up,
                Obstacle_low, Obstacle_up, X_low, X_up, U_low, U_up, N, M)
 # initial_set = np.array([[4.5, 0.5, 0.5], [5, 1, 1]]) Controller = reach_avoid_synthesis_sets_forward_pass(
