@@ -43,8 +43,8 @@ W_low = -W_up
 # with the ship facing East (+ / -30° around 90° = >[pi / 3, 2 * pi / 3])
 # Target_up = [10; 6.5; 2 * pi / 3];
 # Target_low = [6; 0; pi / 3];
-Target_up = np.array([[10, 6.5, 2 * math.pi / 3]])
-Target_low = np.array([[7, 0, math.pi / 3]])
+Target_up = np.array([[10, 6.5, 100]]) # 2 * math.pi / 3
+Target_low = np.array([[7, 0, -100]]) # math.pi / 3
 # Target_up = np.array([[10, 2, 2 * math.pi / 3], [10, 4, 2 * math.pi / 3], [10, 6.5, 2 * math.pi / 3]])
 # Target_low = np.array([[7, 0, math.pi / 3], [7, 2, math.pi / 3], [7, 4, math.pi / 3]])
 
@@ -78,7 +78,7 @@ Target_low = Target_low  # + error_6D(1:n_x);
 
 # Moved this from being the first step in Control synthesis to here
 # Convert target interval to the largest set of symbols it fully contains
-# symbol_step = (X_up - X_low) / sym_x;
+symbol_step = (X_up - X_low) / sym_x
 
 # Abstraction creation
 t_abstraction = time.time()

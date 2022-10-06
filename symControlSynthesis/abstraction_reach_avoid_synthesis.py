@@ -411,7 +411,7 @@ def synthesize(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Tar
     # abstract_paths = copy.deepcopy(original_abstract_paths)
     # Target_up = np.array([[10, 6.5, 2 * math.pi / 3]])
     # Target_low = np.array([[7, 0, math.pi / 3]])
-    initial_set = np.array([[6.5, 2, math.pi / 3+ 0.1], [6.6, 2.1, math.pi / 3 + 0.11]])
+    initial_set = np.array([[6, 2, math.pi / 2], [6.1, 2.1, math.pi / 2 + 0.01]])
     traversal_stack = [copy.deepcopy(initial_set)]
     result_abstract_paths = []
     while len(traversal_stack) and fail_itr < M:
@@ -543,7 +543,7 @@ def synthesize(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Tar
             print("Does the end of the path belong to the target? ", does_rect_contain(rect, targets[-1]))
             rect_patch = Rectangle(rect[0, [0, 1]], rect[1, 0] - rect[0, 0],
                                    rect[1, 1] - rect[0, 1], linewidth=1,
-                                   edgecolor=edge_color, facecolor='y')
+                                   edgecolor=edge_color, facecolor='m')
             currentAxis.add_patch(rect_patch)
     else:
         for path in abstract_paths:
@@ -604,8 +604,8 @@ def synthesize(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Tar
                                        edgecolor=edge_color, facecolor=color)
                 currentAxis_1.add_patch(rect_patch)
     '''
-    plt.ylim([-1, 1])
-    plt.xlim([-1.5, 1.5])
+    plt.ylim([-3, 3])
+    plt.xlim([-3, 3])
 
     plt.show()
 
@@ -617,181 +617,224 @@ def synthesize_helper(Symbolic_reduced, sym_x, sym_u, state_dimensions, targets,
     num_nearest_controls = int(Symbolic_reduced.shape[1] / 2)
     debugging = False
     target_aiming_prob = 0.8
+    symbol_step = (X_up - X_low) / sym_x
     print("new synthesize_helper call ")
     print("initial_set: ", initial_set)
     print("max_path_length: ", max_path_length)
     abstract_targets = []
-    for target_idx in range(len(targets)):
-        target_rect = targets[target_idx]  # np.array([targets[target_idx][0, :], targets[target_idx][1, :]])
-        # abstract_target_1 = transform_poly_to_abstract(target_poly, initial_set[0, :])
-        # abstract_target_2 = transform_poly_to_abstract(target_poly, initial_set[1, :])
-        # abstract_target = pc.intersect(abstract_target_1, abstract_target_2)
-        # if not pc.is_empty(abstract_target):
-        #    abstract_targets.append(abstract_target)
-        #    print("abstract target: ", np.column_stack(abstract_target.bounding_box).T)
-        # abstract_target_1 = transform_rect_to_abstract(target_rect, initial_set[0, :])
-        # abstract_target_2 = transform_rect_to_abstract(target_rect, initial_set[1, :])
-        # if do_rects_inter(abstract_target_1, abstract_target_2):
-        #    abstract_target_up = np.minimum(abstract_target_1[1, :], abstract_target_2[1, :])
-        #    abstract_target_low = np.maximum(abstract_target_1[0, :], abstract_target_2[0, :])
-        #    abstract_targets.append(np.array([abstract_target_low, abstract_target_up]))
-        abstract_target = transform_rect_to_abstract_frames(target_rect, initial_set, over_approximate=False)
-        if abstract_target is not None:
-            abstract_targets.append(abstract_target)  # np.array([abstract_target_low, abstract_target_up])
+
+    def next_quantized_key(curr_key: np.array, quantized_key_range: np.array) -> np.array:
+        if len(curr_key.shape) > 1:
+            raise ValueError("key must be one dimensional lower left and corner of bounding box")
+        next_key = np.copy(curr_key)
+        for dim in range(curr_key.shape[0] - 1, -1, -1):
+            if curr_key[dim] < quantized_key_range[dim]:
+                next_key[dim] += 1
+                for reset_dim in range(dim + 1, curr_key.shape[0]):
+                    next_key[reset_dim] = 0  # quantized_key_range[0, reset_dim]
+                return next_key
+        raise ValueError("curr_key should not exceed the bounds of the bounding box.")
+
+    result_list = []
+    quantized_key_range: np.array = np.floor(initial_set / symbol_step)
+    curr_key: np.array = quantized_key_range[0, :]
+    while True:
+        curr_initset: np.array = np.row_stack((curr_key * symbol_step, curr_key * symbol_step + symbol_step))
+        for target_idx in range(len(targets)):
+            target_rect = targets[target_idx]  # np.array([targets[target_idx][0, :], targets[target_idx][1, :]])
+            # abstract_target_1 = transform_poly_to_abstract(target_poly, initial_set[0, :])
+            # abstract_target_2 = transform_poly_to_abstract(target_poly, initial_set[1, :])
+            # abstract_target = pc.intersect(abstract_target_1, abstract_target_2)
+            # if not pc.is_empty(abstract_target):
+            #    abstract_targets.append(abstract_target)
+            #    print("abstract target: ", np.column_stack(abstract_target.bounding_box).T)
+            # abstract_target_1 = transform_rect_to_abstract(target_rect, initial_set[0, :])
+            # abstract_target_2 = transform_rect_to_abstract(target_rect, initial_set[1, :])
+            # if do_rects_inter(abstract_target_1, abstract_target_2):
+            #    abstract_target_up = np.minimum(abstract_target_1[1, :], abstract_target_2[1, :])
+            #    abstract_target_low = np.maximum(abstract_target_1[0, :], abstract_target_2[0, :])
+            #    abstract_targets.append(np.array([abstract_target_low, abstract_target_up]))
+            abstract_target = transform_rect_to_abstract_frames(target_rect, curr_initset, over_approximate=False)
+            if abstract_target is not None:
+                abstract_targets.append(abstract_target)  # np.array([abstract_target_low, abstract_target_up])
+                if debugging:
+                    concrete_target = transform_to_frame(abstract_targets[-1], curr_initset[0, :],
+                                                         overapproximate=False)
+                    if not does_rect_contain(concrete_target, target_rect):
+                        print("concrete_target: ", concrete_target)
+                        print("original_target: ", target_rect)
+                        print("Some error in transformation from and to abstract coordinates!!!")
+                    concrete_target = transform_to_frame(abstract_targets[-1], curr_initset[1, :],
+                                                         overapproximate=False)
+                    if not does_rect_contain(concrete_target, target_rect):
+                        print("concrete_target: ", concrete_target)
+                        print("original_target: ", target_rect)
+                        print("Some error in transformation from and to abstract coordinates!!!")
+
+        if len(abstract_targets) == 0:
             if debugging:
-                initial_set_center = np.average(initial_set, axis=0)
-                concrete_target = transform_to_frame(abstract_targets[-1], initial_set[0, :], overapproximate=False)
-                if not does_rect_contain(concrete_target, target_rect):
-                    print("concrete_target: ", concrete_target)
-                    print("original_target: ", target_rect)
-                    print("Some error in transformation from and to abstract coordinates!!!")
-                concrete_target = transform_to_frame(abstract_targets[-1], initial_set[1, :], overapproximate=False)
-                if not does_rect_contain(concrete_target, target_rect):
-                    print("concrete_target: ", concrete_target)
-                    print("original_target: ", target_rect)
-                    print("Some error in transformation from and to abstract coordinates!!!")
+                print("Abstract target is empty")
+            return -1, None
 
-    if len(abstract_targets) == 0:
-        print("Abstract target is empty")
-        return -1, None
+        abstract_obstacles = []
+        for obstacle_idx in range(len(obstacles)):
+            obstacle_poly = obstacles[obstacle_idx]
+            # np.array([Obstacle_low[obstacle_idx, :], Obstacle_up[obstacle_idx, :]])
+            # abstract_obstacle_1 = transform_rect_to_abstract(obstacle_rect, curr_initset[0, :])
+            # abstract_obstacle_2 = transform_rect_to_abstract(obstacle_rect, curr_initset[1, :])
+            # abstract_obstacle_1 = transform_poly_to_abstract(obstacle_poly, curr_initset[0, :])
+            # abstract_obstacle_2 = transform_poly_to_abstract(obstacle_poly, curr_initset[1, :])
+            # obstacle_rect = np.column_stack(obstacle_poly.bounding_box).T
+            abstract_obstacle = transform_poly_to_abstract_frames(obstacle_poly, curr_initset)
+            # abstract_obstacles.append(pc.box2poly(abstract_obstacle.T))
+            abstract_obstacles.append(abstract_obstacle)
+            # abstract_obstacles.append(pc.union(abstract_obstacle_1, abstract_obstacle_2))
+            if debugging:
+                print("bounding box of abstract obstacle: ", np.column_stack(abstract_obstacles[-1].bounding_box).T)
+            # print("abstract obstacle: ", abstract_obstacle)
+            # abstract_obstacle_low = np.minimum(abstract_obstacle_1[1, :], abstract_obstacle_2[1, :])
+            # abstract_obstacle_up = np.maximum(abstract_obstacle_1[0, :], abstract_obstacle_2[0, :])
+            # abstract_obstacles.append(np.array([abstract_obstacle_low, abstract_obstacle_up]))
 
-    abstract_obstacles = []
-    for obstacle_idx in range(len(obstacles)):
-        obstacle_poly = obstacles[obstacle_idx]
-        # np.array([Obstacle_low[obstacle_idx, :], Obstacle_up[obstacle_idx, :]])
-        # abstract_obstacle_1 = transform_rect_to_abstract(obstacle_rect, initial_set[0, :])
-        # abstract_obstacle_2 = transform_rect_to_abstract(obstacle_rect, initial_set[1, :])
-        # abstract_obstacle_1 = transform_poly_to_abstract(obstacle_poly, initial_set[0, :])
-        # abstract_obstacle_2 = transform_poly_to_abstract(obstacle_poly, initial_set[1, :])
-        # obstacle_rect = np.column_stack(obstacle_poly.bounding_box).T
-        abstract_obstacle = transform_poly_to_abstract_frames(obstacle_poly, initial_set)
-        # abstract_obstacles.append(pc.box2poly(abstract_obstacle.T))
-        abstract_obstacles.append(abstract_obstacle)
-        # abstract_obstacles.append(pc.union(abstract_obstacle_1, abstract_obstacle_2))
-        print("abstract obstacle: ", np.column_stack(abstract_obstacles[-1].bounding_box).T)
-        # print("abstract obstacle: ", abstract_obstacle)
-        # abstract_obstacle_low = np.minimum(abstract_obstacle_1[1, :], abstract_obstacle_2[1, :])
-        # abstract_obstacle_up = np.maximum(abstract_obstacle_1[0, :], abstract_obstacle_2[0, :])
-        # abstract_obstacles.append(np.array([abstract_obstacle_low, abstract_obstacle_up]))
-
-    hits_not_intersecting_obstacles = []
-    for target_idx in range(len(abstract_targets)):
-        # abstract_target_poly = abstract_targets[target_idx]
-        # print("abstract_target_poly: ", abstract_target_poly)
-        # abstract_target_rect = np.column_stack(abstract_target_poly.bounding_box).T
-        # print("abstract_target_rect: ", abstract_target_rect)
-        # if random.random() < target_aiming_prob:  # self.goal_sample_rate:
-        #    target_idx = random.randint(0, len(targets))
-        # else:
-        #    sampled_state = np.zeros([]) + np.array([random.random() * ub for ub in
-        #                                                         sampling_rectangle[1, :].tolist()])
-        abstract_target_rect = abstract_targets[target_idx]
-        abstract_target_rect = fix_rect_angles(abstract_target_rect)
-        target_hits = list(abstract_rtree_idx3d.nearest(
-            (abstract_target_rect[0, 0], abstract_target_rect[0, 1], abstract_target_rect[0, 2],
-             abstract_target_rect[1, 0] + 0.01, abstract_target_rect[1, 1] + 0.01,
-             abstract_target_rect[1, 2]
-             + 0.01), num_results=100, objects=True))
-        closest_hit_idx = 0
-        closest_hit_distance = 100
-        for idx, hit in enumerate(target_hits):
-            hit_bbox = np.array([hit.bbox[:n], hit.bbox[n:]])
-            distance = np.linalg.norm(np.average(hit_bbox, axis=0) - np.average(abstract_target_rect), axis=0)
-            if distance < closest_hit_distance:
-                closest_hit_idx = idx
-                closest_hit_distance = distance
-        hit = target_hits[closest_hit_idx]
-        if debugging:
-            print("Abstract target: ", abstract_target_rect)
-            print("Length of target_hits: ", len(target_hits))
-            for hit in target_hits:
+        hits_not_intersecting_obstacles = []
+        good_hit = False
+        intersects_obstacle = True
+        for target_idx in range(len(abstract_targets)):
+            # abstract_target_poly = abstract_targets[target_idx]
+            # print("abstract_target_poly: ", abstract_target_poly)
+            # abstract_target_rect = np.column_stack(abstract_target_poly.bounding_box).T
+            # print("abstract_target_rect: ", abstract_target_rect)
+            # if random.random() < target_aiming_prob:  # self.goal_sample_rate:
+            #    target_idx = random.randint(0, len(targets))
+            # else:
+            #    sampled_state = np.zeros([]) + np.array([random.random() * ub for ub in
+            #                                                         sampling_rectangle[1, :].tolist()])
+            abstract_target_rect = abstract_targets[target_idx]
+            abstract_target_rect = fix_rect_angles(abstract_target_rect)
+            target_hits = list(abstract_rtree_idx3d.nearest(
+                (abstract_target_rect[0, 0], abstract_target_rect[0, 1], abstract_target_rect[0, 2],
+                 abstract_target_rect[1, 0] + 0.01, abstract_target_rect[1, 1] + 0.01,
+                 abstract_target_rect[1, 2]
+                 + 0.01), num_results=100, objects=True))
+            closest_hit_idx = 0
+            closest_hit_distance = 100
+            for idx, hit in enumerate(target_hits):
                 hit_bbox = np.array([hit.bbox[:n], hit.bbox[n:]])
-                print("Distance from abstract_tree to abstract target: ",
-                      np.linalg.norm(np.average(hit_bbox, axis=0) - np.average(abstract_target_rect), axis=0))
+                distance = np.linalg.norm(np.average(hit_bbox, axis=0) - np.average(abstract_target_rect), axis=0)
+                if distance < closest_hit_distance:
+                    closest_hit_idx = idx
+                    closest_hit_distance = distance
+            hit = target_hits[closest_hit_idx]
+            if debugging:
+                print("Abstract target: ", abstract_target_rect)
+                print("Length of target_hits: ", len(target_hits))
+                for hit in target_hits:
+                    hit_bbox = np.array([hit.bbox[:n], hit.bbox[n:]])
+                    print("Distance from abstract_tree to abstract target: ",
+                          np.linalg.norm(np.average(hit_bbox, axis=0) - np.average(abstract_target_rect), axis=0))
 
-            print("Number of abstract paths: ", len(abstract_paths))
-            for path in abstract_paths:
-                print("Distance from an abstract_path to abstract target: ",
-                      np.linalg.norm(np.average(path[-1], axis=0) - np.average(abstract_target_rect), axis=0))
-        # hit = random.choice(target_hits)  # random.randint(0, len(target_hits))
-        # hits = [target_hits[hit_idx]]
-        # for hit in hits:
-        good_hit = True
-        intersects_obstacle = False
-        new_initial_set = transform_to_frames(abstract_paths[hit.id][-2][0, :],
-                                              abstract_paths[hit.id][-2][1, :],
-                                              initial_set[0, :], initial_set[1, :])
-        # if not does_rect_contain(abstract_paths[hit.id][-2], abstract_target_rect):
-        if not does_rect_contain(new_initial_set, targets[target_idx]):
-            good_hit = False
-            print("target_rect ", targets[target_idx], " does not contain ", new_initial_set)
-        # else:
-        # print("abstract_target_rect ", abstract_target_rect, " contains ",
-        #      abstract_paths[hit.id][-2])
-        # np.array([hit.bbox[:n], hit.bbox[n:]]))
-        path = abstract_paths[hit.id]
-        for rect in path:
-            poly = pc.box2poly(rect.T)
-            for abstract_obstacle in abstract_obstacles:
-                if not pc.is_empty(pc.intersect(poly, abstract_obstacle)):
-                    # might be slow
-                    # do_rects_inter(rect, abstract_obstacle):
-                    intersects_obstacle = True
+                print("Number of abstract paths: ", len(abstract_paths))
+                for path in abstract_paths:
+                    print("Distance from an abstract_path to abstract target: ",
+                          np.linalg.norm(np.average(path[-1], axis=0) - np.average(abstract_target_rect), axis=0))
+            # hit = random.choice(target_hits)  # random.randint(0, len(target_hits))
+            # hits = [target_hits[hit_idx]]
+            # for hit in hits:
+            good_hit = True
+            intersects_obstacle = False
+            new_curr_initset = transform_to_frames(abstract_paths[hit.id][-2][0, :],
+                                                   abstract_paths[hit.id][-2][1, :],
+                                                   curr_initset[0, :], curr_initset[1, :])
+            # if not does_rect_contain(abstract_paths[hit.id][-2], abstract_target_rect):
+            if not does_rect_contain(new_curr_initset, targets[target_idx]):
+                good_hit = False
+                if debugging:
+                    print("target_rect ", targets[target_idx], " does not contain ", new_curr_initset)
+            # else:
+            # print("abstract_target_rect ", abstract_target_rect, " contains ",
+            #      abstract_paths[hit.id][-2])
+            # np.array([hit.bbox[:n], hit.bbox[n:]]))
+            path = abstract_paths[hit.id]
+            for rect in path:
+                poly = pc.box2poly(rect.T)
+                for abstract_obstacle in abstract_obstacles:
+                    if not pc.is_empty(pc.intersect(poly, abstract_obstacle)):
+                        # might be slow
+                        # do_rects_inter(rect, abstract_obstacle):
+                        intersects_obstacle = True
+                        break
+                if intersects_obstacle:
                     break
-            if intersects_obstacle:
+            if good_hit and not intersects_obstacle:
+                if debugging:
+                    print("reached target at depth ", max_path_length)
+                    print("the last reachable set is: ", new_curr_initset)
+                # abstract_paths[hit.id].append(abstract_target_rect)
+                result_list.append((curr_initset, hit.id, abstract_paths[hit.id]))
                 break
+                # return hit.id, abstract_paths[hit.id]
+            if not intersects_obstacle:
+                # print("abstract_target_rect that is not reached: ", abstract_target_rect)
+                hits_not_intersecting_obstacles.append(hit)
+
         if good_hit and not intersects_obstacle:
-            print("reached target at depth ", max_path_length)
-            print("the last reachable set is: ", new_initial_set)
-            # abstract_paths[hit.id].append(abstract_target_rect)
-            return hit.id, abstract_paths[hit.id]
-        if not intersects_obstacle:
-            # print("abstract_target_rect that is not reached: ", abstract_target_rect)
-            hits_not_intersecting_obstacles.append(hit)
+            continue
 
-    if len(hits_not_intersecting_obstacles) == 0 or max_path_length == 0:
-        print("All sampled paths intersect obstacles")
-        return -1, None  # Failure
+        if len(hits_not_intersecting_obstacles) == 0 or max_path_length == 0:
+            if debugging:
+                print("All sampled paths intersect obstacles")
+            return -1, None  # Failure
 
-    print("hits_not_intersecting_obstacles: ", len(hits_not_intersecting_obstacles))
-    for hit in hits_not_intersecting_obstacles:
-        s_ind, u_ind = hit.object
-        if len(abstract_path_last_set_parts[s_ind][u_ind]):
-            success = True
-            # for last_set in abstract_path_last_set_parts[s_ind][u_ind]: TODO: this needs to be fixed, last_sets
-            #  should be defined for all rectangles in abstract_rtree, not just the original ones temp,
-            #  try this over-approximation fix:
-            new_initial_set = transform_to_frames(abstract_paths[hit.id][-1][0, :],
-                                                  abstract_paths[hit.id][-1][1, :],
-                                                  initial_set[0, :], initial_set[1, :])
-            # new_initial_set = transform_to_frames(last_set[0, :], last_set[1, :], initial_set[0, :], initial_set[1,
-            # :])
-            result, result_abstract_path = synthesize_helper(Symbolic_reduced, sym_x, sym_u, state_dimensions, targets,
-                                                             obstacles, X_low, X_up, abstract_rtree_idx3d,
-                                                             abstract_rect_global_cntr, abstract_paths,
-                                                             abstract_path_last_set_parts,
-                                                             new_initial_set, max_path_length - 1)
+        if debugging:
+            print("hits_not_intersecting_obstacles: ", len(hits_not_intersecting_obstacles))
 
-            if result != -1:  # in range(len(abstract_paths))
-                new_path = copy.deepcopy(abstract_paths[hit.id])
-                # print("Length of previous path: ", len(new_path))
-                for rect in result_abstract_path:  # abstract_paths[result]:
-                    # also this should be fixed, changed last_set to abstract_paths[hit.id][-1] temporarily
-                    new_path.append(transform_to_frames(rect[0, :], rect[1, :], abstract_paths[hit.id][-1][0, :],
-                                                        abstract_paths[hit.id][-1][1, :]))
-                print("new path: ", new_path)
-                abstract_paths.append(new_path)
-                result_rect = new_path[-1]
-                abstract_rtree_idx3d.insert(abstract_rect_global_cntr, (result_rect[0, 0], result_rect[0, 1],
-                                                                        result_rect[0, 2], result_rect[1, 0],
-                                                                        result_rect[1, 1], result_rect[1, 2]),
-                                            obj=(s_ind, u_ind))
-                abstract_rect_global_cntr += 1
-            else:
-                success = False
-            if success:
-                # print("length of abstract_paths[hid.id]: ", len(new_path))
-                return hit.id, new_path
+        for hit in hits_not_intersecting_obstacles:
+            s_ind, u_ind = hit.object
+            if len(abstract_path_last_set_parts[s_ind][u_ind]):
+                success = True
+                # for last_set in abstract_path_last_set_parts[s_ind][u_ind]: TODO: this needs to be fixed, last_sets
+                #  should be defined for all rectangles in abstract_rtree, not just the original ones temp,
+                #  try this over-approximation fix:
+                new_curr_initset = transform_to_frames(abstract_paths[hit.id][-1][0, :],
+                                                      abstract_paths[hit.id][-1][1, :],
+                                                      curr_initset[0, :], curr_initset[1, :])
+                # new_curr_initset = transform_to_frames(last_set[0, :], last_set[1, :], curr_initset[0, :], curr_initset[1,
+                # :])
+                # result, result_abstract_path
+                curr_result_list = synthesize_helper(Symbolic_reduced, sym_x, sym_u, state_dimensions,
+                                                                 targets,
+                                                                 obstacles, X_low, X_up, abstract_rtree_idx3d,
+                                                                 abstract_rect_global_cntr, abstract_paths,
+                                                                 abstract_path_last_set_parts,
+                                                                 new_curr_initset, max_path_length - 1)
+
+                if curr_result_list:  # in range(len(abstract_paths))
+                    # iterate over results and take the union of the paths.
+                    new_path = copy.deepcopy(abstract_paths[hit.id])
+                    # print("Length of previous path: ", len(new_path))
+                    for rect in result_abstract_path:  # abstract_paths[result]:
+                        # also this should be fixed, changed last_set to abstract_paths[hit.id][-1] temporarily
+                        new_path.append(transform_to_frames(rect[0, :], rect[1, :], abstract_paths[hit.id][-1][0, :],
+                                                            abstract_paths[hit.id][-1][1, :]))
+                    if debugging:
+                        print("new path: ", new_path)
+                    abstract_paths.append(new_path)
+                    result_rect = new_path[-1]
+                    abstract_rtree_idx3d.insert(abstract_rect_global_cntr, (result_rect[0, 0], result_rect[0, 1],
+                                                                            result_rect[0, 2], result_rect[1, 0],
+                                                                            result_rect[1, 1], result_rect[1, 2]),
+                                                obj=(s_ind, u_ind))
+                    abstract_rect_global_cntr += 1
+                else:
+                    success = False
+                if success:
+                    # print("length of abstract_paths[hid.id]: ", len(new_path))
+                    result_list.append((curr_initset, hit.id, new_path))
+                    break
+                    # return hit.id, new_path
+        if np.all(curr_key == quantized_key_range[1, :]):
+            break
+        curr_key = next_quantized_key(curr_key, quantized_key_range)
 
     print("All sampled paths do not reach target")
     return -1, None
