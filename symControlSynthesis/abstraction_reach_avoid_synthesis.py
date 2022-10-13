@@ -10,12 +10,21 @@ from yices import *
 import random
 import copy
 import os
+import itertools
 
 import matplotlib
 
 matplotlib.use("macOSX")
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle, Polygon
+
+
+class AbstractState:
+
+    def __init__(self, abstract_targets, abstract_obstacles, concrete_state_idx):
+        self.abstract_targets = abstract_targets
+        self.abstract_obstacles = abstract_obstacles
+        self.concrete_state_idx = concrete_state_idx
 
 
 def transform_poly_to_abstract(poly: pc.polytope, state: np.array):
@@ -269,7 +278,7 @@ def transform_rect_to_abstract_frames(concrete_rect, frames_rect, over_approxima
     return result  # np.array([result_low, result_up]);
 
 
-def transform_poly_to_abstract_frames(concrete_poly, frames_rect):
+def transform_poly_to_abstract_frames(concrete_poly, frames_rect, over_approximate=False):
     poly_1 = transform_poly_to_abstract(concrete_poly, frames_rect[0, :])
     poly_2 = transform_poly_to_abstract(concrete_poly, frames_rect[1, :])
     poly_3 = transform_poly_to_abstract(concrete_poly, np.array([frames_rect[0, 0], frames_rect[0, 1],
@@ -277,9 +286,14 @@ def transform_poly_to_abstract_frames(concrete_poly, frames_rect):
     poly_4 = transform_poly_to_abstract(concrete_poly, np.array([frames_rect[1, 0], frames_rect[1, 1],
                                                                  frames_rect[0, 2]]))
 
-    result = pc.union(poly_1, poly_2)
-    result = pc.union(result, poly_3)
-    result = pc.union(result, poly_4)
+    if over_approximate:
+        result = pc.union(poly_1, poly_2)
+        result = pc.union(result, poly_3)
+        result = pc.union(result, poly_4)
+    else:
+        result = pc.intersect(poly_1, poly_2)
+        result = pc.intersect(result, poly_3)
+        result = pc.intersect(result, poly_4)
     return result
 
 
@@ -344,6 +358,39 @@ def get_intersection(list_array: List[np.array]) -> np.array:
     return result
 
 
+def next_quantized_key(curr_key: np.array, quantized_key_range: np.array) -> np.array:
+    if len(curr_key.shape) > 1:
+        raise ValueError("key must be one dimensional lower left and corner of bounding box")
+    next_key = np.copy(curr_key)
+    for dim in range(curr_key.shape[0] - 1, -1, -1):
+        if curr_key[dim] < quantized_key_range[dim]:
+            next_key[dim] += 1
+            for reset_dim in range(dim + 1, curr_key.shape[0]):
+                next_key[reset_dim] = 0  # quantized_key_range[0, reset_dim]
+            return next_key
+    raise ValueError("curr_key should not exceed the bounds of the bounding box.")
+
+
+def rect_to_indices(rect, symbol_step, ref_lower_bound, sym_x, over_approximate=False):
+    if over_approximate:
+        low_indices = np.floor((rect[0, :] - ref_lower_bound) / symbol_step)
+        up_indices = np.ceil((rect[1, :] - ref_lower_bound) / symbol_step)
+    else:
+        low_indices = np.ceil((rect[0, :] - ref_lower_bound) / symbol_step)
+        up_indices = np.floor((rect[1, :] - ref_lower_bound) / symbol_step)
+    print("rect: ", rect)
+    print("sym_x: ", sym_x)
+    print("ref_lower_bound: ", ref_lower_bound)
+    print("low_indices: ", low_indices)
+    print("up_indices: ", up_indices)
+    subscripts = list(itertools.product(range(int(low_indices[0]), int(up_indices[0])),
+                                        range(int(low_indices[1]), int(up_indices[1])),
+                                        range(int(low_indices[2]), int(up_indices[2]))))
+    subscripts = list(np.array([list(idx) for idx in subscripts]).T)
+    print("subscripts: ", subscripts)
+    return numpy.ravel_multi_index(subscripts, tuple((sym_x + 1).astype(int)))
+
+
 def synthesize(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Target_up,
                Obstacle_low, Obstacle_up, X_low, X_up, U_low, U_up, N, M):
     n = state_dimensions.shape[1]
@@ -362,20 +409,28 @@ def synthesize(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Tar
     p.dat_extension = 'data'
     p.idx_extension = 'index'
 
+    symbol_step = (X_up - X_low) / sym_x[0, :]
+    quantized_key_range: np.array = np.floor(np.array([X_low, X_up]) / symbol_step)
+
     obstacles = []
     targets = []
+    obstacle_indices = []
+    target_indices = []
     for obstacle_idx in range(Obstacle_low.shape[0]):
         obstacle_rect = np.array([Obstacle_low[obstacle_idx, :], Obstacle_up[obstacle_idx, :]])
+        obstacle_rect = fix_rect_angles(obstacle_rect)
         obstacle_poly = pc.box2poly(obstacle_rect.T)
         obstacles.append(obstacle_poly)
+        obstacle_indices.extend(rect_to_indices(obstacle_rect, symbol_step, X_low,
+                                                sym_x[0, :], over_approximate=True))
 
     for target_idx in range(Target_low.shape[0]):
         target_rect = np.array([Target_low[target_idx, :], Target_up[target_idx, :]])
         target_rect = fix_rect_angles(target_rect)
         # target_poly = pc.box2poly(target_rect.T)
         targets.append(target_rect)
-
-    partition_threshold = 0.01
+        target_indices.extend(rect_to_indices(target_rect, symbol_step, X_low,
+                                              sym_x[0, :], over_approximate=False))
 
     original_abstract_paths = []
     abstract_path_last_set_parts = []
@@ -411,99 +466,144 @@ def synthesize(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Tar
     # abstract_paths = copy.deepcopy(original_abstract_paths)
     # Target_up = np.array([[10, 6.5, 2 * math.pi / 3]])
     # Target_low = np.array([[7, 0, math.pi / 3]])
-    initial_set = np.array([[6, 2, math.pi / 2], [6.1, 2.1, math.pi / 2 + 0.01]])
-    traversal_stack = [copy.deepcopy(initial_set)]
+    # initial_set = np.array([[6, 2, math.pi / 2], [6.1, 2.1, math.pi / 2 + 0.01]])
+    # traversal_stack = [copy.deepcopy(initial_set)]
     result_abstract_paths = []
-    while len(traversal_stack) and fail_itr < M:
-        initial_set = traversal_stack.pop()
+    matrix_dim_full = [np.prod(sym_x[0, :]), np.prod(sym_u), 2 * n]
+    # initial_set = traversal_stack.pop()
+    print("matrix_dim_full: ", matrix_dim_full)
+    symbols_to_explore = np.setdiff1d(np.array(range(int(matrix_dim_full[0]))), target_indices)
+    symbols_to_explore = np.setdiff1d(symbols_to_explore, obstacle_indices)
 
-        result, result_abstract_path = synthesize_helper(Symbolic_reduced, sym_x, sym_u, state_dimensions, targets,
-                                                         obstacles, X_low, X_up, abstract_rtree_idx3d,
-                                                         abstract_rect_global_cntr, abstract_paths,
-                                                         abstract_path_last_set_parts,
-                                                         initial_set, N)
+    abstract_targets_and_obstacles = [None] * int(matrix_dim_full[0])
+    controller = [-1] * int(matrix_dim_full[0])
+    u_ind = 0
+    num_controllable_states = 0
+    while True:  # len(traversal_stack) and fail_itr < M:
+        num_new_symbols = 0
+        temp_target_indices = []
+        print("Checking which states can use the rectangle ", u_ind, " in the abstract rtree to reach the target")
+        for s in symbols_to_explore:
+            result_avoid = False
+            result_reach = False
+            s_subscript = np.array(np.unravel_index(s, tuple((sym_x[0, :] + 1).astype(int))))
+            curr_initset: np.array = np.row_stack((s_subscript * symbol_step + X_low,
+                                                   s_subscript * symbol_step + symbol_step + X_low))
+            '''
+            result, result_abstract_path = synthesize_helper(Symbolic_reduced, sym_x, sym_u,
+                                                                           state_dimensions,
+                                                                           targets, obstacles, X_low, X_up,
+                                                                           abstract_rtree_idx3d,
+                                                                           abstract_rect_global_cntr, abstract_paths,
+                                                                           # abstract_path_last_set_parts,
+                                                                           curr_initset, N)
+            '''
+            if u_ind < len(abstract_paths):
+                result_avoid, result_reach = check_one_step_abstract_reach_avoid(targets, obstacles,
+                                                                                 abstract_targets_and_obstacles,
+                                                                                 abstract_paths[u_ind], curr_initset, s)
+            else:
+                for curr_u_ind in range(matrix_dim_full[2]):
+                    new_curr_initset = transform_to_frames(abstract_paths[curr_u_ind][-1][0, :],
+                                                           abstract_paths[curr_u_ind][-1][1, :],
+                                                           curr_initset[0, :], curr_initset[1, :])
+                    new_indices = rect_to_indices(new_curr_initset, symbol_step, X_low,
+                                                  sym_x[0, :], over_approximate=True)
+                    if np.all(np.isin(new_indices, target_indices)):
+                        abstract_rect_global_cntr = add_new_paths(controller, abstract_paths, new_indices, s,
+                                                                  curr_u_ind, abstract_rtree_idx3d,
+                                                                  abstract_rect_global_cntr)
+                        break
 
-        itr += 1
-        if result != -1:
-            succ_itr += 1
-            print(time.time() - t_start, " ", abstract_rect_global_cntr,
+            if result_avoid and result_reach:
+                controller[s] = u_ind
+                temp_target_indices.append(s)
+                num_new_symbols += 1
+
+        if num_new_symbols:
+            print(time.time() - t_start, " ", num_new_symbols,
                   " new controllable states have been found in this synthesis iteration\n")
-            print(abstract_rect_global_cntr, ' symbols are controllable to satisfy the reach-avoid specification\n')
-            print("success iterations: ", succ_itr)
-            result_abstract_paths.append((initial_set, result_abstract_path))
+            target_indices.extend(temp_target_indices)
+            num_controllable_states += num_new_symbols
+            symbols_to_explore = np.setdiff1d(symbols_to_explore, temp_target_indices)
+            print(num_controllable_states, ' symbols are controllable to satisfy the reach-avoid specification\n')
         else:
-            fail_itr += 1
             print('No new controllable state has been found in this synthesis iteration\n', time.time() - t_start)
-            print("fail iterations: ", fail_itr)
-            dim = np.argmax(initial_set[1, :] - initial_set[0, :])
-            temp = np.zeros(initial_set[0, :].shape)
-            temp[dim] = (initial_set[1, dim] - initial_set[0, dim]) / 2
-            new_initial_set_1 = np.array([initial_set[0, :], initial_set[1, :] - temp])
-            new_initial_set_2 = np.array([initial_set[0, :] + temp, initial_set[1, :]])
-            traversal_stack.append(new_initial_set_1)
-            traversal_stack.append(new_initial_set_2)
-            abstract_paths = []
-            os.remove("3d_index_abstract.data")
-            os.remove("3d_index_abstract.index")
-            abstract_rtree_idx3d = index.Index('3d_index_abstract',
-                                               properties=p)
-            print("abstract_rtree_idx3d: ", abstract_rtree_idx3d.leaves())
-            abstract_rect_global_cntr = 0
-            for s_ind in range(Symbolic_reduced.shape[0]):
-                # abstract_paths.append([])
-                for u_ind in range(Symbolic_reduced.shape[1]):
-                    new_last_sets = []
-                    while len(abstract_path_last_set_parts[s_ind][u_ind]):
-                        old_last_set = abstract_path_last_set_parts[s_ind][u_ind].pop()
-                        dim = np.argmax(old_last_set[1, :] - old_last_set[0, :])
-                        if old_last_set[1, dim] - old_last_set[0, dim] <= partition_threshold:
-                            new_last_sets.append(old_last_set)
-                            temp_path = copy.deepcopy(original_abstract_paths[s_ind][u_ind])
-                            temp_path.append(old_last_set)
-                            abstract_paths.append(temp_path)
+            break
+
+        u_ind += 1
+
+        '''
+                dim = np.argmax(initial_set[1, :] - initial_set[0, :])
+                temp = np.zeros(initial_set[0, :].shape)
+                temp[dim] = (initial_set[1, dim] - initial_set[0, dim]) / 2
+                new_initial_set_1 = np.array([initial_set[0, :], initial_set[1, :] - temp])
+                new_initial_set_2 = np.array([initial_set[0, :] + temp, initial_set[1, :]])
+                traversal_stack.append(new_initial_set_1)
+                traversal_stack.append(new_initial_set_2)
+                abstract_paths = []
+                os.remove("3d_index_abstract.data")
+                os.remove("3d_index_abstract.index")
+                abstract_rtree_idx3d = index.Index('3d_index_abstract',
+                                                   properties=p)
+                print("abstract_rtree_idx3d: ", abstract_rtree_idx3d.leaves())
+                abstract_rect_global_cntr = 0
+                for s_ind in range(Symbolic_reduced.shape[0]):
+                    # abstract_paths.append([])
+                    for u_ind in range(Symbolic_reduced.shape[1]):
+                        new_last_sets = []
+                        while len(abstract_path_last_set_parts[s_ind][u_ind]):
+                            old_last_set = abstract_path_last_set_parts[s_ind][u_ind].pop()
+                            dim = np.argmax(old_last_set[1, :] - old_last_set[0, :])
+                            if old_last_set[1, dim] - old_last_set[0, dim] <= partition_threshold:
+                                new_last_sets.append(old_last_set)
+                                temp_path = copy.deepcopy(original_abstract_paths[s_ind][u_ind])
+                                temp_path.append(old_last_set)
+                                abstract_paths.append(temp_path)
+                                abstract_rtree_idx3d.insert(abstract_rect_global_cntr,
+                                                            (old_last_set[0, 0], old_last_set[0, 1],
+                                                             old_last_set[0, 2], old_last_set[1, 0],
+                                                             old_last_set[1, 1], old_last_set[1, 2]),
+                                                            obj=(s_ind, u_ind))
+                                abstract_rect_global_cntr += 1
+                                continue
+                            temp = np.zeros(old_last_set[0, :].shape)
+                            temp[dim] = (old_last_set[1, dim] - old_last_set[0, dim]) / 2
+                            new_last_set_1 = np.array([old_last_set[0, :], old_last_set[1, :] - temp])
+                            new_last_set_2 = np.array([old_last_set[0, :] + temp, old_last_set[1, :]])
+                            new_last_sets.append(new_last_set_1)
+                            new_last_sets.append(new_last_set_2)
+                            # print("old_last_set: ", old_last_set)
+                            # print("new_last_set_1: ", new_last_set_1)
+                            # print("new_last_set_2: ", new_last_set_2)
                             abstract_rtree_idx3d.insert(abstract_rect_global_cntr,
-                                                        (old_last_set[0, 0], old_last_set[0, 1],
-                                                         old_last_set[0, 2], old_last_set[1, 0],
-                                                         old_last_set[1, 1], old_last_set[1, 2]),
+                                                        (new_last_set_1[0, 0], new_last_set_1[0, 1],
+                                                         new_last_set_1[0, 2], new_last_set_1[1, 0],
+                                                         new_last_set_1[1, 1], new_last_set_1[1, 2]),
                                                         obj=(s_ind, u_ind))
+                            new_abstract_path = copy.deepcopy(original_abstract_paths[s_ind][u_ind])
+                            new_abstract_path.append(new_last_set_1)
+                            abstract_paths.append(new_abstract_path)
                             abstract_rect_global_cntr += 1
-                            continue
-                        temp = np.zeros(old_last_set[0, :].shape)
-                        temp[dim] = (old_last_set[1, dim] - old_last_set[0, dim]) / 2
-                        new_last_set_1 = np.array([old_last_set[0, :], old_last_set[1, :] - temp])
-                        new_last_set_2 = np.array([old_last_set[0, :] + temp, old_last_set[1, :]])
-                        new_last_sets.append(new_last_set_1)
-                        new_last_sets.append(new_last_set_2)
-                        # print("old_last_set: ", old_last_set)
-                        # print("new_last_set_1: ", new_last_set_1)
-                        # print("new_last_set_2: ", new_last_set_2)
-                        abstract_rtree_idx3d.insert(abstract_rect_global_cntr,
-                                                    (new_last_set_1[0, 0], new_last_set_1[0, 1],
-                                                     new_last_set_1[0, 2], new_last_set_1[1, 0],
-                                                     new_last_set_1[1, 1], new_last_set_1[1, 2]),
-                                                    obj=(s_ind, u_ind))
-                        new_abstract_path = copy.deepcopy(original_abstract_paths[s_ind][u_ind])
-                        new_abstract_path.append(new_last_set_1)
-                        abstract_paths.append(new_abstract_path)
-                        abstract_rect_global_cntr += 1
-                        abstract_rtree_idx3d.insert(abstract_rect_global_cntr,
-                                                    (new_last_set_2[0, 0], new_last_set_2[0, 1],
-                                                     new_last_set_2[0, 2], new_last_set_2[1, 0],
-                                                     new_last_set_2[1, 1], new_last_set_2[1, 2]),
-                                                    obj=(s_ind, u_ind))
-                        new_abstract_path = copy.deepcopy(original_abstract_paths[s_ind][u_ind])
-                        new_abstract_path.append(new_last_set_2)
-                        abstract_paths.append(new_abstract_path)
-                        abstract_rect_global_cntr += 1
-
-                    abstract_path_last_set_parts[s_ind][u_ind] = copy.deepcopy(new_last_sets)
-
-            # break;
-        print("# of RRT iterations so far: ", itr)
+                            abstract_rtree_idx3d.insert(abstract_rect_global_cntr,
+                                                        (new_last_set_2[0, 0], new_last_set_2[0, 1],
+                                                         new_last_set_2[0, 2], new_last_set_2[1, 0],
+                                                         new_last_set_2[1, 1], new_last_set_2[1, 2]),
+                                                        obj=(s_ind, u_ind))
+                            new_abstract_path = copy.deepcopy(original_abstract_paths[s_ind][u_ind])
+                            new_abstract_path.append(new_last_set_2)
+                            abstract_paths.append(new_abstract_path)
+                            abstract_rect_global_cntr += 1
+    
+                        # abstract_path_last_set_parts[s_ind][u_ind] = copy.deepcopy(new_last_sets)
+    
+                # break;
+            print("# of RRT iterations so far: ", itr)
+            '''
+        itr += 1
 
     print(['Controller synthesis for reach-avoid specification: ', time.time() - t_start, ' seconds'])
-    # controllable_states = np.nonzero(Controller);
-    if len(traversal_stack) == 0:  # abstract_rect_global_cntr:
+    if abstract_rect_global_cntr:
         print(len(abstract_paths), ' symbols are controllable to satisfy the reach-avoid specification\n')
     else:
         print('The reach-avoid specification cannot be satisfied from any initial state\n')
@@ -548,7 +648,7 @@ def synthesize(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Tar
     else:
         for path in abstract_paths:
             for rect in path:
-                rect = transform_to_frames(rect[0, :], rect[1, :], initial_set[0, :], initial_set[1, :])
+                # rect = transform_to_frames(rect[0, :], rect[1, :], initial_set[0, :], initial_set[1, :])
                 rect_patch = Rectangle(rect[0, [0, 1]], rect[1, 0] - rect[0, 0],
                                        rect[1, 1] - rect[0, 1], linewidth=1,
                                        edgecolor=edge_color, facecolor=color)
@@ -610,9 +710,215 @@ def synthesize(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Tar
     plt.show()
 
 
+def check_one_step_abstract_reach_avoid(targets, obstacles, abstract_targets_and_obstacles,
+                                        abstract_path, curr_initset, s):
+    debugging = False
+    good_hit = False
+    intersects_obstacle = False
+    if abstract_targets_and_obstacles[s] is None:
+        abstract_targets = []
+        for target_rect in targets:
+            abstract_target = transform_rect_to_abstract_frames(target_rect, curr_initset, over_approximate=False)
+            if abstract_target is not None:
+                abstract_targets.append(abstract_target)
+        if len(abstract_targets) == 0:
+            if debugging:
+                raise "Abstract target is empty"
+        abstract_obstacles = []
+        for obstacle_poly in obstacles:
+            abstract_obstacle = transform_poly_to_abstract_frames(obstacle_poly, curr_initset, over_approximate=True)
+            abstract_obstacles.append(abstract_obstacle)
+
+        abstract_targets_and_obstacles[s] = AbstractState(abstract_targets, abstract_obstacles, s)
+
+    abstract_state = abstract_targets_and_obstacles[s]
+    for abstract_target in abstract_state.abstract_targets:
+        if does_rect_contain(abstract_path[-1], abstract_target):
+            good_hit = True
+            break
+    for rect in abstract_path:
+        poly = pc.box2poly(rect.T)
+        for abstract_obstacle in abstract_state.abstract_obstacles:
+            if not pc.is_empty(pc.intersect(poly, abstract_obstacle)):
+                intersects_obstacle = True
+                break
+    # if good_hit and not intersects_obstacle:
+    return not intersects_obstacle, good_hit
+
+
+def add_new_paths(controller, abstract_paths, new_indices, s, curr_u_ind, abstract_rtree_idx3d,
+                  abstract_rect_global_cntr):
+    new_path_prefix = copy.deepcopy(abstract_paths[curr_u_ind])
+    new_path_suffix = []
+    for new_s in range(new_indices):
+        for idx, rect in enumerate(abstract_paths[controller[new_s]]):
+            new_rect = transform_to_frames(rect[0, :], rect[1, :],
+                                           new_path_prefix[-1][0, :],
+                                           new_path_prefix[-1][1, :])
+            if len(new_path_suffix) <= idx:
+                new_path_suffix.append(new_rect)
+            else:
+                new_path_suffix[idx] = get_convex_union([new_path_suffix[idx], new_rect])
+    new_path_prefix.extend(new_path_suffix)
+    abstract_paths.append(new_path_prefix)
+    result_rect = new_path_prefix[-1]
+    abstract_rtree_idx3d.insert(abstract_rect_global_cntr, (result_rect[0, 0], result_rect[0, 1],
+                                                            result_rect[0, 2], result_rect[1, 0],
+                                                            result_rect[1, 1], result_rect[1, 2]),
+                                obj=None)
+    abstract_rect_global_cntr += 1
+    return abstract_rect_global_cntr
+
+
+'''
+def synthesize_helper(Symbolic_reduced, sym_x, sym_u, state_dimensions,
+                      X_low, X_up, abstract_rtree_idx3d, abstract_rect_global_cntr, targets,
+                      obstacles, abstract_targets_and_obstacles,
+                      abstract_paths, curr_initset, s):
+    n = state_dimensions.shape[1]
+    debugging = False
+    print("new synthesize_helper call ")
+    result_list = []
+    if abstract_targets_and_obstacles[s] is None:
+        abstract_targets = []
+        for target_rect in targets:
+            abstract_target = transform_rect_to_abstract_frames(target_rect, curr_initset, over_approximate=False)
+            if abstract_target is not None:
+                abstract_targets.append(abstract_target)
+
+        if len(abstract_targets) == 0:
+            if debugging:
+                raise "Abstract target is empty"
+            return False
+        abstract_obstacles = []
+        for obstacle_poly in obstacles:
+            abstract_obstacle = transform_poly_to_abstract_frames(obstacle_poly, curr_initset, over_approximate=True)
+            abstract_obstacles.append(abstract_obstacle)
+
+        abstract_targets_and_obstacles[s] = AbstractState(abstract_targets, abstract_obstacles, s)
+
+    abstract_state = abstract_targets_and_obstacles[s]
+    hits_not_intersecting_obstacles = []
+    good_hit = False
+    intersects_obstacle = True
+    for abstract_target_rect in abstract_state.abstract_targets:
+        abstract_target_rect = fix_rect_angles(abstract_target_rect)
+        target_hits = list(abstract_rtree_idx3d.nearest(
+            (abstract_target_rect[0, 0], abstract_target_rect[0, 1], abstract_target_rect[0, 2],
+             abstract_target_rect[1, 0] + 0.01, abstract_target_rect[1, 1] + 0.01,
+             abstract_target_rect[1, 2]
+             + 0.01), num_results=100, objects=True))
+        closest_hit_idx = 0
+        closest_hit_distance = 100
+        for idx, hit in enumerate(target_hits):
+            hit_bbox = np.array([hit.bbox[:n], hit.bbox[n:]])
+            distance = np.linalg.norm(np.average(hit_bbox, axis=0) - np.average(abstract_target_rect), axis=0)
+            if distance < closest_hit_distance:
+                closest_hit_idx = idx
+                closest_hit_distance = distance
+        hit = target_hits[closest_hit_idx]
+        good_hit = True
+        intersects_obstacle = False
+        new_curr_initset = transform_to_frames(abstract_paths[hit.id][-2][0, :],
+                                               abstract_paths[hit.id][-2][1, :],
+                                               curr_initset[0, :], curr_initset[1, :])
+        if not does_rect_contain(abstract_paths[hit.id][-1], abstract_target_rect):
+            good_hit = False
+        path = abstract_paths[hit.id]
+        for rect in path:
+            poly = pc.box2poly(rect.T)
+            for abstract_obstacle in abstract_state.abstract_obstacles:
+                if not pc.is_empty(pc.intersect(poly, abstract_obstacle)):
+                    # might be slow
+                    # do_rects_inter(rect, abstract_obstacle):
+                    intersects_obstacle = True
+                    break
+            if intersects_obstacle:
+                break
+        if good_hit and not intersects_obstacle:
+            result_list.append((curr_initset, hit.id, abstract_paths[hit.id]))
+            break
+        if not intersects_obstacle:
+            hits_not_intersecting_obstacles.append(hit)
+
+    if good_hit and not intersects_obstacle:
+        continue
+
+    if len(hits_not_intersecting_obstacles) == 0 or max_path_length == 0:
+        if debugging:
+            print("All sampled paths intersect obstacles")
+        return -1, None, []  # Failure
+
+    if debugging:
+        print("hits_not_intersecting_obstacles: ", len(hits_not_intersecting_obstacles))
+    success = False
+    for hit in hits_not_intersecting_obstacles:
+        s_ind, u_ind = hit.object
+        hit_id = hit.id
+        # if len(abstract_path_last_set_parts[s_ind][u_ind]):
+        # for last_set in abstract_path_last_set_parts[s_ind][u_ind]: TODO: this needs to be fixed, last_sets
+        #  should be defined for all rectangles in abstract_rtree, not just the original ones temp,
+        #  try this over-approximation fix:
+        new_curr_initset = transform_to_frames(abstract_paths[hit.id][-1][0, :],
+                                               abstract_paths[hit.id][-1][1, :],
+                                               curr_initset[0, :], curr_initset[1, :])
+        # new_curr_initset = transform_to_frames(last_set[0, :], last_set[1, :], curr_initset[0, :], curr_initset[1,
+        # :])
+        # result, result_abstract_path
+        curr_result_list = synthesize_helper(Symbolic_reduced, sym_x, sym_u, state_dimensions,
+                                             targets,
+                                             obstacles, X_low, X_up, abstract_rtree_idx3d,
+                                             abstract_rect_global_cntr, abstract_paths,
+                                             # abstract_path_last_set_parts,
+                                             new_curr_initset, max_path_length - 1)
+
+        if curr_result_list:  # in range(len(abstract_paths))
+            new_path_prefix = copy.deepcopy(abstract_paths[hit_id])
+            new_path_suffix = []
+            success = True
+            for result_initset, hit_id, result_new_path in curr_result_list:
+                # iterate over results and take the union of the paths.
+                # print("Length of previous path: ", len(new_path))
+                for idx, rect in enumerate(result_new_path):  # abstract_paths[result]:
+                    # also this should be fixed, changed last_set to abstract_paths[hit.id][-1] temporarily
+                    new_rect = transform_to_frames(rect[0, :], rect[1, :], abstract_paths[hit.id][-1][0, :],
+                                                   abstract_paths[hit.id][-1][1, :])
+                    if len(new_path_suffix) <= idx:
+                        new_path_suffix.append(new_rect)
+                    else:
+                        new_path_suffix[idx] = get_convex_union([new_path_suffix[idx], new_rect])
+            new_path_prefix.extend(new_path_suffix)
+            if debugging:
+                print("new path: ", new_path_prefix)
+            abstract_paths.append(new_path_prefix)
+            result_rect = new_path_prefix[-1]
+            abstract_rtree_idx3d.insert(abstract_rect_global_cntr, (result_rect[0, 0], result_rect[0, 1],
+                                                                    result_rect[0, 2], result_rect[1, 0],
+                                                                    result_rect[1, 1], result_rect[1, 2]),
+                                        obj=(s_ind, u_ind))
+            abstract_rect_global_cntr += 1
+        else:
+            success = False
+        if success:
+            # print("length of abstract_paths[hid.id]: ", len(new_path))
+            result_list.append((curr_initset, hit.id, new_path_prefix))
+            break
+            # return hit.id, new_path
+    if not success:  # this part of the initial set cannot reach the target, then the whole initial set fails.
+        return -1, None, []
+    if np.all(curr_key == quantized_key_range[1, :]):
+        break
+    curr_key = next_quantized_key(curr_key, quantized_key_range)
+
+    print("All sampled paths do not reach target")
+    return -1, None, []
+'''
+
+'''
 def synthesize_helper(Symbolic_reduced, sym_x, sym_u, state_dimensions, targets,
                       obstacles, X_low, X_up, abstract_rtree_idx3d, abstract_rect_global_cntr,
-                      abstract_paths, abstract_path_last_set_parts, initial_set, max_path_length):
+                      abstract_paths,  # abstract_path_last_set_parts,
+                      initial_set, max_path_length):
     n = state_dimensions.shape[1]
     num_nearest_controls = int(Symbolic_reduced.shape[1] / 2)
     debugging = False
@@ -622,18 +928,6 @@ def synthesize_helper(Symbolic_reduced, sym_x, sym_u, state_dimensions, targets,
     print("initial_set: ", initial_set)
     print("max_path_length: ", max_path_length)
     abstract_targets = []
-
-    def next_quantized_key(curr_key: np.array, quantized_key_range: np.array) -> np.array:
-        if len(curr_key.shape) > 1:
-            raise ValueError("key must be one dimensional lower left and corner of bounding box")
-        next_key = np.copy(curr_key)
-        for dim in range(curr_key.shape[0] - 1, -1, -1):
-            if curr_key[dim] < quantized_key_range[dim]:
-                next_key[dim] += 1
-                for reset_dim in range(dim + 1, curr_key.shape[0]):
-                    next_key[reset_dim] = 0  # quantized_key_range[0, reset_dim]
-                return next_key
-        raise ValueError("curr_key should not exceed the bounds of the bounding box.")
 
     result_list = []
     quantized_key_range: np.array = np.floor(initial_set / symbol_step)
@@ -783,58 +1077,69 @@ def synthesize_helper(Symbolic_reduced, sym_x, sym_u, state_dimensions, targets,
         if len(hits_not_intersecting_obstacles) == 0 or max_path_length == 0:
             if debugging:
                 print("All sampled paths intersect obstacles")
-            return -1, None  # Failure
+            return -1, None, []  # Failure
 
         if debugging:
             print("hits_not_intersecting_obstacles: ", len(hits_not_intersecting_obstacles))
-
+        success = False
         for hit in hits_not_intersecting_obstacles:
             s_ind, u_ind = hit.object
-            if len(abstract_path_last_set_parts[s_ind][u_ind]):
-                success = True
-                # for last_set in abstract_path_last_set_parts[s_ind][u_ind]: TODO: this needs to be fixed, last_sets
-                #  should be defined for all rectangles in abstract_rtree, not just the original ones temp,
-                #  try this over-approximation fix:
-                new_curr_initset = transform_to_frames(abstract_paths[hit.id][-1][0, :],
-                                                      abstract_paths[hit.id][-1][1, :],
-                                                      curr_initset[0, :], curr_initset[1, :])
-                # new_curr_initset = transform_to_frames(last_set[0, :], last_set[1, :], curr_initset[0, :], curr_initset[1,
-                # :])
-                # result, result_abstract_path
-                curr_result_list = synthesize_helper(Symbolic_reduced, sym_x, sym_u, state_dimensions,
-                                                                 targets,
-                                                                 obstacles, X_low, X_up, abstract_rtree_idx3d,
-                                                                 abstract_rect_global_cntr, abstract_paths,
-                                                                 abstract_path_last_set_parts,
-                                                                 new_curr_initset, max_path_length - 1)
+            hit_id = hit.id
+            # if len(abstract_path_last_set_parts[s_ind][u_ind]):
+            # for last_set in abstract_path_last_set_parts[s_ind][u_ind]: TODO: this needs to be fixed, last_sets
+            #  should be defined for all rectangles in abstract_rtree, not just the original ones temp,
+            #  try this over-approximation fix:
+            new_curr_initset = transform_to_frames(abstract_paths[hit.id][-1][0, :],
+                                                   abstract_paths[hit.id][-1][1, :],
+                                                   curr_initset[0, :], curr_initset[1, :])
+            # new_curr_initset = transform_to_frames(last_set[0, :], last_set[1, :], curr_initset[0, :], curr_initset[1,
+            # :])
+            # result, result_abstract_path
+            curr_result_list = synthesize_helper(Symbolic_reduced, sym_x, sym_u, state_dimensions,
+                                                 targets,
+                                                 obstacles, X_low, X_up, abstract_rtree_idx3d,
+                                                 abstract_rect_global_cntr, abstract_paths,
+                                                 # abstract_path_last_set_parts,
+                                                 new_curr_initset, max_path_length - 1)
 
-                if curr_result_list:  # in range(len(abstract_paths))
+            if curr_result_list:  # in range(len(abstract_paths))
+                new_path_prefix = copy.deepcopy(abstract_paths[hit_id])
+                new_path_suffix = []
+                success = True
+                for result_initset, hit_id, result_new_path in curr_result_list:
                     # iterate over results and take the union of the paths.
-                    new_path = copy.deepcopy(abstract_paths[hit.id])
                     # print("Length of previous path: ", len(new_path))
-                    for rect in result_abstract_path:  # abstract_paths[result]:
+                    for idx, rect in enumerate(result_new_path):  # abstract_paths[result]:
                         # also this should be fixed, changed last_set to abstract_paths[hit.id][-1] temporarily
-                        new_path.append(transform_to_frames(rect[0, :], rect[1, :], abstract_paths[hit.id][-1][0, :],
-                                                            abstract_paths[hit.id][-1][1, :]))
-                    if debugging:
-                        print("new path: ", new_path)
-                    abstract_paths.append(new_path)
-                    result_rect = new_path[-1]
-                    abstract_rtree_idx3d.insert(abstract_rect_global_cntr, (result_rect[0, 0], result_rect[0, 1],
-                                                                            result_rect[0, 2], result_rect[1, 0],
-                                                                            result_rect[1, 1], result_rect[1, 2]),
-                                                obj=(s_ind, u_ind))
-                    abstract_rect_global_cntr += 1
-                else:
-                    success = False
-                if success:
-                    # print("length of abstract_paths[hid.id]: ", len(new_path))
-                    result_list.append((curr_initset, hit.id, new_path))
-                    break
-                    # return hit.id, new_path
+                        new_rect = transform_to_frames(rect[0, :], rect[1, :], abstract_paths[hit.id][-1][0, :],
+                                                       abstract_paths[hit.id][-1][1, :])
+                        if len(new_path_suffix) <= idx:
+                            new_path_suffix.append(new_rect)
+                        else:
+                            new_path_suffix[idx] = get_convex_union([new_path_suffix[idx], new_rect])
+                new_path_prefix.extend(new_path_suffix)
+                if debugging:
+                    print("new path: ", new_path_prefix)
+                abstract_paths.append(new_path_prefix)
+                result_rect = new_path_prefix[-1]
+                abstract_rtree_idx3d.insert(abstract_rect_global_cntr, (result_rect[0, 0], result_rect[0, 1],
+                                                                        result_rect[0, 2], result_rect[1, 0],
+                                                                        result_rect[1, 1], result_rect[1, 2]),
+                                            obj=(s_ind, u_ind))
+                abstract_rect_global_cntr += 1
+            else:
+                success = False
+            if success:
+                # print("length of abstract_paths[hid.id]: ", len(new_path))
+                result_list.append((curr_initset, hit.id, new_path_prefix))
+                break
+                # return hit.id, new_path
+        if not success:  # this part of the initial set cannot reach the target, then the whole initial set fails.
+            return -1, None, []
         if np.all(curr_key == quantized_key_range[1, :]):
             break
         curr_key = next_quantized_key(curr_key, quantized_key_range)
 
     print("All sampled paths do not reach target")
-    return -1, None
+    return -1, None, []
+'''
