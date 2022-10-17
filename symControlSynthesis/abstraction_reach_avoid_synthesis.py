@@ -381,22 +381,21 @@ def next_quantized_key(curr_key: np.array, quantized_key_range: np.array) -> np.
 
 def rect_to_indices(rect, symbol_step, ref_lower_bound, sym_x, over_approximate=False):
     if over_approximate:
-        low_indices = np.floor((rect[0, :] - ref_lower_bound) / symbol_step)
-        up_indices = np.ceil((rect[1, :] - ref_lower_bound) / symbol_step)
+        low_nd_indices = np.floor((rect[0, :] - ref_lower_bound) / symbol_step)
+        up_nd_indices = np.ceil((rect[1, :] - ref_lower_bound) / symbol_step)
     else:
-        low_indices = np.ceil((rect[0, :] - ref_lower_bound) / symbol_step)
-        up_indices = np.floor((rect[1, :] - ref_lower_bound) / symbol_step)
-    print("rect: ", rect)
-    print("sym_x: ", sym_x)
-    print("ref_lower_bound: ", ref_lower_bound)
-    print("low_indices: ", low_indices)
-    print("up_indices: ", up_indices)
-    subscripts = list(itertools.product(range(int(low_indices[0]), int(up_indices[0])),
-                                        range(int(low_indices[1]), int(up_indices[1])),
-                                        range(int(low_indices[2]), int(up_indices[2]))))
+        low_nd_indices = np.ceil((rect[0, :] - ref_lower_bound) / symbol_step)
+        up_nd_indices = np.floor((rect[1, :] - ref_lower_bound) / symbol_step)
+    low_nd_indices = np.maximum(np.zeros(low_nd_indices.shape), low_nd_indices)
+    up_nd_indices = np.minimum(sym_x, up_nd_indices)
+    if np.any(low_nd_indices >= up_nd_indices):
+        raise "symbol step is too large to the point it is causing empty non-empty rectangles " \
+              "having no corresponding indices"
+    subscripts = list(itertools.product(range(int(low_nd_indices[0]), int(up_nd_indices[0])),
+                                        range(int(low_nd_indices[1]), int(up_nd_indices[1])),
+                                        range(int(low_nd_indices[2]), int(up_nd_indices[2]))))
     subscripts = list(np.array([list(idx) for idx in subscripts]).T)
-    print("subscripts: ", subscripts)
-    return numpy.ravel_multi_index(subscripts, tuple((sym_x + 1).astype(int)))
+    return numpy.ravel_multi_index(subscripts, tuple((sym_x).astype(int)))
 
 
 def abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Target_up,
@@ -422,6 +421,7 @@ def abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_
 
     obstacles = []
     targets = []
+    targets_rects = []
     obstacle_indices = []
     target_indices = []
     for obstacle_idx in range(Obstacle_low.shape[0]):
@@ -431,12 +431,14 @@ def abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_
         obstacles.append(obstacle_poly)
         print("obstacle before transforming to indices: ", obstacle_rect)
         indices = rect_to_indices(obstacle_rect, symbol_step, X_low,
-                        sym_x[0, :], over_approximate=True)
+                                  sym_x[0, :], over_approximate=True)
+        '''
         for s in indices:
             s_subscript = np.array(np.unravel_index(s, tuple((sym_x[0, :] + 1).astype(int))))
             s_rect: np.array = np.row_stack((s_subscript * symbol_step + X_low,
                                              s_subscript * symbol_step + symbol_step + X_low))
             print("s_rect of obstacle after transforming from indices: ", s_rect)
+        '''
         obstacle_indices.extend(indices)
 
     for target_idx in range(Target_low.shape[0]):
@@ -444,6 +446,7 @@ def abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_
         target_rect = fix_rect_angles(target_rect)
         target_poly = pc.box2poly(target_rect.T)
         targets.append(target_poly)
+        targets_rects.append(target_rect)
         target_indices.extend(rect_to_indices(target_rect, symbol_step, X_low,
                                               sym_x[0, :], over_approximate=False))
 
@@ -461,6 +464,7 @@ def abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_
     abstract_rect_global_cntr = 0
     abstract_targets_rect_global_cntr = 0
     abstract_paths = []
+    max_reachable_rect_radius = None
     for s_ind in range(Symbolic_reduced.shape[0]):
         abstract_path_last_set_parts.append([])
         original_abstract_paths.append([])
@@ -470,7 +474,9 @@ def abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_
             abstract_rect_up = Symbolic_reduced[s_ind, u_ind, n + np.arange(n), -1]
             rect = np.array([abstract_rect_low, abstract_rect_up])
             rect = fix_rect_angles(rect)
-            abstract_path_last_set_parts[-1][-1].append(rect)
+            curr_max_reachable_rect_radius = np.linalg.norm(rect[1, :] - rect[0, :]) / 2
+            if max_reachable_rect_radius is None or curr_max_reachable_rect_radius > max_reachable_rect_radius:
+                max_reachable_rect_radius = curr_max_reachable_rect_radius
             abstract_rtree_idx3d.insert(abstract_rect_global_cntr, (rect[0, 0], rect[0, 1],
                                                                     rect[0, 2], rect[1, 0],
                                                                     rect[1, 1], rect[1, 2]),
@@ -487,21 +493,28 @@ def abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_
             abstract_paths.append(original_abstract_path)
 
     result_abstract_paths = []
-    matrix_dim_full = [np.prod(sym_x[0, :] + 1), np.prod(sym_u), 2 * n]
+    matrix_dim_full = [np.prod(sym_x[0, :]), np.prod(sym_u), 2 * n]
     print("matrix_dim_full: ", matrix_dim_full)
     symbols_to_explore = np.setdiff1d(np.array(range(int(matrix_dim_full[0]))), target_indices)
     symbols_to_explore = np.setdiff1d(symbols_to_explore, obstacle_indices)
+    symbols_to_discard = []
 
     concrete_rect_global_cntr = 0
-    abstract_targets_and_obstacles = [None] * int(matrix_dim_full[0])
-    concrete_to_abstract = [None] * int(matrix_dim_full[0])
+    abstract_targets_and_obstacles = {}  # [None] * int(matrix_dim_full[0])
+    concrete_to_abstract = {}  # [None] * int(matrix_dim_full[0])
     abstract_to_concrete = []
     reduced_abstract_states = []
     for s in symbols_to_explore:
-        s_subscript = np.array(np.unravel_index(s, tuple((sym_x[0, :] + 1).astype(int))))
+        s_subscript = np.array(np.unravel_index(s, tuple((sym_x[0, :]).astype(int))))
         s_rect: np.array = np.row_stack((s_subscript * symbol_step + X_low,
                                          s_subscript * symbol_step + symbol_step + X_low))
-        if np.any(s_rect[1, :] > X_up):
+        s_rect[0, :] = np.maximum(X_low, s_rect[0, :])
+        s_rect[1, :] = np.minimum(X_up, s_rect[1, :])
+        # if np.any(s_rect[1, :] > X_up):
+        #    raise "s_rect[1, :]: " + str(s_rect[1, :]) + "> X_up: " + str(X_up)
+        if np.any(s_rect[0, :] >= s_rect[1, :]):
+            print("Skipping over ", s_rect)
+            symbols_to_discard.append(s)
             continue
         print("s_rect: ", s_rect)
         concrete_rtree_idx3d.insert(abstract_rect_global_cntr, (s_rect[0, 0], s_rect[0, 1],
@@ -514,9 +527,11 @@ def abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_
 
         abstract_targets_polys = []
         abstract_targets_rects = []
-        for target_poly in targets:
+        for target_idx, target_poly in enumerate(targets):
             abstract_target_poly = transform_poly_to_abstract_frames(target_poly, s_rect, over_approximate=False)
             if not pc.is_empty(abstract_target_poly):
+                # abstract_target_rect = transform_rect_to_abstract_frames(targets_rects[target_idx], s_rect,
+                #                                                         over_approximate=False)
                 rc, x1 = pc.cheby_ball(abstract_target_poly)
                 abstract_target_rect = np.array([x1 - rc, x1 + rc])
                 abstract_targets_rects.append(abstract_target_rect)
@@ -531,8 +546,9 @@ def abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_
                 abstract_targets_rect_global_cntr += 1
             else:
                 print("empty abstract_target_poly: ", abstract_target_poly)
+                raise "empty abstract_target_poly error"
 
-        if len(abstract_targets_polys) == 0 or len(abstract_targets_polys) == 0:
+        if len(abstract_targets_polys) == 0:
             raise "Abstract target is empty"
 
         abstract_obstacles = []
@@ -544,48 +560,61 @@ def abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_
         abstract_targets_and_obstacles[s] = AbstractState(abstract_targets_polys, abstract_obstacles, s)
 
         # Now adding the abstract state to a cluster --> combining abstract states with overlapping (abstract) targets
-        for abstract_target_rect in abstract_targets_rects:
+        for curr_target_idx, curr_target_rect in enumerate(abstract_targets_rects):
             hits = list(reduced_abstract_targets_rtree_idx3d.intersection(
-                (abstract_target_rect[0, 0], abstract_target_rect[0, 1], abstract_target_rect[0, 2],
-                 abstract_target_rect[1, 0], abstract_target_rect[1, 1], abstract_target_rect[1, 2]),
+                (curr_target_rect[0, 0], curr_target_rect[0, 1], curr_target_rect[0, 2],
+                 curr_target_rect[1, 0], curr_target_rect[1, 1], curr_target_rect[1, 2]),
                 objects=True))
             if len(hits):
-                max_vol = 0
-                max_vol_idx = 0
+                max_rad = 0
+                max_rad_idx = 0
                 max_intersection_rect = None
                 for idx, hit in enumerate(hits):
-                    existing_abstract_state_rect = np.array([hit.bbox[:n], hit.bbox[n:]])
-                    intersection_rect = get_intersection([existing_abstract_state_rect, abstract_target_rect])
-                    vol = get_rect_volume(intersection_rect)
-                    if vol > max_vol:
-                        max_vol = vol
-                        max_vol_idx = idx
-                        max_intersection_rect = intersection_rect
-                abstract_state = hits[max_vol_idx].object
-                # change this if you are allowing multiple targets. You should take the union of the pairwise
-                # intersections of s's abstract targets with the abstract state's targets
-                for idx, abstract_target_poly in enumerate(abstract_state.abstract_targets):
-                    intersection_poly = pc.intersect(abstract_targets_polys[0], abstract_target_poly)
-                    if not pc.is_empty(intersection_poly):
-                        abstract_state.abstract_targets[idx] = intersection_poly
-                union_poly = pc.Region(list_poly=abstract_state.abstract_obstacles)
-                for curr_abstract_obstacle_poly in abstract_obstacles:
-                    union_poly = pc.union(curr_abstract_obstacle_poly, union_poly)
-                abstract_state.abstract_obstacles = union_poly
-                new_concrete_state_idx = abstract_state.concrete_state_idx
-                new_concrete_state_idx.append(s)
-                new_abstract_state = AbstractState(abstract_state.abstract_targets, abstract_state.abstract_obstacles,
-                                                   new_concrete_state_idx)
-                reduced_abstract_targets_rtree_idx3d.delete(hits[max_vol_idx].id, hits[max_vol_idx].bbox)
-                reduced_abstract_targets_rtree_idx3d.insert(hits[max_vol_idx].id, (
-                    max_intersection_rect[0, 0], max_intersection_rect[0, 1], max_intersection_rect[0, 2],
-                    max_intersection_rect[1, 0], max_intersection_rect[1, 1], max_intersection_rect[1, 2]),
-                                                            obj=new_abstract_state)
-                reduced_abstract_states[hits[max_vol_idx].id] = new_abstract_state
-                concrete_to_abstract[s] = max_vol_idx
-                abstract_to_concrete[max_vol_idx].append(s)
-                break
-        if concrete_to_abstract[s] is None:
+                    abstract_state = hits[idx].object
+                    for target_idx, abstract_target_poly in enumerate(abstract_state.abstract_targets):
+                        intersection_poly = pc.intersect(copy.deepcopy(abstract_targets_polys[curr_target_idx]),
+                                                         copy.deepcopy(abstract_target_poly))
+                        if not pc.is_empty(intersection_poly):
+                            # abstract_state.abstract_targets[target_idx] = intersection_poly
+                            # existing_abstract_state_rect = np.array([hit.bbox[:n], hit.bbox[n:]])
+                            # intersection_rect = get_intersection([existing_abstract_state_rect, curr_target_rect])
+                            # vol = get_rect_volume(intersection_rect)
+                            rc, x1 = pc.cheby_ball(abstract_target_poly)
+                            max_intersection_rect = np.array([x1 - rc, x1 + rc])
+                            if np.linalg.norm(rc) > np.linalg.norm(max_rad):
+                                max_rad = rc
+                                max_rad_idx = idx
+                                max_intersection_rect = np.array([x1 - rc, x1 + rc])  # intersection_rect
+                # Now we want to make sure that the intersection is large enough to be useful in synthesis later
+                # if np.all(max_intersection_rect[1, :] - max_intersection_rect[0, :] >= 2 * symbol_step):
+                if max_rad >= 2 * max_reachable_rect_radius:  # 2 * symbol_step:
+                    abstract_state = hits[max_rad_idx].object
+                    # change this if you are allowing multiple targets. You should take the union of the pairwise
+                    # intersections of s's abstract targets with the abstract state's targets
+                    for target_idx, abstract_target_poly in enumerate(abstract_state.abstract_targets):
+                        intersection_poly = pc.intersect(copy.deepcopy(abstract_targets_polys[curr_target_idx]),
+                                                         copy.deepcopy(abstract_target_poly))
+                        if not pc.is_empty(intersection_poly):
+                            abstract_state.abstract_targets[target_idx] = intersection_poly
+                    union_poly = pc.Region(list_poly=copy.deepcopy(abstract_state.abstract_obstacles))
+                    for curr_abstract_obstacle_poly in abstract_obstacles:
+                        union_poly = pc.union(copy.deepcopy(curr_abstract_obstacle_poly), union_poly)
+                    abstract_state.abstract_obstacles = union_poly
+                    new_concrete_state_idx = abstract_state.concrete_state_idx
+                    new_concrete_state_idx.append(s)
+                    new_abstract_state = AbstractState(abstract_state.abstract_targets,
+                                                       abstract_state.abstract_obstacles,
+                                                       new_concrete_state_idx)
+                    reduced_abstract_targets_rtree_idx3d.delete(hits[max_rad_idx].id, hits[max_rad_idx].bbox)
+                    reduced_abstract_targets_rtree_idx3d.insert(hits[max_rad_idx].id, (
+                        max_intersection_rect[0, 0], max_intersection_rect[0, 1], max_intersection_rect[0, 2],
+                        max_intersection_rect[1, 0], max_intersection_rect[1, 1], max_intersection_rect[1, 2]),
+                                                                obj=new_abstract_state)
+                    reduced_abstract_states[hits[max_rad_idx].id] = new_abstract_state
+                    concrete_to_abstract[s] = hits[max_rad_idx].id
+                    abstract_to_concrete[hits[max_rad_idx].id].append(s)
+                    break
+        if s not in concrete_to_abstract:  # concrete_to_abstract[s] is None:
             # create a new abstract state since there isn't a current one suitable for s.
             rect = abstract_targets_rects[0]
             new_abstract_state = AbstractState(abstract_targets_polys, abstract_obstacles, [s])
@@ -595,9 +624,18 @@ def abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_
             abstract_to_concrete.append([s])
             reduced_abstract_states.append(new_abstract_state)
             reduced_abstract_targets_rect_global_cntr += 1
+
+    symbols_to_explore = np.setdiff1d(symbols_to_explore, symbols_to_discard)
     print(['Done symmetry abstraction in: ', time.time() - t_start, ' seconds'])
     print("concrete_to_abstract: ", len(concrete_to_abstract))
     print("abstract_to_concrete: ", len(abstract_to_concrete))
+
+    # Now, create the edges in the discrete model
+    for s in symbols_to_explore:
+        # here you should transform s to the abstract coordinates, but in our case, it is just the origin.
+        for u_ind in range(Symbolic_reduced.shape[1]):
+            
+
 
     for idx, abstract_state in enumerate(reduced_abstract_states):
         print("Plotting abstract state: ", idx)
@@ -632,6 +670,7 @@ def abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_
         plt.xlim([-10, 10])
         plt.savefig("Abstract state: " + str(idx))
         plt.show()
+        plt.cla()
         plt.close()
     # TODO: build transition model between abstract states. debug abstraction: why most of the states are mapped
     #  to the first abstract state, although figures show that's not the case
