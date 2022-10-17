@@ -2,7 +2,7 @@ import matlab.engine
 import numpy as np
 import time
 import math
-from plot import plot
+# from plot import plot
 
 import matplotlib
 
@@ -10,7 +10,7 @@ matplotlib.use("macOSX")
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle, Polygon
 
-from abstraction_reach_avoid_synthesis import synthesize
+from abstraction_reach_avoid_synthesis import synthesize, abstract_synthesis
 from Reach_avoid_synthesis_sets import reach_avoid_synthesis_sets
 from Reach_avoid_synthesis_sets_forward_pass import reach_avoid_synthesis_sets_forward_pass
 
@@ -43,8 +43,8 @@ W_low = -W_up
 # with the ship facing East (+ / -30° around 90° = >[pi / 3, 2 * pi / 3])
 # Target_up = [10; 6.5; 2 * pi / 3];
 # Target_low = [6; 0; pi / 3];
-Target_up = np.array([[10, 6.5, 100]]) # 2 * math.pi / 3
-Target_low = np.array([[7, 0, -100]]) # math.pi / 3
+Target_up = np.array([[10, 6.5, 100]])  # 2 * math.pi / 3
+Target_low = np.array([[7, 0, -100]])  # math.pi / 3
 # Target_up = np.array([[10, 2, 2 * math.pi / 3], [10, 4, 2 * math.pi / 3], [10, 6.5, 2 * math.pi / 3]])
 # Target_low = np.array([[7, 0, math.pi / 3], [7, 2, math.pi / 3], [7, 4, math.pi / 3]])
 
@@ -54,11 +54,13 @@ Target_low = np.array([[7, 0, -100]]) # math.pi / 3
 # Hussein: change the angles bounds from -pi, pi to - 100, 100, respectively
 # Obstacle_up = [[[2.5], [5.5]], [[3],[6.5]], [[math.pi], [math.pi]]];
 # Obstacle_low = [[[2], [5]], [[0],[3.5]], [[-math.pi], [-math.pi]]];
-Obstacle_up = np.array([[2.5, 3, 100], [5.5, 9.5, 100], [0, 9.5, 100], [13, 0, 100], [13, 9.5, 100], [13, 9.5, 100]])
-Obstacle_low = np.array([[2, -3, -100], [5, 3.5, -100], [-3, -3, -100], [-3, -3, -100], [-3, 6.5, -100], [10, -3, -100]])
+Obstacle_up = np.array([[2.5, 3, math.pi], [5.5, 9.5, math.pi], [0, 9.5, math.pi], [13, 0, math.pi],
+                        [13, 9.5, math.pi], [13, 9.5, math.pi]])
+Obstacle_low = np.array([[2, -3, -math.pi], [5, 3.5, -math.pi], [-3, -3, -math.pi], [-3, -3, -math.pi],
+                         [-3, 6.5, -math.pi], [10, -3, -math.pi]])
 
 sym_x = 10 * np.ones((1, n_x))
-sym_x[0, 2] = 15
+sym_x[0, 2] = 30
 
 sym_u = 5 * np.ones((1, n_u))
 
@@ -69,10 +71,8 @@ state_dimensions = np.zeros((1, n_x))
 ## Update specifications with error bounds
 
 # Shrink state space / safety
-X_up = X_up  + 3 # - error_6D(1:n_x);
+X_up = X_up + 3  # - error_6D(1:n_x);
 X_low = X_low - 3  # + error_6D(1:n_x);
-print("X_low: ", X_low)
-print("X_up: ", X_up)
 X_low[2] = -math.pi
 X_up[2] = math.pi
 
@@ -168,8 +168,10 @@ U_discrete = np.array(U_discrete)
 
 N = 30
 M = 5
-synthesize(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Target_up,
-               Obstacle_low, Obstacle_up, X_low, X_up, U_low, U_up, N, M)
+abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Target_up,
+                   Obstacle_low, Obstacle_up, X_low, X_up)
+# synthesize(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Target_up,
+#               Obstacle_low, Obstacle_up, X_low, X_up, U_low, U_up, N, M)
 # initial_set = np.array([[4.5, 0.5, 0.5], [5, 1, 1]]) Controller = reach_avoid_synthesis_sets_forward_pass(
 # initial_set, Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Target_up, Obstacle_low, Obstacle_up,
 # X_low, X_up, U_low, U_up)

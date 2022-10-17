@@ -11,6 +11,7 @@ import random
 import copy
 import os
 import itertools
+from scipy.spatial import ConvexHull
 
 import matplotlib
 
@@ -337,6 +338,13 @@ def does_rect_contain(rect1, rect2):  # does rect2 contains rect1
     return False
 
 
+def get_rect_volume(rect: np.array):
+    vol = np.prod(rect[1, :] - rect[0, :])
+    if vol < 0:
+        raise "not a valid rectangle"
+    return vol
+
+
 def get_convex_union(list_array: List[np.array]) -> np.array:
     assert len(list_array) > 0, "list array length should be larger than zero"
     result: np.array = np.copy(list_array[0])
@@ -391,6 +399,373 @@ def rect_to_indices(rect, symbol_step, ref_lower_bound, sym_x, over_approximate=
     return numpy.ravel_multi_index(subscripts, tuple((sym_x + 1).astype(int)))
 
 
+def abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Target_up,
+                       Obstacle_low, Obstacle_up, X_low, X_up):
+    n = state_dimensions.shape[1]
+    itr = 0
+    t_start = time.time()
+    print('\n%s\tStart of the symmetry abstraction \n', time.time() - t_start)
+
+    color_initial = 'y'
+    color_reach = 'b'
+    color_target = 'm'
+    color = 'b'
+    obstacle_color = 'r'
+    target_color = 'g'
+    p = index.Property()
+    p.dimension = 3
+    p.dat_extension = 'data'
+    p.idx_extension = 'index'
+
+    symbol_step = (X_up - X_low) / sym_x[0, :]
+    quantized_key_range: np.array = np.floor(np.array([X_low, X_up]) / symbol_step)
+
+    obstacles = []
+    targets = []
+    obstacle_indices = []
+    target_indices = []
+    for obstacle_idx in range(Obstacle_low.shape[0]):
+        obstacle_rect = np.array([Obstacle_low[obstacle_idx, :], Obstacle_up[obstacle_idx, :]])
+        obstacle_rect = fix_rect_angles(obstacle_rect)
+        obstacle_poly = pc.box2poly(obstacle_rect.T)
+        obstacles.append(obstacle_poly)
+        print("obstacle before transforming to indices: ", obstacle_rect)
+        indices = rect_to_indices(obstacle_rect, symbol_step, X_low,
+                        sym_x[0, :], over_approximate=True)
+        for s in indices:
+            s_subscript = np.array(np.unravel_index(s, tuple((sym_x[0, :] + 1).astype(int))))
+            s_rect: np.array = np.row_stack((s_subscript * symbol_step + X_low,
+                                             s_subscript * symbol_step + symbol_step + X_low))
+            print("s_rect of obstacle after transforming from indices: ", s_rect)
+        obstacle_indices.extend(indices)
+
+    for target_idx in range(Target_low.shape[0]):
+        target_rect = np.array([Target_low[target_idx, :], Target_up[target_idx, :]])
+        target_rect = fix_rect_angles(target_rect)
+        target_poly = pc.box2poly(target_rect.T)
+        targets.append(target_poly)
+        target_indices.extend(rect_to_indices(target_rect, symbol_step, X_low,
+                                              sym_x[0, :], over_approximate=False))
+
+    original_abstract_paths = []
+    abstract_path_last_set_parts = []
+    abstract_rtree_idx3d = index.Index('3d_index_abstract',
+                                       properties=p)
+    concrete_rtree_idx3d = index.Index('3d_index_concrete',
+                                       properties=p)
+    abstract_targets_rtree_idx3d = index.Index('3d_index_abstract_targets',
+                                               properties=p)
+    reduced_abstract_targets_rtree_idx3d = index.Index('3d_index_reduced_abstract_targets',
+                                                       properties=p)
+    reduced_abstract_targets_rect_global_cntr = 0
+    abstract_rect_global_cntr = 0
+    abstract_targets_rect_global_cntr = 0
+    abstract_paths = []
+    for s_ind in range(Symbolic_reduced.shape[0]):
+        abstract_path_last_set_parts.append([])
+        original_abstract_paths.append([])
+        for u_ind in range(Symbolic_reduced.shape[1]):
+            abstract_path_last_set_parts[-1].append([])
+            abstract_rect_low = Symbolic_reduced[s_ind, u_ind, np.arange(n), -1]
+            abstract_rect_up = Symbolic_reduced[s_ind, u_ind, n + np.arange(n), -1]
+            rect = np.array([abstract_rect_low, abstract_rect_up])
+            rect = fix_rect_angles(rect)
+            abstract_path_last_set_parts[-1][-1].append(rect)
+            abstract_rtree_idx3d.insert(abstract_rect_global_cntr, (rect[0, 0], rect[0, 1],
+                                                                    rect[0, 2], rect[1, 0],
+                                                                    rect[1, 1], rect[1, 2]),
+                                        obj=(s_ind, u_ind))
+            abstract_rect_global_cntr += 1
+            original_abstract_path = []
+            for t_ind in range(Symbolic_reduced.shape[3]):
+                rect = np.array([Symbolic_reduced[s_ind, u_ind, np.arange(n), t_ind],
+                                 Symbolic_reduced[s_ind, u_ind, n + np.arange(n), t_ind]])
+                rect = fix_rect_angles(rect)
+                original_abstract_path.append(rect)
+
+            original_abstract_paths[-1].append(copy.deepcopy(original_abstract_path))
+            abstract_paths.append(original_abstract_path)
+
+    result_abstract_paths = []
+    matrix_dim_full = [np.prod(sym_x[0, :] + 1), np.prod(sym_u), 2 * n]
+    print("matrix_dim_full: ", matrix_dim_full)
+    symbols_to_explore = np.setdiff1d(np.array(range(int(matrix_dim_full[0]))), target_indices)
+    symbols_to_explore = np.setdiff1d(symbols_to_explore, obstacle_indices)
+
+    concrete_rect_global_cntr = 0
+    abstract_targets_and_obstacles = [None] * int(matrix_dim_full[0])
+    concrete_to_abstract = [None] * int(matrix_dim_full[0])
+    abstract_to_concrete = []
+    reduced_abstract_states = []
+    for s in symbols_to_explore:
+        s_subscript = np.array(np.unravel_index(s, tuple((sym_x[0, :] + 1).astype(int))))
+        s_rect: np.array = np.row_stack((s_subscript * symbol_step + X_low,
+                                         s_subscript * symbol_step + symbol_step + X_low))
+        if np.any(s_rect[1, :] > X_up):
+            continue
+        print("s_rect: ", s_rect)
+        concrete_rtree_idx3d.insert(abstract_rect_global_cntr, (s_rect[0, 0], s_rect[0, 1],
+                                                                s_rect[0, 2], s_rect[1, 0],
+                                                                s_rect[1, 1], s_rect[1, 2]),
+                                    obj=s)
+        concrete_rect_global_cntr += 1
+
+        # transforming the targets and obstacles to a new coordinate system relative to the states in s.
+
+        abstract_targets_polys = []
+        abstract_targets_rects = []
+        for target_poly in targets:
+            abstract_target_poly = transform_poly_to_abstract_frames(target_poly, s_rect, over_approximate=False)
+            if not pc.is_empty(abstract_target_poly):
+                rc, x1 = pc.cheby_ball(abstract_target_poly)
+                abstract_target_rect = np.array([x1 - rc, x1 + rc])
+                abstract_targets_rects.append(abstract_target_rect)
+                abstract_targets_polys.append(abstract_target_poly)
+                abstract_targets_rtree_idx3d.insert(abstract_targets_rect_global_cntr, (abstract_target_rect[0, 0],
+                                                                                        abstract_target_rect[0, 1],
+                                                                                        abstract_target_rect[0, 2],
+                                                                                        abstract_target_rect[1, 0],
+                                                                                        abstract_target_rect[1, 1],
+                                                                                        abstract_target_rect[1, 2]),
+                                                    obj=s)
+                abstract_targets_rect_global_cntr += 1
+            else:
+                print("empty abstract_target_poly: ", abstract_target_poly)
+
+        if len(abstract_targets_polys) == 0 or len(abstract_targets_polys) == 0:
+            raise "Abstract target is empty"
+
+        abstract_obstacles = []
+        for obstacle_poly in obstacles:
+            abstract_obstacle = transform_poly_to_abstract_frames(obstacle_poly, s_rect,
+                                                                  over_approximate=True)
+            abstract_obstacles.append(abstract_obstacle)
+
+        abstract_targets_and_obstacles[s] = AbstractState(abstract_targets_polys, abstract_obstacles, s)
+
+        # Now adding the abstract state to a cluster --> combining abstract states with overlapping (abstract) targets
+        for abstract_target_rect in abstract_targets_rects:
+            hits = list(reduced_abstract_targets_rtree_idx3d.intersection(
+                (abstract_target_rect[0, 0], abstract_target_rect[0, 1], abstract_target_rect[0, 2],
+                 abstract_target_rect[1, 0], abstract_target_rect[1, 1], abstract_target_rect[1, 2]),
+                objects=True))
+            if len(hits):
+                max_vol = 0
+                max_vol_idx = 0
+                max_intersection_rect = None
+                for idx, hit in enumerate(hits):
+                    existing_abstract_state_rect = np.array([hit.bbox[:n], hit.bbox[n:]])
+                    intersection_rect = get_intersection([existing_abstract_state_rect, abstract_target_rect])
+                    vol = get_rect_volume(intersection_rect)
+                    if vol > max_vol:
+                        max_vol = vol
+                        max_vol_idx = idx
+                        max_intersection_rect = intersection_rect
+                abstract_state = hits[max_vol_idx].object
+                # change this if you are allowing multiple targets. You should take the union of the pairwise
+                # intersections of s's abstract targets with the abstract state's targets
+                for idx, abstract_target_poly in enumerate(abstract_state.abstract_targets):
+                    intersection_poly = pc.intersect(abstract_targets_polys[0], abstract_target_poly)
+                    if not pc.is_empty(intersection_poly):
+                        abstract_state.abstract_targets[idx] = intersection_poly
+                union_poly = pc.Region(list_poly=abstract_state.abstract_obstacles)
+                for curr_abstract_obstacle_poly in abstract_obstacles:
+                    union_poly = pc.union(curr_abstract_obstacle_poly, union_poly)
+                abstract_state.abstract_obstacles = union_poly
+                new_concrete_state_idx = abstract_state.concrete_state_idx
+                new_concrete_state_idx.append(s)
+                new_abstract_state = AbstractState(abstract_state.abstract_targets, abstract_state.abstract_obstacles,
+                                                   new_concrete_state_idx)
+                reduced_abstract_targets_rtree_idx3d.delete(hits[max_vol_idx].id, hits[max_vol_idx].bbox)
+                reduced_abstract_targets_rtree_idx3d.insert(hits[max_vol_idx].id, (
+                    max_intersection_rect[0, 0], max_intersection_rect[0, 1], max_intersection_rect[0, 2],
+                    max_intersection_rect[1, 0], max_intersection_rect[1, 1], max_intersection_rect[1, 2]),
+                                                            obj=new_abstract_state)
+                reduced_abstract_states[hits[max_vol_idx].id] = new_abstract_state
+                concrete_to_abstract[s] = max_vol_idx
+                abstract_to_concrete[max_vol_idx].append(s)
+                break
+        if concrete_to_abstract[s] is None:
+            # create a new abstract state since there isn't a current one suitable for s.
+            rect = abstract_targets_rects[0]
+            new_abstract_state = AbstractState(abstract_targets_polys, abstract_obstacles, [s])
+            reduced_abstract_targets_rtree_idx3d.insert(reduced_abstract_targets_rect_global_cntr, (
+                rect[0, 0], rect[0, 1], rect[0, 2], rect[1, 0], rect[1, 1], rect[1, 2]), obj=new_abstract_state)
+            concrete_to_abstract[s] = reduced_abstract_targets_rect_global_cntr
+            abstract_to_concrete.append([s])
+            reduced_abstract_states.append(new_abstract_state)
+            reduced_abstract_targets_rect_global_cntr += 1
+    print(['Done symmetry abstraction in: ', time.time() - t_start, ' seconds'])
+    print("concrete_to_abstract: ", len(concrete_to_abstract))
+    print("abstract_to_concrete: ", len(abstract_to_concrete))
+
+    for idx, abstract_state in enumerate(reduced_abstract_states):
+        print("Plotting abstract state: ", idx)
+        plt.figure("Abstract state: " + str(idx))
+        currentAxis = plt.gca()
+        abstract_obstacles = abstract_state.abstract_obstacles
+        abstract_targets = abstract_state.abstract_targets
+        for region in abstract_obstacles:
+            if isinstance(region, pc.Region):
+                poly_list = region.list_poly
+            else:
+                poly_list = [region]
+            for poly in poly_list:
+                points = pc.extreme(poly)
+                points = points[:, :2]
+                hull = ConvexHull(points)
+                poly_patch = Polygon(points[hull.vertices, :], alpha=.5, color=obstacle_color, fill=True)
+                currentAxis.add_patch(poly_patch)
+
+        for region in abstract_targets:
+            if isinstance(region, pc.Region):
+                poly_list = region.list_poly
+            else:
+                poly_list = [region]
+            for poly in poly_list:
+                points = pc.extreme(poly)
+                points = points[:, :2]
+                hull = ConvexHull(points)
+                poly_patch = Polygon(points[hull.vertices, :], alpha=.5, color=target_color, fill=True)
+                currentAxis.add_patch(poly_patch)
+        plt.ylim([-10, 10])
+        plt.xlim([-10, 10])
+        plt.savefig("Abstract state: " + str(idx))
+        plt.show()
+        plt.close()
+    # TODO: build transition model between abstract states. debug abstraction: why most of the states are mapped
+    #  to the first abstract state, although figures show that's not the case
+    '''
+    print('\n%s\tStart of the control synthesis\n', time.time() - t_start)
+    controller = [-1] * int(matrix_dim_full[0])
+    u_ind = 0
+    num_controllable_states = 0
+    cur_target = targets[0]
+    while True:  # len(traversal_stack) and fail_itr < M:
+        num_new_symbols = 0
+        temp_target_indices = []
+        print("Checking which states can use the rectangle ", u_ind, " in the abstract rtree to reach the target")
+        fewer_symbols_to_explore_hits = list(concrete_rtree_idx3d.nearest((cur_target[0, 0], cur_target[0, 1],
+                                                                           cur_target[0, 2], cur_target[1, 0] + 0.01,
+                                                                           cur_target[1, 1] + 0.01, cur_target[1, 2]
+                                                                           + 0.01), num_results=100, objects=True))
+        for hit in fewer_symbols_to_explore_hits:  # symbols_to_explore:
+            s = hit.object
+            result_avoid = False
+            result_reach = False
+            s_subscript = np.array(np.unravel_index(s, tuple((sym_x[0, :] + 1).astype(int))))
+            curr_initset: np.array = np.row_stack((s_subscript * symbol_step + X_low,
+                                                   s_subscript * symbol_step + symbol_step + X_low))
+            if u_ind < len(abstract_paths):
+                result_avoid, result_reach = check_one_step_abstract_reach_avoid(targets, obstacles,
+                                                                                 abstract_targets_and_obstacles,
+                                                                                 abstract_paths[u_ind], curr_initset, s)
+            else:
+                for curr_u_ind in range(matrix_dim_full[2]):
+                    new_curr_initset = transform_to_frames(abstract_paths[curr_u_ind][-1][0, :],
+                                                           abstract_paths[curr_u_ind][-1][1, :],
+                                                           curr_initset[0, :], curr_initset[1, :])
+                    new_indices = rect_to_indices(new_curr_initset, symbol_step, X_low,
+                                                  sym_x[0, :], over_approximate=True)
+                    if np.all(np.isin(new_indices, target_indices)):
+                        abstract_rect_global_cntr = add_new_paths(controller, abstract_paths, new_indices, s,
+                                                                  curr_u_ind, abstract_rtree_idx3d,
+                                                                  abstract_rect_global_cntr)
+                        break
+
+            if result_avoid and result_reach:
+                cur_target = get_convex_union([cur_target, curr_initset])
+                controller[s] = u_ind
+                temp_target_indices.append(s)
+                concrete_rtree_idx3d.delete(s, (curr_initset[0, 0], curr_initset[0, 1], curr_initset[0, 2],
+                                                curr_initset[1, 0], curr_initset[1, 1], curr_initset[1, 2]))
+                num_new_symbols += 1
+
+        if num_new_symbols:
+            print(time.time() - t_start, " ", num_new_symbols,
+                  " new controllable states have been found in this synthesis iteration\n")
+            target_indices.extend(temp_target_indices)
+            num_controllable_states += num_new_symbols
+            symbols_to_explore = np.setdiff1d(symbols_to_explore, temp_target_indices)
+            print(num_controllable_states, ' symbols are controllable to satisfy the reach-avoid specification\n')
+        else:
+            print('No new controllable state has been found in this synthesis iteration\n', time.time() - t_start)
+            break
+
+        u_ind += 1
+        itr += 1
+
+    print(['Controller synthesis for reach-avoid specification: ', time.time() - t_start, ' seconds'])
+    if abstract_rect_global_cntr:
+        print(len(abstract_paths), ' symbols are controllable to satisfy the reach-avoid specification\n')
+    else:
+        print('The reach-avoid specification cannot be satisfied from any initial state\n')
+
+    plt.figure("Original coordinates")
+    currentAxis = plt.gca()
+    color = 'r'
+    edge_color = 'k'
+    for i in range(Obstacle_up.shape[0]):  # and np.any(rect_curr):
+        rect = np.array([Obstacle_low[i, :], Obstacle_up[i, :]])
+        rect_patch = Rectangle(rect[0, [0, 1]], rect[1, 0] - rect[0, 0],
+                               rect[1, 1] - rect[0, 1], linewidth=1,
+                               edgecolor=color, facecolor=color)
+        currentAxis.add_patch(rect_patch)
+
+    color = 'g'
+    for target_idx in range(Target_low.shape[0]):
+        rect = np.array([Target_low[target_idx, :], Target_up[target_idx, :]])
+        rect_patch = Rectangle(rect[0, [0, 1]], rect[1, 0] - rect[0, 0],
+                               rect[1, 1] - rect[0, 1], linewidth=1,
+                               edgecolor=color, facecolor=color)
+        currentAxis.add_patch(rect_patch)
+
+    color = 'b'
+    if len(result_abstract_paths) > 0:
+        for initial_set, path in result_abstract_paths:
+            for rect in path:
+                rect = transform_to_frames(rect[0, :], rect[1, :], initial_set[0, :], initial_set[1, :])
+                rect_patch = Rectangle(rect[0, [0, 1]], rect[1, 0] - rect[0, 0],
+                                       rect[1, 1] - rect[0, 1], linewidth=1,
+                                       edgecolor=edge_color, facecolor=color)
+                currentAxis.add_patch(rect_patch)
+            rect = transform_to_frames(path[-1][0, :], path[-1][1, :], initial_set[0, :],
+                                       initial_set[1, :])
+            print("last rect: ", rect)
+            print("targets[-1]: ", targets[-1])
+            print("Does the end of the path belong to the target? ", does_rect_contain(rect, targets[-1]))
+            rect_patch = Rectangle(rect[0, [0, 1]], rect[1, 0] - rect[0, 0],
+                                   rect[1, 1] - rect[0, 1], linewidth=1,
+                                   edgecolor=edge_color, facecolor='m')
+            currentAxis.add_patch(rect_patch)
+    else:
+        for path in abstract_paths:
+            for rect in path:
+                # rect = transform_to_frames(rect[0, :], rect[1, :], initial_set[0, :], initial_set[1, :])
+                rect_patch = Rectangle(rect[0, [0, 1]], rect[1, 0] - rect[0, 0],
+                                       rect[1, 1] - rect[0, 1], linewidth=1,
+                                       edgecolor=edge_color, facecolor=color)
+                currentAxis.add_patch(rect_patch)
+
+    plt.ylim([X_low[1], X_up[1]])
+    plt.xlim([X_low[0], X_up[0]])
+
+    plt.figure("Resulting reachable sets in reduced coordinates")
+    color = 'orange'
+    currentAxis_1 = plt.gca()
+    for path in abstract_paths:
+        for rect in path:
+            rect_patch = Rectangle(rect[0, [0, 1]], rect[1, 0] - rect[0, 0],
+                                   rect[1, 1] - rect[0, 1], linewidth=1,
+                                   edgecolor=edge_color, facecolor=color)
+            currentAxis_1.add_patch(rect_patch)
+    plt.ylim([-3, 3])
+    plt.xlim([-3, 3])
+
+    plt.show()
+    '''
+
+
 def synthesize(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Target_up,
                Obstacle_low, Obstacle_up, X_low, X_up, U_low, U_up, N, M):
     n = state_dimensions.shape[1]
@@ -436,6 +811,8 @@ def synthesize(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Tar
     abstract_path_last_set_parts = []
     abstract_rtree_idx3d = index.Index('3d_index_abstract',
                                        properties=p)
+    concrete_rtree_idx3d = index.Index('3d_index_concrete',
+                                       properties=p)
     abstract_rect_global_cntr = 0
     abstract_paths = []
     for s_ind in range(Symbolic_reduced.shape[0]):
@@ -475,15 +852,32 @@ def synthesize(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Tar
     symbols_to_explore = np.setdiff1d(np.array(range(int(matrix_dim_full[0]))), target_indices)
     symbols_to_explore = np.setdiff1d(symbols_to_explore, obstacle_indices)
 
+    concrete_rect_global_cntr = 0
+    for s in symbols_to_explore:
+        s_subscript = np.array(np.unravel_index(s, tuple((sym_x[0, :] + 1).astype(int))))
+        rect: np.array = np.row_stack((s_subscript * symbol_step + X_low,
+                                       s_subscript * symbol_step + symbol_step + X_low))
+        concrete_rtree_idx3d.insert(abstract_rect_global_cntr, (rect[0, 0], rect[0, 1],
+                                                                rect[0, 2], rect[1, 0],
+                                                                rect[1, 1], rect[1, 2]),
+                                    obj=s)
+        concrete_rect_global_cntr += 1
+
     abstract_targets_and_obstacles = [None] * int(matrix_dim_full[0])
     controller = [-1] * int(matrix_dim_full[0])
     u_ind = 0
     num_controllable_states = 0
+    cur_target = targets[0]
     while True:  # len(traversal_stack) and fail_itr < M:
         num_new_symbols = 0
         temp_target_indices = []
         print("Checking which states can use the rectangle ", u_ind, " in the abstract rtree to reach the target")
-        for s in symbols_to_explore:
+        fewer_symbols_to_explore_hits = list(concrete_rtree_idx3d.nearest((cur_target[0, 0], cur_target[0, 1],
+                                                                           cur_target[0, 2], cur_target[1, 0] + 0.01,
+                                                                           cur_target[1, 1] + 0.01, cur_target[1, 2]
+                                                                           + 0.01), num_results=100, objects=True))
+        for hit in fewer_symbols_to_explore_hits:  # symbols_to_explore:
+            s = hit.object
             result_avoid = False
             result_reach = False
             s_subscript = np.array(np.unravel_index(s, tuple((sym_x[0, :] + 1).astype(int))))
@@ -516,8 +910,11 @@ def synthesize(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Tar
                         break
 
             if result_avoid and result_reach:
+                cur_target = get_convex_union([cur_target, curr_initset])
                 controller[s] = u_ind
                 temp_target_indices.append(s)
+                concrete_rtree_idx3d.delete(s, (curr_initset[0, 0], curr_initset[0, 1], curr_initset[0, 2],
+                                                curr_initset[1, 0], curr_initset[1, 1], curr_initset[1, 2]))
                 num_new_symbols += 1
 
         if num_new_symbols:

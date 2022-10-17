@@ -8,7 +8,7 @@ import numpy as np
 from itertools import product, combinations
 import mpl_toolkits.mplot3d as plt3d
 import itertools
-from mayavi import mlab
+# from mayavi import mlab
 
 
 def cube_faces(xmin, xmax, ymin, ymax, zmin, zmax):
