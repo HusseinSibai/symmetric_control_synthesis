@@ -59,8 +59,8 @@ Obstacle_up = np.array([[2.5, 3, math.pi], [5.5, 9.5, math.pi], [0, 9.5, math.pi
 Obstacle_low = np.array([[2, -3, -math.pi], [5, 3.5, -math.pi], [-3, -3, -math.pi], [-3, -3, -math.pi],
                          [-3, 6.5, -math.pi], [10, -3, -math.pi]])
 
-sym_x = 10 * np.ones((1, n_x))
-sym_x[0, 2] = 30
+sym_x = 15 * np.ones((1, n_x))
+sym_x[0, 2] = 15
 
 sym_u = 5 * np.ones((1, n_u))
 
