@@ -550,6 +550,7 @@ def create_symmetry_abstract_transitions(Symbolic_reduced, abstract_paths, abstr
                 for rect in targets_rects:
                     if does_rect_contain(abstract_paths[u_ind][-1], rect):
                         adjacency_list[concrete_to_abstract[s]][u_ind] = [-1]
+                        # TODO: fix this as all concrete states should result in the target, not just this one
                         succ_in_target = True
                         break
             if (not succ_intersects_obstacle) and (not succ_in_target):
@@ -842,6 +843,10 @@ def abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_
 
     controller, controllable_abstract_states, unsafe_abstract_states = \
         symmetry_abstract_synthesis_helper(abstract_to_concrete, adjacency_list)
+
+    # TODO: implement the refinement subroutine. Choose an action, check its reachable set, split the corresponding
+    #  concrete states into two sets: one with this action being unsafe, the others are the rest. fix the adjacency
+    #  list accordingly
 
     '''
     print('\n%s\tStart of the control synthesis\n', time.time() - t_start)
