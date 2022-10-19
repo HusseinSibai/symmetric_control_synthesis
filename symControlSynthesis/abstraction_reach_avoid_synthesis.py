@@ -433,15 +433,17 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
         if len(abstract_targets_polys) == 0:
             raise "Abstract target is empty"
 
-        abstract_obstacles = []
+        abstract_obstacles = pc.Region(list_poly=[])
         for obstacle_poly in obstacles:
             abstract_obstacle = transform_poly_to_abstract_frames(obstacle_poly, s_rect,
                                                                   over_approximate=True)
-            abstract_obstacles.append(abstract_obstacle)
+            abstract_obstacles = pc.union(abstract_obstacles, abstract_obstacle)
+            # abstract_obstacles.append(abstract_obstacle)
 
         symmetry_transformed_targets_and_obstacles[s] = AbstractState(abstract_targets_polys, abstract_obstacles, s)
 
         # Now adding the abstract state to a cluster --> combining abstract states with overlapping (abstract) targets
+        added_to_existing_state = False
         for curr_target_idx, curr_target_rect in enumerate(abstract_targets_rects):
             hits = list(symmetry_abstract_targets_rtree_idx3d.intersection(
                 (curr_target_rect[0, 0], curr_target_rect[0, 1], curr_target_rect[0, 2],
@@ -466,22 +468,8 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
                 # if np.all(max_intersection_rect[1, :] - max_intersection_rect[0, :] >= 2 * symbol_step):
                 if max_rad >= intersection_radius_threshold:  # 2 * symbol_step:
                     abstract_state = hits[max_rad_idx].object
-                    # change this if you are allowing multiple targets. You should take the union of the pairwise
-                    # intersections of s's abstract targets with the abstract state's targets
-                    for target_idx, abstract_target_poly in enumerate(abstract_state.abstract_targets):
-                        intersection_poly = pc.intersect(copy.deepcopy(abstract_targets_polys[curr_target_idx]),
-                                                         copy.deepcopy(abstract_target_poly))
-                        if not pc.is_empty(intersection_poly):
-                            abstract_state.abstract_targets[target_idx] = intersection_poly
-                    union_poly = pc.Region(list_poly=copy.deepcopy(abstract_state.abstract_obstacles))
-                    for curr_abstract_obstacle_poly in abstract_obstacles:
-                        union_poly = pc.union(copy.deepcopy(curr_abstract_obstacle_poly), union_poly)
-                    abstract_state.abstract_obstacles = union_poly
-                    new_concrete_state_idx = abstract_state.concrete_state_idx
-                    new_concrete_state_idx.append(s)
-                    new_abstract_state = AbstractState(abstract_state.abstract_targets,
-                                                       abstract_state.abstract_obstacles,
-                                                       new_concrete_state_idx)
+                    new_abstract_state = add_concrete_state_to_symmetry_abstract_state(s, abstract_state,
+                                                                                       symmetry_transformed_targets_and_obstacles)
                     symmetry_abstract_targets_rtree_idx3d.delete(hits[max_rad_idx].id, hits[max_rad_idx].bbox)
                     symmetry_abstract_targets_rtree_idx3d.insert(hits[max_rad_idx].id, (
                         max_intersection_rect[0, 0], max_intersection_rect[0, 1], max_intersection_rect[0, 2],
@@ -490,13 +478,15 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
                     symmetry_abstract_states[hits[max_rad_idx].id] = new_abstract_state
                     concrete_to_abstract[s] = hits[max_rad_idx].id
                     abstract_to_concrete[hits[max_rad_idx].id].append(s)
+                    added_to_existing_state = True
                     break
-        if s not in concrete_to_abstract:  # concrete_to_abstract[s] is None:
+        if not added_to_existing_state:  # concrete_to_abstract[s] is None:
             # create a new abstract state since there isn't a current one suitable for s.
-            rect = abstract_targets_rects[0]
             new_abstract_state = AbstractState(abstract_targets_polys, abstract_obstacles, [s])
-            symmetry_abstract_targets_rtree_idx3d.insert(len(symmetry_abstract_states), (
-                rect[0, 0], rect[0, 1], rect[0, 2], rect[1, 0], rect[1, 1], rect[1, 2]), obj=new_abstract_state)
+            for target_idx in range(len(new_abstract_state.abstract_targets)):
+                rect = abstract_targets_rects[target_idx]
+                symmetry_abstract_targets_rtree_idx3d.insert(len(symmetry_abstract_states), (
+                    rect[0, 0], rect[0, 1], rect[0, 2], rect[1, 0], rect[1, 1], rect[1, 2]), obj=new_abstract_state)
             concrete_to_abstract[s] = len(symmetry_abstract_states)
             abstract_to_concrete.append([s])
             symmetry_abstract_states.append(new_abstract_state)
@@ -506,6 +496,19 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
     print("abstract_to_concrete: ", len(abstract_to_concrete))
     return symmetry_transformed_targets_and_obstacles, concrete_to_abstract, abstract_to_concrete, \
            symmetry_abstract_states
+
+
+def add_concrete_state_to_symmetry_abstract_state(curr_concrete_state_idx, abstract_state,
+                                                  symmetry_transformed_targets_and_obstacles):
+    concrete_state = symmetry_transformed_targets_and_obstacles[curr_concrete_state_idx]
+    for target_idx, abstract_target_poly in enumerate(abstract_state.abstract_targets):
+        intersection_poly = pc.intersect(copy.deepcopy(concrete_state.abstract_targets[target_idx]),
+                                         copy.deepcopy(abstract_state.abstract_targets[target_idx]))
+        abstract_state.abstract_targets[target_idx] = intersection_poly
+    union_poly = pc.union(concrete_state.abstract_obstacles, abstract_state.abstract_obstacles)
+    abstract_state.abstract_obstacles = union_poly
+    abstract_state.concrete_state_idx.append(curr_concrete_state_idx)
+    return abstract_state
 
 
 def create_symmetry_abstract_transitions(Symbolic_reduced, abstract_paths, abstract_to_concrete, concrete_to_abstract,
@@ -531,8 +534,9 @@ def create_symmetry_abstract_transitions(Symbolic_reduced, abstract_paths, abstr
             succ_intersects_obstacle = False
             succ_in_target = False
             for t_ind in range(len(abstract_paths[u_ind])):
-                concrete_succ = transform_to_frames(abstract_paths[u_ind][t_ind][0, :],
-                                                    abstract_paths[u_ind][t_ind][1, :],
+                reachable_rect = np.column_stack(pc.bounding_box(abstract_paths[u_ind][t_ind])).T
+                concrete_succ = transform_to_frames(reachable_rect[0, :],
+                                                    reachable_rect[1, :],
                                                     s_rect[0, :], s_rect[1, :])
                 if np.any(concrete_succ[1, :] > X_up) or np.any(concrete_succ[0, :] < X_low) \
                         or np.any(concrete_succ[0, :] == concrete_succ[1, :]):
@@ -547,15 +551,17 @@ def create_symmetry_abstract_transitions(Symbolic_reduced, abstract_paths, abstr
                 if succ_intersects_obstacle:
                     break
             if not succ_intersects_obstacle:
+                reachable_rect = np.column_stack(pc.bounding_box(abstract_paths[u_ind][-1])).T
                 for rect in targets_rects:
-                    if does_rect_contain(abstract_paths[u_ind][-1], rect):
+                    if does_rect_contain(reachable_rect, rect):
                         adjacency_list[concrete_to_abstract[s]][u_ind] = [-1]
                         # TODO: fix this as all concrete states should result in the target, not just this one
                         succ_in_target = True
                         break
             if (not succ_intersects_obstacle) and (not succ_in_target):
-                concrete_succ = transform_to_frames(abstract_paths[u_ind][-1][0, :],
-                                                    abstract_paths[u_ind][-1][1, :],
+                reachable_rect = np.column_stack(pc.bounding_box(abstract_paths[u_ind][-1])).T
+                concrete_succ = transform_to_frames(reachable_rect[0, :],
+                                                    reachable_rect[1, :],
                                                     s_rect[0, :], s_rect[1, :])
                 concrete_succ_indices = rect_to_indices(concrete_succ, symbol_step, X_low, sym_x[0, :],
                                                         over_approximate=True)
@@ -645,9 +651,10 @@ def create_symmetry_abstract_reachable_sets(Symbolic_reduced, n, reachability_rt
                 rect = np.array([Symbolic_reduced[s_ind, u_ind, np.arange(n), t_ind],
                                  Symbolic_reduced[s_ind, u_ind, n + np.arange(n), t_ind]])
                 rect = fix_rect_angles(rect)
-                original_abstract_path.append(rect)
+                poly = pc.box2poly(rect.T)
+                original_abstract_path.append(poly)
             abstract_paths.append(original_abstract_path)
-    return abstract_paths, reachability_rtree_idx3d, reachable_rect_global_cntr, intersection_radius_threshold
+    return abstract_paths, reachable_rect_global_cntr, intersection_radius_threshold
 
 
 def create_targets_and_obstacles(Target_low, Target_up, Obstacle_low, Obstacle_up, symbol_step, sym_x, X_low):
@@ -798,6 +805,20 @@ def symmetry_abstract_synthesis_helper(abstract_to_concrete, adjacency_list):
     '''
 
 
+def refine(concrete_to_abstract, abstract_to_concrete, adjacency_list,
+           controller, controllable_abstract_states, unsafe_abstract_states,
+           symmetry_transformed_targets_and_obstacles, abstract_paths):
+    for abstract_s in unsafe_abstract_states:
+        concrete_set_1 = []
+        # for u_ind in range(len(adjacency_list[abstract_s])):
+        while not concrete_set_1:
+            u_ind = random.randint(0, len(adjacency_list[abstract_s]))
+            for concrete_state_idx in abstract_to_concrete[abstract_s]:
+                sym_concrete_state = symmetry_transformed_targets_and_obstacles[concrete_state_idx]
+                if not pc.is_empty(pc.intersect(abstract_paths[u_ind][-1], sym_concrete_state.abstract_obstacles)):
+                    concrete_set_1.append(concrete_state_idx)
+
+
 def abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Target_up,
                        Obstacle_low, Obstacle_up, X_low, X_up):
     n = state_dimensions.shape[1]
@@ -815,7 +836,7 @@ def abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_
     targets, targets_rects, target_indices, obstacles, obstacles_rects, obstacle_indices = \
         create_targets_and_obstacles(Target_low, Target_up, Obstacle_low, Obstacle_up, symbol_step, sym_x, X_low)
 
-    abstract_paths, reachability_rtree_idx3d, reachable_rect_global_cntr, intersection_radius_threshold = \
+    abstract_paths, reachable_rect_global_cntr, intersection_radius_threshold = \
         create_symmetry_abstract_reachable_sets(Symbolic_reduced, n, reachability_rtree_idx3d)
 
     matrix_dim_full = [np.prod(sym_x[0, :]), np.prod(sym_u), 2 * n]
