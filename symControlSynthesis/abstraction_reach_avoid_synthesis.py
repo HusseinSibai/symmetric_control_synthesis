@@ -814,6 +814,7 @@ def create_targets_and_obstacles(Target_low, Target_up, Obstacle_low, Obstacle_u
 
 def symmetry_abstract_synthesis_helper(abstract_to_concrete, remaining_abstract_states, adjacency_list):
     t_start = time.time()
+    # TODO: do the search in reverse order. Start from the target and split accordingly. BFS-based refinement.
     print('\n%s\tStart of the control synthesis\n', time.time() - t_start)
     controller = [-1] * len(abstract_to_concrete)
     num_controllable_states = 0
@@ -1139,7 +1140,7 @@ def abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_
 
     print("adjacency_list: ", adjacency_list)
     refinement_itr = 0
-    max_num_refinement_steps = 10
+    max_num_refinement_steps = 15
     remaining_abstract_states = np.array(range(len(abstract_to_concrete)))
     while refinement_itr < max_num_refinement_steps:
         controller, controllable_abstract_states, unsafe_abstract_states = \
