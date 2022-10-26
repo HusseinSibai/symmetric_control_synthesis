@@ -44,7 +44,7 @@ W_low = -W_up
 # Target_up = [10; 6.5; 2 * pi / 3];
 # Target_low = [6; 0; pi / 3];
 Target_up = np.array([[10, 6.5, 2 * math.pi / 3]])  # 2 * math.pi / 3
-Target_low = np.array([[7, 0, -math.pi / 3]])  # math.pi / 3
+Target_low = np.array([[7, 0, math.pi / 3]])  # math.pi / 3
 # Target_up = np.array([[10, 2, 2 * math.pi / 3], [10, 4, 2 * math.pi / 3], [10, 6.5, 2 * math.pi / 3]])
 # Target_low = np.array([[7, 0, math.pi / 3], [7, 2, math.pi / 3], [7, 4, math.pi / 3]])
 
@@ -68,7 +68,7 @@ time_step = np.linspace(0, 3, 3).reshape((1, 3))  # np.array([0,0.5,1,2,3]) #
 
 state_dimensions = np.zeros((1, n_x))
 
-## Update specifications with error bounds
+# Update specifications with error bounds
 
 # Shrink state space / safety
 X_up = X_up + 3  # - error_6D(1:n_x);
