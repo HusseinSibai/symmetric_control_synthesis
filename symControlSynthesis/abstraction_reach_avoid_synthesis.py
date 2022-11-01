@@ -764,7 +764,7 @@ def plot_abstract_states(symmetry_abstract_states):
     obstacle_color = 'r'
     target_color = 'g'
     for idx, abstract_state in enumerate(symmetry_abstract_states):
-        print("Plotting abstract state: ", idx)
+        # print("Plotting abstract state: ", idx)
         plt.figure("Abstract state: " + str(idx))
         currentAxis = plt.gca()
         abstract_obstacles = abstract_state.abstract_obstacles
@@ -1355,6 +1355,8 @@ def abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_
     symbols_to_explore = np.setdiff1d(np.array(range(int(matrix_dim_full[0]))), target_indices)
     symbols_to_explore = np.setdiff1d(symbols_to_explore, obstacle_indices)
 
+    # intersection_radius_threshold = intersection_radius_threshold * 10
+
     symmetry_transformed_targets_and_obstacles, \
     concrete_to_abstract, abstract_to_concrete, \
     symmetry_abstract_states = create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets,
@@ -1402,7 +1404,7 @@ def abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_
     t_synthesis = 0
     print('\n%s\tStart of the control synthesis\n', time.time() - t_start)
     refinement_itr = 0
-    max_num_refinement_steps = 200
+    max_num_refinement_steps = 10000
     remaining_abstract_states = np.array(range(len(abstract_to_concrete)))
     controllable_abstract_states = []
     refinement_candidates = copy.deepcopy(target_parents)
@@ -1489,6 +1491,7 @@ def abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_
             if not abstract_to_concrete[abstract_s]:
                 print(abstract_s, " does not represent any concrete state, why is it controllable?")
             controllable_concrete_states.extend(abstract_to_concrete[abstract_s])
+            print("Controllable abstract state ", abstract_s, " represents the following concrete states: ", abstract_to_concrete[abstract_s])
         print(len(controllable_concrete_states), 'concrete symbols are controllable to satisfy the reach-avoid '
                                                  'specification\n')
     else:
