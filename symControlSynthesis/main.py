@@ -59,8 +59,8 @@ Obstacle_up = np.array([[2.5, 3, math.pi], [5.5, 9.5, math.pi], [0, 9.5, math.pi
 Obstacle_low = np.array([[2, -3, -math.pi], [5, 3.5, -math.pi], [-3, -3, -math.pi], [-3, -3, -math.pi],
                          [-3, 6.5, -math.pi], [10, -3, -math.pi]])
 
-sym_x = 20 * np.ones((1, n_x))
-sym_x[0, 2] = 15
+sym_x = 30 * np.ones((1, n_x))
+sym_x[0, 2] = 20
 
 sym_u = 5 * np.ones((1, n_u))
 
@@ -150,6 +150,7 @@ for s_ind in range(Symbolic_reduced.shape[0]):
             currentAxis_1.add_patch(rect_patch)
 plt.ylim([-0.5, 0.5])
 plt.xlim([-1, 1])
+plt.savefig("Abstract reachable sets")
 plt.show()
 # plot(Symbolic_reduced_list);
 # print(np.array(mat_out).shape)

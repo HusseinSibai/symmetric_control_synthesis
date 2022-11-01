@@ -561,7 +561,7 @@ def create_symmetry_abstract_transitions(Symbolic_reduced, abstract_paths, abstr
                                                 obstacles_rects,
                                                 obstacle_indices,
                                                 targets_rects, target_indices)
-            adjacency_list[abstract_state_ind][u_ind]= copy.deepcopy(neighbors)
+            adjacency_list[abstract_state_ind][u_ind] = copy.deepcopy(neighbors)
             for next_abstract_state_ind in adjacency_list[abstract_state_ind][u_ind]:
                 if next_abstract_state_ind >= 0 and \
                         abstract_state_ind not in inverse_adjacency_list[next_abstract_state_ind][u_ind]:
@@ -707,7 +707,7 @@ def get_concrete_transition(s_ind, u_ind, concrete_edges, inverse_concrete_edges
                             abstract_paths, obstacles_rects,
                             obstacle_indices, targets_rects, target_indices):
     if concrete_edges[s_ind][u_ind]:
-        return copy.deepcopy(concrete_edges[s_ind][u_ind])
+        return concrete_edges[s_ind][u_ind]
     s_subscript = np.array(np.unravel_index(s_ind, tuple((sym_x[0, :]).astype(int))))
     s_rect: np.array = np.row_stack((s_subscript * symbol_step + X_low,
                                      s_subscript * symbol_step + symbol_step + X_low))
@@ -1044,7 +1044,7 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
     for u_ind in range(len(abstract_paths)):
         # parents_to_explore = np.setdiff1d(inverse_adjacency_list[abstract_state_ind][u_ind],
         #                                  np.array(updated_parents)).tolist()
-        for parent in original_parents[u_ind]: # inverse_adjacency_list[abstract_state_ind]
+        for parent in original_parents[u_ind]:  # inverse_adjacency_list[abstract_state_ind]
             if parent != abstract_state_ind:  # and parent < len(abstract_to_concrete) - 2:
                 # and parent not in controllable_abstract_states:  # and parent not in
                 # updated_parents:
@@ -1071,9 +1071,9 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
                     if next_abstract_state_ind >= len(abstract_to_concrete) - 2 and \
                             parent not in inverse_adjacency_list[next_abstract_state_ind][u_ind]:
                         inverse_adjacency_list[next_abstract_state_ind][u_ind].append(parent)
-                    elif (next_abstract_state_ind == -1 or next_abstract_state_ind in controllable_abstract_states) \
-                            and parent not in target_parents and parent not in controllable_abstract_states:
-                        target_parents.append(parent)
+                    # elif (next_abstract_state_ind == -1 or next_abstract_state_ind in controllable_abstract_states) \
+                    #        and parent not in target_parents and parent not in controllable_abstract_states:
+                    #    target_parents.append(parent)
                 # updated_parents.append(parent)
 
         '''
@@ -1116,9 +1116,9 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
                             inverse_adjacency_list[neighbor][u_ind][idx] = len(abstract_to_concrete) - 2
                             # updated_neighbors_1.append(neighbor)
 
-            if (neighbor == -1 or neighbor in controllable_abstract_states) and \
-                    len(abstract_to_concrete) - 2 not in target_parents:
-                target_parents.append(len(abstract_to_concrete) - 2)
+            # if (neighbor == -1 or neighbor in controllable_abstract_states) and \
+            #        len(abstract_to_concrete) - 2 not in target_parents:
+            #    target_parents.append(len(abstract_to_concrete) - 2)
 
         neighbors = get_abstract_transition(concrete_to_abstract,
                                             abstract_to_concrete, abstract_edges,
@@ -1148,12 +1148,12 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
                     for idx, parent in enumerate(inverse_adjacency_list[neighbor][u_ind]):
                         if parent == abstract_state_ind:
                             inverse_adjacency_list[neighbor][u_ind][idx] = len(abstract_to_concrete) - 1
-                        if parent == len(abstract_to_concrete) - 2:
+                        elif parent == len(abstract_to_concrete) - 2:
                             inverse_adjacency_list[neighbor][u_ind].append(len(abstract_to_concrete) - 1)
                         # updated_neighbors_2.append(neighbor)
-            if (neighbor == -1 or neighbor in controllable_abstract_states) \
-                    and len(abstract_to_concrete) - 1 not in target_parents:
-                target_parents.append(len(abstract_to_concrete) - 1)
+            # if (neighbor == -1 or neighbor in controllable_abstract_states) \
+            #        and len(abstract_to_concrete) - 1 not in target_parents:
+            #    target_parents.append(len(abstract_to_concrete) - 1)
         '''
         for original_neighbor in original_neighbors[u_ind]:
             if abstract_state_ind != original_neighbor:
@@ -1181,11 +1181,13 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
                     raise "how did this stay here?"
     '''
 
-
     inverse_adjacency_list[abstract_state_ind] = None  # [[] * len(abstract_paths)]
     for idx, parent in enumerate(target_parents):
         if parent == abstract_state_ind:
             target_parents.pop(idx)
+            target_parents.append(len(abstract_to_concrete) - 1)
+            target_parents.append(len(abstract_to_concrete) - 2)
+            break
 
     '''
     for u_ind in range(len(abstract_paths)):
