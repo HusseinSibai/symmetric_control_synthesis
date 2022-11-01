@@ -415,7 +415,7 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
                                          s_subscript * symbol_step + symbol_step + X_low))
         s_rect[0, :] = np.maximum(X_low, s_rect[0, :])
         s_rect[1, :] = np.minimum(X_up, s_rect[1, :])
-        print("s_rect: ", s_rect)
+        # print("s_rect: ", s_rect)
 
         # transforming the targets and obstacles to a new coordinate system relative to the states in s.
 
@@ -525,31 +525,43 @@ def create_symmetry_abstract_transitions(Symbolic_reduced, abstract_paths, abstr
                                          symbol_step, targets_rects, target_indices,
                                          obstacles_rects, obstacle_indices,
                                          sym_x, X_low, X_up):
-    adjacency_list = [[[]] * Symbolic_reduced.shape[1]] * len(abstract_to_concrete)
-    abstract_to_concrete_edges = [[[]] * Symbolic_reduced.shape[1]] * len(abstract_to_concrete)
+    adjacency_list = []
+    for abstract_s in range(len(abstract_to_concrete)):
+        adjacency_list.append([])
+        for u_ind in range(Symbolic_reduced.shape[1]):
+            adjacency_list[abstract_s].append([])
+    inverse_adjacency_list = []
+    for abstract_s in range(len(abstract_to_concrete)):
+        inverse_adjacency_list.append([])
+        for u_ind in range(Symbolic_reduced.shape[1]):
+            inverse_adjacency_list[abstract_s].append([])
+    abstract_to_concrete_edges = None  # [[[]] * Symbolic_reduced.shape[1]] * len(abstract_to_concrete)
     target_parents = []
     concrete_target_parents = []
     concrete_edges = {}
     inverse_concrete_edges = {}
     for concrete_state_ind in concrete_to_abstract:
-        concrete_edges[concrete_state_ind] = [[]] * Symbolic_reduced.shape[1]
-        inverse_concrete_edges[concrete_state_ind] = [[]] * Symbolic_reduced.shape[1]
-    inverse_adjacency_list = [[[]] * Symbolic_reduced.shape[1]] * len(abstract_to_concrete)
+        concrete_edges[concrete_state_ind] = []
+        inverse_concrete_edges[concrete_state_ind] = []
+        for u_ind in range(Symbolic_reduced.shape[1]):
+            concrete_edges[concrete_state_ind].append([])
+            inverse_concrete_edges[concrete_state_ind].append([])
     for abstract_state_ind in range(len(abstract_to_concrete)):
         for u_ind in range(Symbolic_reduced.shape[1]):
-            adjacency_list[abstract_state_ind][u_ind] = get_abstract_transition(concrete_to_abstract,
-                                                                                abstract_to_concrete,
-                                                                                abstract_to_concrete_edges,
-                                                                                concrete_edges,
-                                                                                inverse_concrete_edges,
-                                                                                concrete_target_parents,
-                                                                                abstract_state_ind,
-                                                                                u_ind,
-                                                                                sym_x, symbol_step, X_low,
-                                                                                X_up, abstract_paths,
-                                                                                obstacles_rects,
-                                                                                obstacle_indices,
-                                                                                targets_rects, target_indices)
+            neighbors = get_abstract_transition(concrete_to_abstract,
+                                                abstract_to_concrete,
+                                                abstract_to_concrete_edges,
+                                                concrete_edges,
+                                                inverse_concrete_edges,
+                                                concrete_target_parents,
+                                                abstract_state_ind,
+                                                u_ind,
+                                                sym_x, symbol_step, X_low,
+                                                X_up, abstract_paths,
+                                                obstacles_rects,
+                                                obstacle_indices,
+                                                targets_rects, target_indices)
+            adjacency_list[abstract_state_ind][u_ind]= copy.deepcopy(neighbors)
             for next_abstract_state_ind in adjacency_list[abstract_state_ind][u_ind]:
                 if next_abstract_state_ind >= 0 and \
                         abstract_state_ind not in inverse_adjacency_list[next_abstract_state_ind][u_ind]:
@@ -695,7 +707,7 @@ def get_concrete_transition(s_ind, u_ind, concrete_edges, inverse_concrete_edges
                             abstract_paths, obstacles_rects,
                             obstacle_indices, targets_rects, target_indices):
     if concrete_edges[s_ind][u_ind]:
-        return concrete_edges[s_ind][u_ind]
+        return copy.deepcopy(concrete_edges[s_ind][u_ind])
     s_subscript = np.array(np.unravel_index(s_ind, tuple((sym_x[0, :]).astype(int))))
     s_rect: np.array = np.row_stack((s_subscript * symbol_step + X_low,
                                      s_subscript * symbol_step + symbol_step + X_low))
@@ -740,7 +752,7 @@ def get_concrete_transition(s_ind, u_ind, concrete_edges, inverse_concrete_edges
     if indices_to_delete:
         neighbors = np.delete(np.array(neighbors), np.array(indices_to_delete).astype(int)).tolist()
         neighbors.append(-1)
-    concrete_edges[s_ind][u_ind] = neighbors
+    concrete_edges[s_ind][u_ind] = copy.deepcopy(neighbors)
     for neighbor in neighbors:
         if neighbor >= 0:
             if s_ind not in inverse_concrete_edges[neighbor][u_ind]:
@@ -830,7 +842,6 @@ def create_targets_and_obstacles(Target_low, Target_up, Obstacle_low, Obstacle_u
         obstacles_rects.append(obstacle_rect)
         obstacle_poly = pc.box2poly(obstacle_rect.T)
         obstacles.append(obstacle_poly)
-        print("obstacle before transforming to indices: ", obstacle_rect)
         indices = rect_to_indices(obstacle_rect, symbol_step, X_low,
                                   sym_x[0, :], over_approximate=True)
         obstacle_indices.extend(indices)
@@ -847,12 +858,15 @@ def create_targets_and_obstacles(Target_low, Target_up, Obstacle_low, Obstacle_u
     return targets, targets_rects, target_indices, obstacles, obstacles_rects, obstacle_indices
 
 
-def symmetry_abstract_synthesis_helper(abstract_to_concrete, remaining_abstract_states, adjacency_list, target_parents, controller):
+def symmetry_abstract_synthesis_helper(abstract_to_concrete, remaining_abstract_states, adjacency_list,
+                                       inverse_adjacency_list, target_parents, refinement_candidates,
+                                       global_controllable_abstract_states,
+                                       controller):
     t_start = time.time()
     num_controllable_states = 0
     controllable_abstract_states = []
     unsafe_abstract_states = []
-    abstract_states_to_explore = target_parents
+    abstract_states_to_explore = copy.deepcopy(target_parents)
     # copy.deepcopy(remaining_abstract_states)  # list(range(len(abstract_to_concrete)))
     while True:
         num_new_symbols = 0
@@ -862,11 +876,15 @@ def symmetry_abstract_synthesis_helper(abstract_to_concrete, remaining_abstract_
             unsafe_state = True
             for u_ind in range(len(adjacency_list[abstract_s])):
                 result_reach = True
+                if not adjacency_list[abstract_s][u_ind]:
+                    raise "how did this happen?"
                 if -2 in adjacency_list[abstract_s][u_ind]:
                     continue
+                unsafe_state = False
                 for next_abstract_s in adjacency_list[abstract_s][u_ind]:
                     if not (next_abstract_s == -1 or next_abstract_s in temp_controllable_abstract_states
-                            or next_abstract_s in controllable_abstract_states):
+                            or next_abstract_s in controllable_abstract_states
+                            or next_abstract_s in global_controllable_abstract_states):
                         result_reach = False
                         break
                 if result_reach:
@@ -875,24 +893,34 @@ def symmetry_abstract_synthesis_helper(abstract_to_concrete, remaining_abstract_
                     num_new_symbols += 1
                     unsafe_state = False
                     break
-                unsafe_state = False
             if unsafe_state:
                 temp_unsafe_abstract_states.append(abstract_s)
 
-        unsafe_abstract_states.extend(temp_unsafe_abstract_states)
-        abstract_states_to_explore = np.setdiff1d(abstract_states_to_explore, temp_unsafe_abstract_states)
+        # unsafe_abstract_states.extend(temp_unsafe_abstract_states)
+        # abstract_states_to_explore = np.setdiff1d(abstract_states_to_explore, temp_unsafe_abstract_states)
         if num_new_symbols:
             print(time.time() - t_start, " ", num_new_symbols,
                   " new controllable states have been found in this synthesis iteration\n")
             controllable_abstract_states.extend(temp_controllable_abstract_states)
             num_controllable_states += num_new_symbols
-            abstract_states_to_explore = np.setdiff1d(abstract_states_to_explore, temp_controllable_abstract_states)
+            for abstract_s in temp_controllable_abstract_states:
+                for u_ind in range(len(adjacency_list[abstract_s])):
+                    for parent in inverse_adjacency_list[abstract_s][u_ind]:
+                        if parent not in global_controllable_abstract_states and \
+                                parent not in controllable_abstract_states and \
+                                parent not in abstract_states_to_explore:  # and parent not in
+                            abstract_states_to_explore.append(parent)
+                            if len(abstract_to_concrete[parent]) > 1 and parent not in refinement_candidates:
+                                refinement_candidates.append(parent)
+            abstract_states_to_explore = np.setdiff1d(abstract_states_to_explore,
+                                                      temp_controllable_abstract_states).tolist()
+            refinement_candidates = np.setdiff1d(refinement_candidates, temp_controllable_abstract_states).tolist()
             print(num_controllable_states, ' symbols are controllable to satisfy the reach-avoid specification\n')
         else:
             print('No new controllable state has been found in this synthesis iteration\n', time.time() - t_start)
             break
 
-    return controller, controllable_abstract_states, unsafe_abstract_states
+    return controller, controllable_abstract_states, unsafe_abstract_states, abstract_states_to_explore
 
     '''
     plt.figure("Original coordinates")
@@ -963,7 +991,7 @@ def symmetry_abstract_synthesis_helper(abstract_to_concrete, remaining_abstract_
 def split_abstract_state(abstract_state_ind, concrete_indices,
                          abstract_to_concrete, concrete_to_abstract, abstract_edges,
                          concrete_edges, inverse_concrete_edges, concrete_target_parents, adjacency_list,
-                         inverse_adjacency_list, target_parents, abstract_paths,
+                         inverse_adjacency_list, target_parents, controllable_abstract_states, abstract_paths,
                          symmetry_transformed_targets_and_obstacles, symmetry_abstract_states,
                          symmetry_abstract_targets_rtree_idx3d,
                          sym_x, symbol_step, X_low, X_up,
@@ -973,7 +1001,7 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
     if len(concrete_indices) >= len(abstract_to_concrete[abstract_state_ind]):
         print("The concrete indices provided are all that ", abstract_state_ind, " represents, so no need to split.")
         return concrete_to_abstract, abstract_to_concrete, symmetry_abstract_states, \
-               adjacency_list, inverse_adjacency_list
+               adjacency_list, inverse_adjacency_list, target_parents
     rest_of_concrete_indices = np.setdiff1d(np.array(abstract_to_concrete[abstract_state_ind]), concrete_indices)
     for concrete_state_idx in concrete_indices:
         abstract_state_1 = add_concrete_state_to_symmetry_abstract_state(concrete_state_idx,
@@ -992,69 +1020,104 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
     abstract_to_concrete.append(abstract_state_2.concrete_state_idx)
     for idx in abstract_state_2.concrete_state_idx:
         concrete_to_abstract[idx] = len(abstract_to_concrete) - 1
-    adjacency_list[abstract_state_ind] = [
-        [] * len(abstract_paths)]  # cut the original abstract state from all connections
+    original_neighbors = copy.deepcopy(adjacency_list[abstract_state_ind])
+    original_parents = copy.deepcopy(inverse_adjacency_list[abstract_state_ind])
+    original_concrete = copy.deepcopy(abstract_to_concrete[abstract_state_ind])
+    adjacency_list[abstract_state_ind] = None  # [[] * len(abstract_paths)]  # cut the original abstract state from
+    # all connections
     abstract_to_concrete[abstract_state_ind] = []
-    adjacency_list.append([[]] * len(abstract_paths))
-    adjacency_list.append([[]] * len(abstract_paths))
-    inverse_adjacency_list.append([[]] * len(abstract_paths))
-    inverse_adjacency_list.append([[]] * len(abstract_paths))
+    adjacency_list.append([])
+    for u_ind in range(len(abstract_paths)):
+        adjacency_list[-1].append([])
+    adjacency_list.append([])
+    for u_ind in range(len(abstract_paths)):
+        adjacency_list[-1].append([])
+    # adjacency_list.append([[]] * len(abstract_paths))
+    inverse_adjacency_list.append([])
+    for u_ind in range(len(abstract_paths)):
+        inverse_adjacency_list[-1].append([])
+    inverse_adjacency_list.append([])
+    for u_ind in range(len(abstract_paths)):
+        inverse_adjacency_list[-1].append([])
+    # inverse_adjacency_list.append([[]] * len(abstract_paths))
+    # inverse_adjacency_list.append([[]] * len(abstract_paths))
     for u_ind in range(len(abstract_paths)):
         # parents_to_explore = np.setdiff1d(inverse_adjacency_list[abstract_state_ind][u_ind],
         #                                  np.array(updated_parents)).tolist()
-        for parent in inverse_adjacency_list[abstract_state_ind][u_ind]:
-            if parent != abstract_state_ind and parent < len(abstract_to_concrete) - 2:  # and parent not in
+        for parent in original_parents[u_ind]: # inverse_adjacency_list[abstract_state_ind]
+            if parent != abstract_state_ind:  # and parent < len(abstract_to_concrete) - 2:
+                # and parent not in controllable_abstract_states:  # and parent not in
                 # updated_parents:
                 if not adjacency_list[parent][u_ind]:
                     raise "Where did " + str(parent) + " come from?"
-                adjacency_list[parent][u_ind] = get_abstract_transition(concrete_to_abstract,
-                                                                        abstract_to_concrete,
-                                                                        abstract_edges,
-                                                                        concrete_edges,
-                                                                        inverse_concrete_edges,
-                                                                        concrete_target_parents,
-                                                                        parent, u_ind,
-                                                                        sym_x,
-                                                                        symbol_step, X_low,
-                                                                        X_up, abstract_paths,
-                                                                        obstacles_rects,
-                                                                        obstacle_indices,
-                                                                        targets_rects,
-                                                                        target_indices)
+                parent_neighbors = get_abstract_transition(concrete_to_abstract,
+                                                           abstract_to_concrete,
+                                                           abstract_edges,
+                                                           concrete_edges,
+                                                           inverse_concrete_edges,
+                                                           concrete_target_parents,
+                                                           parent, u_ind,
+                                                           sym_x,
+                                                           symbol_step, X_low,
+                                                           X_up, abstract_paths,
+                                                           obstacles_rects,
+                                                           obstacle_indices,
+                                                           targets_rects,
+                                                           target_indices)
+                # if abstract_state_ind in parent_neighbors:
+                #    print("how did this happen?")
+                adjacency_list[parent][u_ind] = copy.deepcopy(parent_neighbors)
                 for next_abstract_state_ind in adjacency_list[parent][u_ind]:
                     if next_abstract_state_ind >= len(abstract_to_concrete) - 2 and \
                             parent not in inverse_adjacency_list[next_abstract_state_ind][u_ind]:
                         inverse_adjacency_list[next_abstract_state_ind][u_ind].append(parent)
-                    elif next_abstract_state_ind == -1 and parent not in target_parents:
+                    elif (next_abstract_state_ind == -1 or next_abstract_state_ind in controllable_abstract_states) \
+                            and parent not in target_parents and parent not in controllable_abstract_states:
                         target_parents.append(parent)
                 # updated_parents.append(parent)
-        neighbors = get_abstract_transition(concrete_to_abstract,
-                                            abstract_to_concrete,
-                                            abstract_edges,
-                                            concrete_edges,
-                                            inverse_concrete_edges,
-                                            concrete_target_parents,
-                                            len(abstract_to_concrete) - 2,
-                                            u_ind, sym_x,
-                                            symbol_step, X_low,
-                                            X_up, abstract_paths,
-                                            obstacles_rects,
-                                            obstacle_indices,
-                                            targets_rects,
-                                            target_indices)
-        adjacency_list[-2][u_ind] = neighbors
+
+        '''
+        for original_parent in original_parents[u_ind]:
+            if abstract_state_ind != original_parent:
+                if u_ind >= len(adjacency_list[original_parent]):
+                    raise "how?"
+                if abstract_state_ind in adjacency_list[original_parent][u_ind]:
+                    raise "how did this stay here?"
+        '''
+
+        neighbors_2 = get_abstract_transition(concrete_to_abstract,
+                                              abstract_to_concrete,
+                                              abstract_edges,
+                                              concrete_edges,
+                                              inverse_concrete_edges,
+                                              concrete_target_parents,
+                                              len(abstract_to_concrete) - 2,
+                                              u_ind, sym_x,
+                                              symbol_step, X_low,
+                                              X_up, abstract_paths,
+                                              obstacles_rects,
+                                              obstacle_indices,
+                                              targets_rects,
+                                              target_indices)
+        # if abstract_state_ind in neighbors_2:
+        #    print("how did this happen?")
+        adjacency_list[len(abstract_to_concrete) - 2][u_ind] = copy.deepcopy(neighbors_2)
         # neighbors_to_update = np.setdiff1d(np.array(neighbors), np.array(updated_neighbors_1)).tolist()
-        for neighbor in neighbors:
+        for neighbor in neighbors_2:
+            # if neighbor not in original_neighbors[u_ind] and neighbor < len(abstract_to_concrete) - 2:
+            #    raise "how?"
             if neighbor >= 0:
-                if neighbor >= len(abstract_to_concrete) - 2 and \
-                        len(abstract_to_concrete) - 2 not in inverse_adjacency_list[neighbor][u_ind]:
-                    inverse_adjacency_list[neighbor][u_ind].append(len(abstract_to_concrete) - 2)
+                if neighbor >= len(abstract_to_concrete) - 2:
+                    if len(abstract_to_concrete) - 2 not in inverse_adjacency_list[neighbor][u_ind]:
+                        inverse_adjacency_list[neighbor][u_ind].append(len(abstract_to_concrete) - 2)
                 else:
                     for idx, parent in enumerate(inverse_adjacency_list[neighbor][u_ind]):
                         if parent == abstract_state_ind:
                             inverse_adjacency_list[neighbor][u_ind][idx] = len(abstract_to_concrete) - 2
                             # updated_neighbors_1.append(neighbor)
-            elif neighbor == -1 and len(abstract_to_concrete) - 2 not in target_parents:
+
+            if (neighbor == -1 or neighbor in controllable_abstract_states) and \
+                    len(abstract_to_concrete) - 2 not in target_parents:
                 target_parents.append(len(abstract_to_concrete) - 2)
 
         neighbors = get_abstract_transition(concrete_to_abstract,
@@ -1070,24 +1133,69 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
                                             obstacle_indices,
                                             targets_rects,
                                             target_indices)
-        adjacency_list[-1][u_ind] = neighbors
+        # if abstract_state_ind in neighbors:
+        #    print("how did this happen?")
+        adjacency_list[len(abstract_to_concrete) - 1][u_ind] = copy.deepcopy(neighbors)
         # neighbors_to_update = np.setdiff1d(np.array(neighbors), np.array(updated_neighbors_2)).tolist()
         for neighbor in neighbors:
+            # if neighbor not in original_neighbors[u_ind] and neighbor < len(abstract_to_concrete) - 2:
+            #    raise "how?"
             if neighbor >= 0:
-                if neighbor >= len(abstract_to_concrete) - 2 and \
-                        len(abstract_to_concrete) - 1 not in inverse_adjacency_list[neighbor][u_ind]:
-                    inverse_adjacency_list[neighbor][u_ind].append(len(abstract_to_concrete) - 1)
+                if neighbor >= len(abstract_to_concrete) - 2:
+                    if len(abstract_to_concrete) - 1 not in inverse_adjacency_list[neighbor][u_ind]:
+                        inverse_adjacency_list[neighbor][u_ind].append(len(abstract_to_concrete) - 1)
                 else:
                     for idx, parent in enumerate(inverse_adjacency_list[neighbor][u_ind]):
                         if parent == abstract_state_ind:
                             inverse_adjacency_list[neighbor][u_ind][idx] = len(abstract_to_concrete) - 1
+                        if parent == len(abstract_to_concrete) - 2:
+                            inverse_adjacency_list[neighbor][u_ind].append(len(abstract_to_concrete) - 1)
                         # updated_neighbors_2.append(neighbor)
-            elif neighbor == -1 and len(abstract_to_concrete) - 1 not in target_parents:
+            if (neighbor == -1 or neighbor in controllable_abstract_states) \
+                    and len(abstract_to_concrete) - 1 not in target_parents:
                 target_parents.append(len(abstract_to_concrete) - 1)
-    inverse_adjacency_list[abstract_state_ind] = [[] * len(abstract_paths)]
+        '''
+        for original_neighbor in original_neighbors[u_ind]:
+            if abstract_state_ind != original_neighbor:
+                if u_ind >= len(inverse_adjacency_list[original_neighbor]):
+                    raise "how?"
+                for parent in inverse_adjacency_list[original_neighbor][u_ind]:
+                    if parent == abstract_state_ind and abstract_state_ind != original_neighbor:
+                        raise "how did this stay here?"
+        '''
+    '''
+    for u_ind in range(len(abstract_paths)):
+        for original_parent in original_parents[u_ind]:
+            if abstract_state_ind != original_parent:
+                if u_ind >= len(adjacency_list[original_parent]):
+                    raise "how?"
+                if abstract_state_ind in adjacency_list[original_parent][u_ind]:
+                    raise "how did this stay here?"
+
+    for u_ind in range(len(abstract_paths)):
+        for original_neighbor in original_neighbors[u_ind]:
+            if abstract_state_ind != original_neighbor:
+                if u_ind >= len(adjacency_list[original_neighbor]):
+                    raise "how?"
+                if abstract_state_ind in inverse_adjacency_list[original_neighbor][u_ind]:
+                    raise "how did this stay here?"
+    '''
+
+
+    inverse_adjacency_list[abstract_state_ind] = None  # [[] * len(abstract_paths)]
     for idx, parent in enumerate(target_parents):
         if parent == abstract_state_ind:
             target_parents.pop(idx)
+
+    '''
+    for u_ind in range(len(abstract_paths)):
+        for abstract_s in range(len(abstract_to_concrete)):
+            if adjacency_list[abstract_s] is not None:
+                if abstract_state_ind in adjacency_list[abstract_s][u_ind]:
+                    raise "how did this stay here?"
+                if abstract_state_ind in inverse_adjacency_list[abstract_s][u_ind]:
+                    raise "how did this stay here?"
+    '''
     rtree_target_rect = symmetry_abstract_states[abstract_state_ind].rtree_target_rect
     symmetry_abstract_targets_rtree_idx3d.delete(abstract_state_ind,
                                                  (rtree_target_rect[0, 0], rtree_target_rect[0, 1],
@@ -1112,7 +1220,7 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
 def refine(concrete_to_abstract, abstract_to_concrete, abstract_edges,
            concrete_edges, inverse_concrete_edges, concrete_target_parents, symmetry_abstract_states,
            remaining_abstract_states,
-           adjacency_list, inverse_adjacency_list, target_parents, refinement_candidates,
+           adjacency_list, inverse_adjacency_list, refinement_candidates, target_parents, controllable_abstract_states,
            unsafe_abstract_states,
            symmetry_transformed_targets_and_obstacles, symmetry_abstract_targets_rtree_idx3d,
            abstract_paths, reachability_rtree_idx3d, sym_x,
@@ -1125,7 +1233,12 @@ def refine(concrete_to_abstract, abstract_to_concrete, abstract_edges,
     # for abstract_state_ind in unsafe_abstract_states:
     itr = 0
     progress = False
-    while itr <= math.ceil(len(refinement_candidates)):  # remaining_abstract_states.shape[0] / 10):
+    num_new_abstract_states = 0
+    deleted_abstract_states = []
+    # refinement_candidates_temp = copy.deepcopy(refinement_candidates)
+    # len_refinement_candidates = len(refinement_candidates)
+    max_num_of_refinements = len(refinement_candidates)
+    while itr < max_num_of_refinements:  # remaining_abstract_states.shape[0] / 10):
         # for abstract_state_ind in target_parents:
         itr += 1
         # abstract_state = symmetry_abstract_states[abstract_state_ind]
@@ -1177,6 +1290,7 @@ def refine(concrete_to_abstract, abstract_to_concrete, abstract_edges,
                                                                                               adjacency_list,
                                                                                               inverse_adjacency_list,
                                                                                               target_parents,
+                                                                                              controllable_abstract_states,
                                                                                               abstract_paths,
                                                                                               symmetry_transformed_targets_and_obstacles,
                                                                                               symmetry_abstract_states,
@@ -1195,15 +1309,28 @@ def refine(concrete_to_abstract, abstract_to_concrete, abstract_edges,
                 if len(abstract_to_concrete[-2]) > 1:
                     refinement_candidates.append(len(abstract_to_concrete) - 2)
                 refinement_candidates.pop(random_ind)
+                '''
+                for idx, abstract_s in enumerate(refinement_candidates):
+                    if abstract_s == abstract_state_ind:
+                        refinement_candidates.pop(idx)
+                        break     
+                '''
+                deleted_abstract_states.append(abstract_state_ind)
+                num_new_abstract_states += 1
+        else:
+            refinement_candidates.pop(random_ind)
 
         # cut the original abstract state from all connections
+    return progress, num_new_abstract_states, concrete_to_abstract, abstract_to_concrete, symmetry_abstract_states, \
+           adjacency_list, inverse_adjacency_list, refinement_candidates, \
+           target_parents, remaining_abstract_states, deleted_abstract_states
 
-    return progress, concrete_to_abstract, abstract_to_concrete, symmetry_abstract_states, \
-           adjacency_list, inverse_adjacency_list, target_parents, remaining_abstract_states
 
+# def simulate_control(abstract_controller, )
 
 def abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Target_up,
                        Obstacle_low, Obstacle_up, X_low, X_up):
+    t_start = time.time()
     n = state_dimensions.shape[1]
     p = index.Property()
     p.dimension = 3
@@ -1249,6 +1376,10 @@ def abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_
         obstacle_indices,
         sym_x, X_low, X_up)
 
+    t_abstraction = time.time() - t_start
+    print(['Construction of symmetry-based abstraction took: ', t_abstraction, ' seconds'])
+    num_abstract_states_before_refinement = len(abstract_to_concrete)
+
     grid_size_is_not_small_enough = True
     for candidate_controllable_state in concrete_target_parents:
         for u_ind in range(Symbolic_reduced.shape[1]):
@@ -1263,52 +1394,69 @@ def abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_
         raise "Decrease grid size, no concrete state can be controlled to reach the origin."
     else:
         print("Grid size is good enough, for now.")
-    controller = {} # [-1] * len(abstract_to_concrete)
-    t_start = time.time()
+    controller = {}  # [-1] * len(abstract_to_concrete)
+    t_synthesis_start = time.time()
+    t_refine = 0
+    t_synthesis = 0
     print('\n%s\tStart of the control synthesis\n', time.time() - t_start)
     refinement_itr = 0
-    max_num_refinement_steps = 50
+    max_num_refinement_steps = 200
     remaining_abstract_states = np.array(range(len(abstract_to_concrete)))
     controllable_abstract_states = []
     refinement_candidates = copy.deepcopy(target_parents)
     while refinement_itr < max_num_refinement_steps:
-        controller, controllable_abstract_states_temp, unsafe_abstract_states = \
+        temp_t_synthesis = time.time()
+        controller, controllable_abstract_states_temp, unsafe_abstract_states, abstract_states_to_explore = \
             symmetry_abstract_synthesis_helper(abstract_to_concrete, remaining_abstract_states, adjacency_list,
-                                               target_parents, controller)
+                                               inverse_adjacency_list, target_parents, refinement_candidates,
+                                               controllable_abstract_states,
+                                               controller)
+        t_synthesis += time.time() - temp_t_synthesis
 
         remaining_abstract_states = np.setdiff1d(remaining_abstract_states,
                                                  controllable_abstract_states_temp)
-        target_parents = np.setdiff1d(np.array(target_parents), controllable_abstract_states_temp).tolist()
+        target_parents = copy.deepcopy(abstract_states_to_explore)  # np.setdiff1d(np.array(target_parents),
+        # controllable_abstract_states_temp).tolist()
         controllable_abstract_states.extend(controllable_abstract_states_temp)
+        # for parent in target_parents:
+        #    if len(abstract_to_concrete[parent]) > 1:
+        refinement_candidates = np.setdiff1d(np.array(refinement_candidates), controllable_abstract_states).tolist()
 
-        progress, concrete_to_abstract, abstract_to_concrete, symmetry_abstract_states, adjacency_list, \
-        inverse_adjacency_list, target_parents_temp, remaining_abstract_states = refine(concrete_to_abstract,
-                                                                                   abstract_to_concrete,
-                                                                                   abstract_edges,
-                                                                                   concrete_edges,
-                                                                                   inverse_concrete_edges,
-                                                                                   concrete_target_parents,
-                                                                                   symmetry_abstract_states,
-                                                                                   remaining_abstract_states,
-                                                                                   adjacency_list,
-                                                                                   inverse_adjacency_list,
-                                                                                   target_parents,
-                                                                                   refinement_candidates,
-                                                                                   unsafe_abstract_states,
-                                                                                   symmetry_transformed_targets_and_obstacles,
-                                                                                   symmetry_abstract_targets_rtree_idx3d,
-                                                                                   abstract_paths,
-                                                                                   reachability_rtree_idx3d,
-                                                                                   sym_x,
-                                                                                   symbol_step, X_low,
-                                                                                   X_up,
-                                                                                   obstacles_rects,
-                                                                                   obstacle_indices,
-                                                                                   targets_rects,
-                                                                                   target_indices)
-        target_parents_temp = np.setdiff1d(np.array(target_parents_temp), controllable_abstract_states).tolist()
-        target_parents = copy.deepcopy(target_parents_temp)
-        refinement_itr += 1
+        # refinement_candidates = copy.deepcopy(target_parents)
+        # np.setdiff1d(np.array(copy.deepcopy(target_parents)), controllable_abstract_states_temp).tolist()
+        temp_t_refine = time.time()
+        progress, num_new_abstract_states, concrete_to_abstract, abstract_to_concrete, symmetry_abstract_states, adjacency_list, \
+        inverse_adjacency_list, refinement_candidates, target_parents, remaining_abstract_states, deleted_abstract_states = refine(
+            concrete_to_abstract,
+            abstract_to_concrete,
+            abstract_edges,
+            concrete_edges,
+            inverse_concrete_edges,
+            concrete_target_parents,
+            symmetry_abstract_states,
+            remaining_abstract_states,
+            adjacency_list,
+            inverse_adjacency_list,
+            refinement_candidates,
+            target_parents,
+            controllable_abstract_states,
+            unsafe_abstract_states,
+            symmetry_transformed_targets_and_obstacles,
+            symmetry_abstract_targets_rtree_idx3d,
+            abstract_paths,
+            reachability_rtree_idx3d,
+            sym_x,
+            symbol_step, X_low,
+            X_up,
+            obstacles_rects,
+            obstacle_indices,
+            targets_rects,
+            target_indices)
+        t_refine += time.time() - temp_t_refine
+        target_parents = np.setdiff1d(np.array(target_parents), controllable_abstract_states).tolist()
+        target_parents = np.setdiff1d(np.array(target_parents), deleted_abstract_states).tolist()
+        # target_parents = copy.deepcopy(target_parents)
+        refinement_itr += num_new_abstract_states
         if not refinement_candidates:
             print("No states to refine anymore.")
             break
@@ -1317,9 +1465,30 @@ def abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_
         print("target parents: ", target_parents)
         # print("concrete target parents: ", concrete_target_parents)
 
-    print(['Controller synthesis for reach-avoid specification: ', time.time() - t_start, ' seconds'])
+    print(['Construction of symmetry-based abstraction took: ', t_abstraction, ' seconds'])
+    print(
+        ['Controller synthesis along with refinement for reach-avoid specification: ', time.time() - t_synthesis_start,
+         ' seconds'])
+    print(['Pure refinement took a total of: ', t_refine, ' seconds'])
+    print(['Pure synthesis took a total of: ', t_synthesis, ' seconds'])
+    print(['Number of splits of abstract states: ', refinement_itr])
+    print(['Number of abstract states before refinement is: ', num_abstract_states_before_refinement])
+    num_abstract_states = 0
+    for abstract_s_idx in range(len(abstract_to_concrete)):
+        if abstract_to_concrete[abstract_s_idx]:
+            num_abstract_states += 1
+    print(['Number of abstract states after refinement is: ', num_abstract_states])
+    print(['Number of concrete states is: ', len(concrete_to_abstract)])
     if len(controllable_abstract_states):
-        print(len(controllable_abstract_states), ' symbols are controllable to satisfy the reach-avoid specification\n')
+        print(len(controllable_abstract_states), 'abstract symbols are controllable to satisfy the reach-avoid '
+                                                 'specification\n')
+        controllable_concrete_states = []
+        for abstract_s in controllable_abstract_states:
+            if not abstract_to_concrete[abstract_s]:
+                print(abstract_s, " does not represent any concrete state, why is it controllable?")
+            controllable_concrete_states.extend(abstract_to_concrete[abstract_s])
+        print(len(controllable_concrete_states), 'concrete symbols are controllable to satisfy the reach-avoid '
+                                                 'specification\n')
     else:
         print('The reach-avoid specification cannot be satisfied from any initial state\n')
     plot_abstract_states(symmetry_abstract_states)
@@ -1556,8 +1725,12 @@ def synthesize(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Tar
                                     obj=s)
         concrete_rect_global_cntr += 1
 
-    abstract_targets_and_obstacles = [None] * int(matrix_dim_full[0])
-    controller = [-1] * int(matrix_dim_full[0])
+    abstract_targets_and_obstacles = []
+    for i in range(int(matrix_dim_full[0])):
+        abstract_targets_and_obstacles.append(None)
+    controller = []
+    for i in range(int(matrix_dim_full[0])):
+        controller.append(-1)  # [-1] * int(matrix_dim_full[0])
     u_ind = 0
     num_controllable_states = 0
     cur_target = targets[0]
