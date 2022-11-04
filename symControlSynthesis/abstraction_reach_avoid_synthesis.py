@@ -1243,7 +1243,7 @@ def get_abstract_transition_without_concrete(abstract_state_ind, u_ind,
                 symmetry_abstract_states[abstract_state_ind].abstract_targets[0],
                 reachable_rect,
                 over_approximate=False)
-            if np.all(target_poly_after_transition.contains(np.array([0, 0, 0]))):
+            if np.all(target_poly_after_transition.contains(np.zeros(3,1))):
                 return [-1]
 
     # abstract_targets_over_approximation = symmetry_abstract_states[abstract_state_ind].abstract_targets_over_approximation
