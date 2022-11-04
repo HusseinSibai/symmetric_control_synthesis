@@ -54,15 +54,15 @@ Target_low = np.array([[7, 0, math.pi / 3]])  # math.pi / 3
 # Hussein: change the angles bounds from -pi, pi to - 100, 100, respectively
 # Obstacle_up = [[[2.5], [5.5]], [[3],[6.5]], [[math.pi], [math.pi]]];
 # Obstacle_low = [[[2], [5]], [[0],[3.5]], [[-math.pi], [-math.pi]]];
-Obstacle_up = np.array([[2.5, 3, math.pi], [5.5, 9.5, math.pi], [0, 9.5, math.pi], [13, 0, math.pi],
-                        [13, 9.5, math.pi], [13, 9.5, math.pi]])
-Obstacle_low = np.array([[2, -3, -math.pi], [5, 3.5, -math.pi], [-3, -3, -math.pi], [-3, -3, -math.pi],
-                         [-3, 6.5, -math.pi], [10, -3, -math.pi]])
+Obstacle_up = np.array([[2.5, 3, 100], [5.5, 9.5, 100], [0, 9.5, 100], [13, 0, 100],
+                        [13, 9.5, 100], [13, 9.5, 100]])
+Obstacle_low = np.array([[2, -3, -100], [5, 3.5, -100], [-3, -3, -100], [-3, -3, -100],
+                         [-3, 6.5, -100], [10, -3, -100]])
 
-sym_x = 40 * np.ones((1, n_x))
+sym_x = 10 * np.ones((1, n_x))
 sym_x[0, 2] = 15
 
-sym_u = 9 * np.ones((1, n_u))
+sym_u = 5 * np.ones((1, n_u))
 
 time_step = np.linspace(0, 3, 3).reshape((1, 3))  # np.array([0,0.5,1,2,3]) #
 
@@ -148,8 +148,8 @@ for s_ind in range(Symbolic_reduced.shape[0]):
                                    abstract_rect_up[1] - abstract_rect_low[1], linewidth=1,
                                    edgecolor=edge_color, facecolor=color)
             currentAxis_1.add_patch(rect_patch)
-plt.ylim([-0.5, 0.5])
-plt.xlim([-1, 1])
+plt.ylim([-0.35, 0.35])
+plt.xlim([-0.75, 0.75])
 plt.savefig("Abstract reachable sets")
 plt.show()
 # plot(Symbolic_reduced_list);
