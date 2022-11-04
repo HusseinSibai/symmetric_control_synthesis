@@ -1228,21 +1228,23 @@ def get_abstract_transition_without_concrete(abstract_state_ind, u_ind,
     # target_rect = np.array([x1 - rc, x1 + rc])
     # if does_rect_contain(reachable_rect, target_rect):
     #    return [-1]
-    if not pc.is_empty(get_poly_intersection(abstract_paths[u_ind][-1],
-                                             symmetry_abstract_states[
-                                                 abstract_state_ind].abstract_obstacles)):  # pc.intersect
-        neighbors.append(-2)
+    for t_ind in range(len(abstract_paths[u_ind])):
+        if not pc.is_empty(get_poly_intersection(abstract_paths[u_ind][t_ind],
+                                                 symmetry_abstract_states[abstract_state_ind].abstract_obstacles)):
+            neighbors.append(-2)
+            break
 
     if not symmetry_abstract_states[abstract_state_ind].empty_abstract_target and \
             not pc.is_empty(get_poly_intersection(abstract_paths[u_ind][-1],
                                                   symmetry_abstract_states[abstract_state_ind].abstract_targets[0])):
         neighbors.append(-1)
-        target_poly_after_transition = transform_poly_to_abstract_frames(
-            symmetry_abstract_states[abstract_state_ind].abstract_targets[0],
-            reachable_rect,
-            over_approximate=False)
-        if np.all(target_poly_after_transition.contains(np.array([0, 0, 0]))):
-            return [-1]
+        if -2 not in neighbors:
+            target_poly_after_transition = transform_poly_to_abstract_frames(
+                symmetry_abstract_states[abstract_state_ind].abstract_targets[0],
+                reachable_rect,
+                over_approximate=False)
+            if np.all(target_poly_after_transition.contains(np.array([0, 0, 0]))):
+                return [-1]
 
     # abstract_targets_over_approximation = symmetry_abstract_states[abstract_state_ind].abstract_targets_over_approximation
     # print("abstract_targets[0] bounding box:", pc.bounding_box(abstract_targets_over_approximation[0]))
