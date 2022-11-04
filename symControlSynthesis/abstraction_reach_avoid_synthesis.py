@@ -356,8 +356,8 @@ def is_within_range(angle, a, b):
         ang += 2 * math.pi
     while ang > 2 * math.pi:
         ang -= 2 * math.pi
-    if a <= 2*math.pi <= b:
-        if ang >= a or ang <= b - 2*math.pi:
+    if a <= 2 * math.pi <= b:
+        if ang >= a or ang <= b - 2 * math.pi:
             return True
     if a <= ang <= b:
         return True
@@ -837,7 +837,7 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
             abstract_pos_target_poly = transform_poly_to_abstract_frames(target_poly, s_rect, over_approximate=False,
                                                                          project_to_pos=True)
             abstract_target_poly_over_approx = transform_poly_to_abstract_frames(
-                target_poly, s_rect, over_approximate=True) # project_to_pos=True
+                target_poly, s_rect, over_approximate=True)  # project_to_pos=True
             if not pc.is_empty(abstract_target_poly):
                 rc, x1 = pc.cheby_ball(abstract_target_poly)
                 abstract_target_rect = np.array([x1 - rc, x1 + rc])
@@ -892,7 +892,7 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
                 for idx, hit in enumerate(hits):
                     abstract_state = hits[idx].object
                     for target_idx, abstract_target_poly in enumerate(abstract_state.abstract_targets):
-                        if True: # not abstract_state.empty_abstract_target and not empty_abstract_target:
+                        if True:  # not abstract_state.empty_abstract_target and not empty_abstract_target:
                             intersection_poly = get_poly_intersection(
                                 copy.deepcopy(abstract_targets_polys[curr_target_idx]),
                                 copy.deepcopy(abstract_target_poly))  # pc.intersect
@@ -1032,7 +1032,7 @@ def add_concrete_state_to_symmetry_abstract_state(curr_concrete_state_idx, abstr
             # inter_poly_2 = copy.deepcopy(abstract_state.abstract_targets_without_angles[target_idx])
         intersection_poly = get_poly_intersection(inter_poly_1, inter_poly_2)  # pc.intersect
         while pc.is_empty(intersection_poly):
-            if True: # abstract_state.empty_abstract_target or concrete_state.empty_abstract_target:
+            if True:  # abstract_state.empty_abstract_target or concrete_state.empty_abstract_target:
                 raise "empty abstract_target_poly error, grid must be refined, it's too far to see the position of " \
                       "the target similarly even within the same grid cell! "
             else:
@@ -1237,6 +1237,12 @@ def get_abstract_transition_without_concrete(abstract_state_ind, u_ind,
             not pc.is_empty(get_poly_intersection(abstract_paths[u_ind][-1],
                                                   symmetry_abstract_states[abstract_state_ind].abstract_targets[0])):
         neighbors.append(-1)
+        target_poly_after_transition = transform_poly_to_abstract_frames(
+            symmetry_abstract_states[abstract_state_ind].abstract_targets[0],
+            reachable_rect,
+            over_approximate=False)
+        if np.all(target_poly_after_transition.contains(np.array([0, 0, 0]))):
+            return [-1]
 
     # abstract_targets_over_approximation = symmetry_abstract_states[abstract_state_ind].abstract_targets_over_approximation
     # print("abstract_targets[0] bounding box:", pc.bounding_box(abstract_targets_over_approximation[0]))
@@ -1299,12 +1305,12 @@ def update_parent_after_split(parent_abstract_state_ind, new_child_abstract_stat
         reachable_rect,
         over_approximate=True)
 
-    if does_rect_contain(symmetry_abstract_states[new_child_abstract_state_ind_1].rtree_target_rect_under_approx,
-                         target_rect_after_transition):
+    if do_rects_inter(symmetry_abstract_states[new_child_abstract_state_ind_1].rtree_target_rect_under_approx,
+                      target_rect_after_transition):
         neighbors.append(new_child_abstract_state_ind_1)
 
-    if does_rect_contain(symmetry_abstract_states[new_child_abstract_state_ind_2].rtree_target_rect_under_approx,
-                         target_rect_after_transition):
+    if do_rects_inter(symmetry_abstract_states[new_child_abstract_state_ind_2].rtree_target_rect_under_approx,
+                      target_rect_after_transition):
         neighbors.append(new_child_abstract_state_ind_2)
     # abstract_to_concrete_edges[abstract_state_ind][u_ind] = neighbors
     if not neighbors:
@@ -1776,7 +1782,7 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
         # parents_to_explore = np.setdiff1d(inverse_adjacency_list[abstract_state_ind][u_ind],
         #                                  np.array(updated_parents)).tolist()
         for parent in original_parents[u_ind]:  # inverse_adjacency_list[abstract_state_ind]
-            if parent != abstract_state_ind:  # and parent < len(abstract_to_concrete) - 2:
+            if parent != abstract_state_ind and parent not in controllable_abstract_states:  # and parent < len(abstract_to_concrete) - 2:
                 # and parent not in controllable_abstract_states:  # and parent not in
                 # updated_parents:
                 if not adjacency_list[parent][u_ind]:
