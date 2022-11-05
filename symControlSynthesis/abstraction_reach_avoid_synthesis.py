@@ -36,7 +36,7 @@ class AbstractState:
         # abstract_targets_rects_over_approx[0]
         # np.column_stack(pc.bounding_box(abstract_targets[0])).T
         self.set_of_allowed_controls = None
-        self.abstract_targets_over_approximation = abstract_targets
+        self.abstract_targets_over_approximation = copy.deepcopy(abstract_targets)
         self.empty_abstract_target = empty_abstract_target
 
 
@@ -202,7 +202,7 @@ def add_angle_dimension_to_region(reg: pc.Region, angle_interval: np.array):
     return result
 
 
-def get_poly_intersection(poly_1: pc.Region, poly_2: pc.Region, project_to_pos=False):
+def get_poly_intersection(poly_1: pc.Region, poly_2: pc.Region, project_to_pos=False, check_convex=False):
     if project_to_pos:
         return pc.intersect(poly_1, poly_2)
     result = pc.Region(list_poly=[])
@@ -267,13 +267,13 @@ def get_poly_intersection(poly_1: pc.Region, poly_2: pc.Region, project_to_pos=F
                     b_new[p_inter_pos.A.shape[0]] = b_inter_right
                     A_new[p_inter_pos.A.shape[0] + 1, 2] = -1
                     b_new[p_inter_pos.A.shape[0] + 1] = b_inter_left
-                    result = pc.union(result, pc.Polytope(A_new, b_new))
+                    result = pc.union(result, pc.Polytope(A_new, b_new), check_convex=check_convex)
     return result
 
 
-def get_poly_union(poly_1: pc.Region, poly_2: pc.Region, project_to_pos=False, order_matters=False):
+def get_poly_union(poly_1: pc.Region, poly_2: pc.Region, check_convex=False, project_to_pos=False, order_matters=False):
     if True:  # project_to_pos:
-        return pc.union(poly_1, poly_2)
+        return pc.union(poly_1, poly_2, check_convex=check_convex)
     result = pc.Region(list_poly=[])
     if pc.is_empty(poly_1):
         return poly_2
@@ -344,7 +344,7 @@ def get_poly_union(poly_1: pc.Region, poly_2: pc.Region, project_to_pos=False, o
                     b_new[poly_union_pos.A.shape[0]] = b_inter_right
                     A_new[poly_union_pos.A.shape[0] + 1, 2] = -1
                     b_new[poly_union_pos.A.shape[0] + 1] = b_inter_left
-                    result = pc.union(result, pc.Polytope(A_new, b_new))
+                    result = pc.union(result, pc.Polytope(A_new, b_new), check_convex=check_convex)
     return result
 
 
@@ -666,7 +666,8 @@ def transform_rect_to_abstract_frames(concrete_rect, frames_rect, over_approxima
     return result  # np.array([result_low, result_up]);
 
 
-def transform_poly_to_abstract_frames(concrete_poly, frames_rect, over_approximate=False, project_to_pos=False):
+def transform_poly_to_abstract_frames(concrete_poly, frames_rect, over_approximate=False, project_to_pos=False,
+                                      check_convex=False):
     if project_to_pos:
         concrete_poly_new = project_region_to_position_coordinates(copy.deepcopy(concrete_poly))
     else:
@@ -683,9 +684,9 @@ def transform_poly_to_abstract_frames(concrete_poly, frames_rect, over_approxima
         result = get_poly_union(result, poly_2, project_to_pos, order_matters=True)  # pc.union(result, poly_3)
         result = get_poly_union(result, poly_3, project_to_pos, order_matters=True)  # pc.union(result, poly_4)
     else:
-        result = get_poly_intersection(poly_1, poly_2, project_to_pos)  # pc.intersect(poly_1, poly_2)
-        result = get_poly_intersection(result, poly_3, project_to_pos)
-        result = get_poly_intersection(result, poly_4, project_to_pos)
+        result = get_poly_intersection(poly_1, poly_2, project_to_pos, check_convex)  # pc.intersect(poly_1, poly_2)
+        result = get_poly_intersection(result, poly_3, project_to_pos, check_convex)
+        result = get_poly_intersection(result, poly_4, project_to_pos, check_convex)
     return result
 
 
@@ -816,6 +817,9 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
     concrete_to_abstract = {}  # [None] * int(matrix_dim_full[0])
     abstract_to_concrete = []
     symmetry_abstract_states = []
+    abstract_states_to_rtree_ids = {}
+    rtree_ids_to_abstract_states = {}
+    next_rtree_id_candidate = 0
     for s in symbols_to_explore:
         s_subscript = np.array(np.unravel_index(s, tuple((sym_x[0, :]).astype(int))))
         s_rect: np.array = np.row_stack((s_subscript * symbol_step + X_low,
@@ -842,6 +846,7 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
                 rc, x1 = pc.cheby_ball(abstract_target_poly)
                 abstract_target_rect = np.array([x1 - rc, x1 + rc])
             elif not pc.is_empty(abstract_pos_target_poly):
+                pdb.set_trace()
                 raise "abstract target is empty for a concrete state"
                 empty_abstract_target = True
                 rc_pos, x1_pos = pc.cheby_ball(abstract_pos_target_poly)
@@ -850,6 +855,7 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
                                                  [abstract_target_rect_pos[1, 0], abstract_target_rect_pos[1, 1],
                                                   2 * math.pi]])
             else:
+                pdb.set_trace()
                 print("empty abstract_target_poly: ", abstract_target_poly)
                 raise "empty abstract_target_poly error, grid must be refined, it's too far to see the position of " \
                       "the target similarly even within the same grid cell! "
@@ -861,6 +867,7 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
             abstract_pos_targets_polys.append(abstract_pos_target_poly)
 
         if len(abstract_targets_polys) == 0:
+            pdb.set_trace()
             raise "Abstract target is empty"
 
         abstract_obstacles = pc.Region(list_poly=[])
@@ -885,39 +892,43 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
                 objects=True))
             if len(hits):
                 max_rad = 0
-                max_rad_idx = 0
+                max_rad_idx = None
                 has_empty_angle_interval = pc.is_empty(abstract_targets_polys[0])
                 max_intersection_rect = None
                 # max_union_rect = None
                 for idx, hit in enumerate(hits):
-                    abstract_state = hits[idx].object
-                    for target_idx, abstract_target_poly in enumerate(abstract_state.abstract_targets):
-                        if True:  # not abstract_state.empty_abstract_target and not empty_abstract_target:
-                            intersection_poly = get_poly_intersection(
-                                copy.deepcopy(abstract_targets_polys[curr_target_idx]),
-                                copy.deepcopy(abstract_target_poly))  # pc.intersect
-                        else:
-                            intersection_poly = get_poly_intersection(
-                                copy.deepcopy(abstract_pos_targets_polys[curr_target_idx]),
-                                copy.deepcopy(
-                                    abstract_state.abstract_targets_without_angles[target_idx]))  # pc.intersect
-                        if not pc.is_empty(intersection_poly):
-                            rc, x1 = pc.cheby_ball(intersection_poly)
-                            if np.linalg.norm(rc) > np.linalg.norm(max_rad):
-                                max_rad = rc
-                                max_rad_idx = idx
-                                max_intersection_rect = np.array([x1 - rc, x1 + rc])  # intersection_rect
-                                # max_union_rect = np.column_stack(
-                                #    pc.bounding_box(abstract_targets_polys[curr_target_idx])).T
-                                # max_union_rect = get_convex_union([max_union_rect,
-                                #                                   abstract_state.rtree_target_rect_over_approx])
+                    if hit.id in abstract_states_to_rtree_ids.values():
+                        abstract_state = hit.object
+                        for target_idx, abstract_target_poly in enumerate(abstract_state.abstract_targets):
+                            if True:  # not abstract_state.empty_abstract_target and not empty_abstract_target:
+                                intersection_poly = get_poly_intersection(
+                                    copy.deepcopy(abstract_targets_polys[curr_target_idx]),
+                                    copy.deepcopy(abstract_target_poly), check_convex=False)  # pc.intersect
+                            else:
+                                intersection_poly = get_poly_intersection(
+                                    copy.deepcopy(abstract_pos_targets_polys[curr_target_idx]),
+                                    copy.deepcopy(
+                                        abstract_state.abstract_targets_without_angles[target_idx]))  # pc.intersect
+                            if not pc.is_empty(intersection_poly):
+                                rc, x1 = pc.cheby_ball(intersection_poly)
+                                if np.linalg.norm(rc) > np.linalg.norm(max_rad):
+                                    max_rad = rc
+                                    max_rad_idx = idx
+                                    max_intersection_rect = np.array([x1 - rc, x1 + rc])  # intersection_rect
+                                    # max_union_rect = np.column_stack(
+                                    #    pc.bounding_box(abstract_targets_polys[curr_target_idx])).T
+                                    # max_union_rect = get_convex_union([max_union_rect,
+                                    #                                   abstract_state.rtree_target_rect_over_approx])
 
                 # Now we want to make sure that the intersection is large enough to be useful in synthesis later
                 # if np.all(max_intersection_rect[1, :] - max_intersection_rect[0, :] >= 2 * symbol_step):
                 if max_rad >= intersection_radius_threshold:  # 2 * symbol_step:
                     abstract_state = hits[max_rad_idx].object
+                    inter_poly_1 = symmetry_transformed_targets_and_obstacles[s].abstract_targets[0]
+                    inter_poly_2 = abstract_state.abstract_targets[0]
                     new_abstract_state = add_concrete_state_to_symmetry_abstract_state(s, abstract_state,
                                                                                        symmetry_transformed_targets_and_obstacles)
+                    inter_poly_3 = new_abstract_state.abstract_targets[0]
                     ##########################
                     rtree_target_rect_under_approx = abstract_state.rtree_target_rect_under_approx
                     original_angle_interval = [rtree_target_rect_under_approx[0, 2],
@@ -948,7 +959,7 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
                             new_abstract_state.rtree_target_rect_under_approx)
                         rtree_target_rect_under_approx_temp[0, 2] = interval[0]
                         rtree_target_rect_under_approx_temp[1, 2] = interval[1]
-                        symmetry_under_approx_abstract_targets_rtree_idx3d.insert(hits[max_rad_idx].id, (
+                        symmetry_under_approx_abstract_targets_rtree_idx3d.insert(next_rtree_id_candidate, (
                             rtree_target_rect_under_approx_temp[0, 0], rtree_target_rect_under_approx_temp[0, 1],
                             rtree_target_rect_under_approx_temp[0, 2], rtree_target_rect_under_approx_temp[1, 0],
                             rtree_target_rect_under_approx_temp[1, 1], rtree_target_rect_under_approx_temp[1, 2]),
@@ -962,9 +973,17 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
                         max_intersection_rect[1, 0], max_intersection_rect[1, 1], max_intersection_rect[1, 2]),
                                                                               obj=new_abstract_state)
                     '''
-                    symmetry_abstract_states[hits[max_rad_idx].id] = new_abstract_state
-                    concrete_to_abstract[s] = hits[max_rad_idx].id
-                    abstract_to_concrete[hits[max_rad_idx].id].append(s)
+                    # symmetry_abstract_states[hits[max_rad_idx].id] = new_abstract_state
+                    symmetry_abstract_states[rtree_ids_to_abstract_states[hits[max_rad_idx].id]] = new_abstract_state
+                    concrete_to_abstract[s] = rtree_ids_to_abstract_states[hits[max_rad_idx].id]  # hits[max_rad_idx].id
+                    abstract_states_to_rtree_ids[rtree_ids_to_abstract_states[hits[max_rad_idx].id]] = \
+                        next_rtree_id_candidate
+                    abstract_to_concrete[rtree_ids_to_abstract_states[hits[max_rad_idx].id]].append(
+                        s)  # hits[max_rad_idx].id
+                    rtree_ids_to_abstract_states[next_rtree_id_candidate] = \
+                        copy.deepcopy(rtree_ids_to_abstract_states[hits[max_rad_idx].id])
+                    del rtree_ids_to_abstract_states[hits[max_rad_idx].id]
+                    next_rtree_id_candidate += 1
                     added_to_existing_state = True
                     break
         if not added_to_existing_state:  # concrete_to_abstract[s] is None:
@@ -982,7 +1001,10 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
                     new_abstract_state.rtree_target_rect_under_approx)
                 rtree_target_rect_under_approx_temp[0, 2] = interval[0]
                 rtree_target_rect_under_approx_temp[1, 2] = interval[1]
-                symmetry_under_approx_abstract_targets_rtree_idx3d.insert(len(symmetry_abstract_states), (
+                # id was len(symmetry_abstract_states) instead of s in rtree, but to solve the non-determinism
+                # of deletion problem, changed it to the concrete value. Still attempting to delete
+                # though to avoid the increasing size of the rtree.
+                symmetry_under_approx_abstract_targets_rtree_idx3d.insert(next_rtree_id_candidate, (
                     rtree_target_rect_under_approx_temp[0, 0], rtree_target_rect_under_approx_temp[0, 1],
                     rtree_target_rect_under_approx_temp[0, 2], rtree_target_rect_under_approx_temp[1, 0],
                     rtree_target_rect_under_approx_temp[1, 1], rtree_target_rect_under_approx_temp[1, 2]),
@@ -990,8 +1012,11 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
             # symmetry_under_approx_abstract_targets_rtree_idx3d.insert(len(symmetry_abstract_states), (
             #    rect[0, 0], rect[0, 1], rect[0, 2], rect[1, 0], rect[1, 1], rect[1, 2]), obj=new_abstract_state)
             concrete_to_abstract[s] = len(symmetry_abstract_states)
+            abstract_states_to_rtree_ids[len(symmetry_abstract_states)] = next_rtree_id_candidate
+            rtree_ids_to_abstract_states[next_rtree_id_candidate] = len(symmetry_abstract_states)
             abstract_to_concrete.append([s])
             symmetry_abstract_states.append(new_abstract_state)
+            next_rtree_id_candidate += 1
 
     # over_rect_to_be_deleted = hits[max_rad_idx].object.rtree_target_rect_over_approx
     # over_rect_in_tuple_format = (
@@ -999,16 +1024,18 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
     #    over_rect_to_be_deleted[1, 0], over_rect_to_be_deleted[1, 1], over_rect_to_be_deleted[1, 2])
     # symmetry_over_approx_abstract_targets_rtree_idx3d.delete(hits[max_rad_idx].id,
     #                                                         over_rect_in_tuple_format)
+    '''
     for idx, abstract_state in enumerate(symmetry_abstract_states):
         max_union_rect = abstract_state.rtree_target_rect_over_approx
         symmetry_over_approx_abstract_targets_rtree_idx3d.insert(idx, (
             max_union_rect[0, 0], max_union_rect[0, 1], max_union_rect[0, 2],
             max_union_rect[1, 0], max_union_rect[1, 1], max_union_rect[1, 2]), obj=abstract_state)
+    '''
     print(['Done creation of symmetry abstract states in: ', time.time() - t_start, ' seconds'])
     print("concrete_to_abstract: ", len(concrete_to_abstract))
     print("abstract_to_concrete: ", len(abstract_to_concrete))
     return symmetry_transformed_targets_and_obstacles, concrete_to_abstract, abstract_to_concrete, \
-           symmetry_abstract_states
+           symmetry_abstract_states, abstract_states_to_rtree_ids, rtree_ids_to_abstract_states, next_rtree_id_candidate
 
 
 def add_concrete_state_to_symmetry_abstract_state(curr_concrete_state_idx, abstract_state,
@@ -1021,17 +1048,19 @@ def add_concrete_state_to_symmetry_abstract_state(curr_concrete_state_idx, abstr
                              [curr_concrete_state_idx], concrete_state.rtree_target_rect_over_approx,
                              concrete_state.empty_abstract_target)
     concrete_state = symmetry_transformed_targets_and_obstacles[curr_concrete_state_idx]
-    for target_idx, abstract_target_poly in enumerate(abstract_state.abstract_targets):
+    for target_idx in range(len(abstract_state.abstract_targets)):
         if not (abstract_state.empty_abstract_target or concrete_state.empty_abstract_target):
             inter_poly_1 = copy.deepcopy(concrete_state.abstract_targets[target_idx])
             inter_poly_2 = copy.deepcopy(abstract_state.abstract_targets[target_idx])
         else:
+            pdb.set_trace()
             raise "empty intersection between the relative target of the abstract state" \
                   " and that of the concrete state it is being added to!"
             # inter_poly_1 = copy.deepcopy(concrete_state.abstract_targets_without_angles[target_idx])
             # inter_poly_2 = copy.deepcopy(abstract_state.abstract_targets_without_angles[target_idx])
-        intersection_poly = get_poly_intersection(inter_poly_1, inter_poly_2)  # pc.intersect
+        intersection_poly = get_poly_intersection(inter_poly_1, inter_poly_2, check_convex=False)  # pc.intersect
         while pc.is_empty(intersection_poly):
+            pdb.set_trace()
             if True:  # abstract_state.empty_abstract_target or concrete_state.empty_abstract_target:
                 raise "empty abstract_target_poly error, grid must be refined, it's too far to see the position of " \
                       "the target similarly even within the same grid cell! "
@@ -1043,11 +1072,11 @@ def add_concrete_state_to_symmetry_abstract_state(curr_concrete_state_idx, abstr
         # if not (abstract_state.empty_abstract_target or concrete_state.empty_abstract_target):
         u_poly_1 = copy.deepcopy(concrete_state.abstract_targets_over_approximation[target_idx])
         u_poly_2 = copy.deepcopy(abstract_state.abstract_targets_over_approximation[target_idx])
-        union_poly = get_poly_union(u_poly_1, u_poly_2)  # pc.union
-        abstract_state.abstract_targets[target_idx] = intersection_poly
-        abstract_state.abstract_targets_over_approximation[target_idx] = union_poly
+        union_poly = get_poly_union(u_poly_1, u_poly_2, check_convex=False)  # pc.union
+        abstract_state.abstract_targets[target_idx] = copy.deepcopy(intersection_poly)
+        abstract_state.abstract_targets_over_approximation[target_idx] = copy.deepcopy(union_poly)
 
-    rc, x1 = pc.cheby_ball(abstract_state.abstract_targets[0])
+    rc, x1 = pc.cheby_ball(copy.deepcopy(abstract_state.abstract_targets[0]))
     rtree_target_rect_under_approx = np.array([x1 - rc, x1 + rc])
     abstract_state.rtree_target_rect_under_approx = \
         fix_angle_interval_in_rect(rtree_target_rect_under_approx)
@@ -1056,15 +1085,15 @@ def add_concrete_state_to_symmetry_abstract_state(curr_concrete_state_idx, abstr
     # np.column_stack(
     # pc.bounding_box(abstract_state.abstract_targets_over_approximation[0])).T
     union_poly_obstacles = get_poly_union(concrete_state.abstract_obstacles,
-                                          abstract_state.abstract_obstacles)  # pc.union
+                                          abstract_state.abstract_obstacles, check_convex=False)  # pc.union
     abstract_state.abstract_obstacles = union_poly_obstacles
     abstract_state.concrete_state_idx.append(curr_concrete_state_idx)
-
     return abstract_state
 
 
 def create_symmetry_abstract_transitions(Symbolic_reduced, abstract_paths, abstract_to_concrete, concrete_to_abstract,
                                          symmetry_abstract_states, symmetry_under_approx_abstract_targets_rtree_idx3d,
+                                         abstract_states_to_rtree_ids, rtree_ids_to_abstract_states,
                                          symbol_step, targets_rects, target_indices,
                                          obstacles_rects, obstacle_indices,
                                          sym_x, X_low, X_up):
@@ -1110,6 +1139,8 @@ def create_symmetry_abstract_transitions(Symbolic_reduced, abstract_paths, abstr
                                                                  symmetry_abstract_states,
                                                                  [],
                                                                  symmetry_under_approx_abstract_targets_rtree_idx3d,
+                                                                 abstract_states_to_rtree_ids,
+                                                                 rtree_ids_to_abstract_states,
                                                                  abstract_paths)
             adjacency_list[abstract_state_ind][u_ind] = copy.deepcopy(neighbors)
             for next_abstract_state_ind in adjacency_list[abstract_state_ind][u_ind]:
@@ -1217,7 +1248,10 @@ def create_symmetry_abstract_transitions(Symbolic_reduced, abstract_paths, abstr
 def get_abstract_transition_without_concrete(abstract_state_ind, u_ind,
                                              symmetry_abstract_states,
                                              controllable_abstract_states,
-                                             symmetry_under_approx_abstract_targets_rtree_idx3d, abstract_paths):
+                                             symmetry_under_approx_abstract_targets_rtree_idx3d,
+                                             abstract_states_to_rtree_ids,
+                                             rtree_ids_to_abstract_states,
+                                             abstract_paths):
     neighbors = []
     # rc, x1 = pc.cheby_ball(symmetry_abstract_states[abstract_state_ind].abstract_obstacles)
     # obstacle_rect = np.array([x1 - rc, x1 + rc])
@@ -1230,21 +1264,25 @@ def get_abstract_transition_without_concrete(abstract_state_ind, u_ind,
     #    return [-1]
     for t_ind in range(len(abstract_paths[u_ind])):
         if not pc.is_empty(get_poly_intersection(abstract_paths[u_ind][t_ind],
-                                                 symmetry_abstract_states[abstract_state_ind].abstract_obstacles)):
+                                                 symmetry_abstract_states[abstract_state_ind].abstract_obstacles,
+                                                 check_convex=False)):
             neighbors.append(-2)
             break
-
+    # not pc.is_empty(get_poly_intersection(abstract_paths[u_ind][-1],
+    #                                      symmetry_abstract_states[abstract_state_ind].abstract_targets_over_approximation[0],
+    #                                      check_convex=False)):
     if not symmetry_abstract_states[abstract_state_ind].empty_abstract_target and \
-            not pc.is_empty(get_poly_intersection(abstract_paths[u_ind][-1],
-                                                  symmetry_abstract_states[abstract_state_ind].abstract_targets[0])):
+            do_rects_inter(reachable_rect,
+                           symmetry_abstract_states[abstract_state_ind].rtree_target_rect_over_approx):
         neighbors.append(-1)
-        if -2 not in neighbors:
-            target_poly_after_transition = transform_poly_to_abstract_frames(
-                symmetry_abstract_states[abstract_state_ind].abstract_targets[0],
-                reachable_rect,
-                over_approximate=False)
-            if np.all(target_poly_after_transition.contains(np.zeros(3,1))):
-                return [-1]
+        # if -2 not in neighbors:
+        # target_poly_after_transition = transform_poly_to_abstract_frames(
+        #    symmetry_abstract_states[abstract_state_ind].abstract_targets[0],
+        #    reachable_rect,
+        #    over_approximate=False, check_convex=True)
+        # target_rect_after_transition = transform_rect_to_abstract_frames()
+        # if np.all(target_poly_after_transition.contains(np.zeros((3,1)))):
+        #    return [-1]
 
     # abstract_targets_over_approximation = symmetry_abstract_states[abstract_state_ind].abstract_targets_over_approximation
     # print("abstract_targets[0] bounding box:", pc.bounding_box(abstract_targets_over_approximation[0]))
@@ -1262,15 +1300,22 @@ def get_abstract_transition_without_concrete(abstract_state_ind, u_ind,
         reachable_rect,
         over_approximate=True)
 
+    if -1 in neighbors and -2 not in neighbors and \
+            np.all(target_rect_after_transition[0, :2] <= np.array([0, 0])) and \
+            np.all(np.array([0, 0]) <= target_rect_after_transition[1, :2]) and \
+            (target_rect_after_transition[0, 2] <= 0 <= target_rect_after_transition[1, 2] or
+             target_rect_after_transition[0, 2] <= 2 * math.pi <= target_rect_after_transition[1, 2]):
+        return [-1]
+
     hits = list(symmetry_under_approx_abstract_targets_rtree_idx3d.intersection((target_rect_after_transition[0, 0],
                                                                                  target_rect_after_transition[0, 1],
                                                                                  target_rect_after_transition[0, 2],
                                                                                  target_rect_after_transition[
-                                                                                     1, 0] + 0.01,
+                                                                                     1, 0],
                                                                                  target_rect_after_transition[
-                                                                                     1, 1] + 0.01,
+                                                                                     1, 1],
                                                                                  target_rect_after_transition[
-                                                                                     1, 2] + 0.01),
+                                                                                     1, 2]),
                                                                                 objects=True))
 
     # for idx, abstract_state in enumerate(symmetry_abstract_states):
@@ -1280,15 +1325,17 @@ def get_abstract_transition_without_concrete(abstract_state_ind, u_ind,
         #    neighbors.append(idx)
         # if not pc.is_empty(pc.intersect(hit.object.abstract_targets[0], target_poly_after_transition)):
         if do_rects_inter(hit.object.rtree_target_rect_under_approx, target_rect_after_transition) \
-                and hit.id not in neighbors:
-            if hit.id in controllable_abstract_states:
+                and hit.id in abstract_states_to_rtree_ids.values() \
+                and rtree_ids_to_abstract_states[hit.id] not in neighbors:
+            if rtree_ids_to_abstract_states[hit.id] in controllable_abstract_states:
                 if -1 not in neighbors:
                     neighbors.append(-1)
             else:
-                neighbors.append(hit.id)
+                neighbors.append(rtree_ids_to_abstract_states[hit.id])
     # abstract_to_concrete_edges[abstract_state_ind][u_ind] = neighbors
     if not neighbors:
-        print("No neighbors for s_ind ", abstract_state_ind, " with control ", u_ind)
+        pdb.set_trace()
+        print("No neighbors for abstract_state_ind ", abstract_state_ind, " with control ", u_ind)
         # print("No neighbors!")
         raise "No neighbors!"
     return neighbors
@@ -1316,7 +1363,8 @@ def update_parent_after_split(parent_abstract_state_ind, new_child_abstract_stat
         neighbors.append(new_child_abstract_state_ind_2)
     # abstract_to_concrete_edges[abstract_state_ind][u_ind] = neighbors
     if not neighbors:
-        raise "No neighbors!"
+        print("No neighbors for parent ", parent_abstract_state_ind)
+        pdb.set_trace()
     return neighbors
 
 
@@ -1669,7 +1717,8 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
                          concrete_edges, inverse_concrete_edges, concrete_target_parents, adjacency_list,
                          inverse_adjacency_list, target_parents, controllable_abstract_states, abstract_paths,
                          symmetry_transformed_targets_and_obstacles, symmetry_abstract_states,
-                         symmetry_under_approx_abstract_targets_rtree_idx3d,
+                         symmetry_under_approx_abstract_targets_rtree_idx3d, abstract_states_to_rtree_ids,
+                         rtree_ids_to_abstract_states, next_rtree_id_candidate,
                          symmetry_over_approx_abstract_targets_rtree_idx3d,
                          sym_x, symbol_step, X_low, X_up,
                          obstacles_rects, obstacle_indices, targets_rects, target_indices):
@@ -1705,23 +1754,25 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
         rtree_target_rect_under_approx_temp = copy.deepcopy(rtree_target_rect_under_approx)
         rtree_target_rect_under_approx_temp[0, 2] = interval[0]
         rtree_target_rect_under_approx_temp[1, 2] = interval[1]
-        symmetry_under_approx_abstract_targets_rtree_idx3d.delete(abstract_state_ind,
+        symmetry_under_approx_abstract_targets_rtree_idx3d.delete(abstract_states_to_rtree_ids[abstract_state_ind],
                                                                   (rtree_target_rect_under_approx_temp[0, 0],
                                                                    rtree_target_rect_under_approx_temp[0, 1],
                                                                    rtree_target_rect_under_approx_temp[0, 2],
                                                                    rtree_target_rect_under_approx_temp[1, 0],
                                                                    rtree_target_rect_under_approx_temp[1, 1],
                                                                    rtree_target_rect_under_approx_temp[1, 2]))
-        '''
-        rtree_target_rect_over_approx = symmetry_abstract_states[abstract_state_ind].rtree_target_rect_over_approx
-        symmetry_over_approx_abstract_targets_rtree_idx3d.delete(abstract_state_ind,
-                                                                 (rtree_target_rect_over_approx[0, 0],
-                                                                  rtree_target_rect_over_approx[0, 1],
-                                                                  rtree_target_rect_over_approx[0, 2],
-                                                                  rtree_target_rect_over_approx[1, 0],
-                                                                  rtree_target_rect_over_approx[1, 1],
-                                                                  rtree_target_rect_over_approx[1, 2]))
-        '''
+    del rtree_ids_to_abstract_states[abstract_states_to_rtree_ids[abstract_state_ind]]
+    del abstract_states_to_rtree_ids[abstract_state_ind]
+    '''
+    rtree_target_rect_over_approx = symmetry_abstract_states[abstract_state_ind].rtree_target_rect_over_approx
+    symmetry_over_approx_abstract_targets_rtree_idx3d.delete(abstract_state_ind,
+                                                             (rtree_target_rect_over_approx[0, 0],
+                                                              rtree_target_rect_over_approx[0, 1],
+                                                              rtree_target_rect_over_approx[0, 2],
+                                                              rtree_target_rect_over_approx[1, 0],
+                                                              rtree_target_rect_over_approx[1, 1],
+                                                              rtree_target_rect_over_approx[1, 2]))
+    '''
     original_angle_interval_1 = [abstract_state_1.rtree_target_rect_under_approx[0, 2],
                                  abstract_state_1.rtree_target_rect_under_approx[1, 2]]
     decomposed_angle_intervals_1 = get_decomposed_angle_intervals(original_angle_interval_1)
@@ -1729,11 +1780,14 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
         rtree_target_rect_under_approx_temp = copy.deepcopy(abstract_state_1.rtree_target_rect_under_approx)
         rtree_target_rect_under_approx_temp[0, 2] = interval[0]
         rtree_target_rect_under_approx_temp[1, 2] = interval[1]
-        symmetry_under_approx_abstract_targets_rtree_idx3d.insert(len(symmetry_abstract_states) - 2, (
+        symmetry_under_approx_abstract_targets_rtree_idx3d.insert(next_rtree_id_candidate, (
             rtree_target_rect_under_approx_temp[0, 0], rtree_target_rect_under_approx_temp[0, 1],
             rtree_target_rect_under_approx_temp[0, 2], rtree_target_rect_under_approx_temp[1, 0],
             rtree_target_rect_under_approx_temp[1, 1], rtree_target_rect_under_approx_temp[1, 2]),
                                                                   obj=symmetry_abstract_states[-2])
+    abstract_states_to_rtree_ids[len(symmetry_abstract_states) - 2] = next_rtree_id_candidate
+    rtree_ids_to_abstract_states[next_rtree_id_candidate] = len(symmetry_abstract_states) - 2
+    next_rtree_id_candidate += 1
     original_angle_interval_2 = [abstract_state_2.rtree_target_rect_under_approx[0, 2],
                                  abstract_state_2.rtree_target_rect_under_approx[1, 2]]
     decomposed_angle_intervals_2 = get_decomposed_angle_intervals(original_angle_interval_2)
@@ -1741,25 +1795,29 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
         rtree_target_rect_under_approx_temp = copy.deepcopy(abstract_state_2.rtree_target_rect_under_approx)
         rtree_target_rect_under_approx_temp[0, 2] = interval[0]
         rtree_target_rect_under_approx_temp[1, 2] = interval[1]
-        symmetry_under_approx_abstract_targets_rtree_idx3d.insert(len(symmetry_abstract_states) - 1, (
+        symmetry_under_approx_abstract_targets_rtree_idx3d.insert(next_rtree_id_candidate, (
             rtree_target_rect_under_approx_temp[0, 0], rtree_target_rect_under_approx_temp[0, 1],
             rtree_target_rect_under_approx_temp[0, 2], rtree_target_rect_under_approx_temp[1, 0],
             rtree_target_rect_under_approx_temp[1, 1], rtree_target_rect_under_approx_temp[1, 2]),
                                                                   obj=symmetry_abstract_states[-1])
-        '''
-        symmetry_over_approx_abstract_targets_rtree_idx3d.insert(len(abstract_to_concrete) - 2, (
-            abstract_state_1.rtree_target_rect_over_approx[0, 0], abstract_state_1.rtree_target_rect_over_approx[0, 1],
-            abstract_state_1.rtree_target_rect_over_approx[0, 2], abstract_state_1.rtree_target_rect_over_approx[1, 0],
-            abstract_state_1.rtree_target_rect_over_approx[1, 1], abstract_state_1.rtree_target_rect_over_approx[1, 2]),
-                                                                 obj=symmetry_abstract_states[-2])
-        symmetry_over_approx_abstract_targets_rtree_idx3d.insert(len(abstract_to_concrete) - 1, (
-            abstract_state_2.rtree_target_rect_over_approx[0, 0], abstract_state_2.rtree_target_rect_over_approx[0, 1],
-            abstract_state_2.rtree_target_rect_over_approx[0, 2], abstract_state_2.rtree_target_rect_over_approx[1, 0],
-            abstract_state_2.rtree_target_rect_over_approx[1, 1], abstract_state_2.rtree_target_rect_over_approx[1, 2]),
-                                                                 obj=symmetry_abstract_states[-1])
-        '''
 
-    # original_neighbors = copy.deepcopy(adjacency_list[abstract_state_ind])
+    abstract_states_to_rtree_ids[len(symmetry_abstract_states) - 1] = next_rtree_id_candidate
+    rtree_ids_to_abstract_states[next_rtree_id_candidate] = len(symmetry_abstract_states) - 1
+    next_rtree_id_candidate += 1
+    '''
+    symmetry_over_approx_abstract_targets_rtree_idx3d.insert(len(abstract_to_concrete) - 2, (
+        abstract_state_1.rtree_target_rect_over_approx[0, 0], abstract_state_1.rtree_target_rect_over_approx[0, 1],
+        abstract_state_1.rtree_target_rect_over_approx[0, 2], abstract_state_1.rtree_target_rect_over_approx[1, 0],
+        abstract_state_1.rtree_target_rect_over_approx[1, 1], abstract_state_1.rtree_target_rect_over_approx[1, 2]),
+                                                             obj=symmetry_abstract_states[-2])
+    symmetry_over_approx_abstract_targets_rtree_idx3d.insert(len(abstract_to_concrete) - 1, (
+        abstract_state_2.rtree_target_rect_over_approx[0, 0], abstract_state_2.rtree_target_rect_over_approx[0, 1],
+        abstract_state_2.rtree_target_rect_over_approx[0, 2], abstract_state_2.rtree_target_rect_over_approx[1, 0],
+        abstract_state_2.rtree_target_rect_over_approx[1, 1], abstract_state_2.rtree_target_rect_over_approx[1, 2]),
+                                                             obj=symmetry_abstract_states[-1])
+    '''
+
+    original_neighbors = copy.deepcopy(adjacency_list[abstract_state_ind])
     original_parents = copy.deepcopy(inverse_adjacency_list[abstract_state_ind])
     # original_concrete = copy.deepcopy(abstract_to_concrete[abstract_state_ind])
     adjacency_list[abstract_state_ind] = None  # [[] * len(abstract_paths)]  # cut the original abstract state from
@@ -1784,11 +1842,13 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
         # parents_to_explore = np.setdiff1d(inverse_adjacency_list[abstract_state_ind][u_ind],
         #                                  np.array(updated_parents)).tolist()
         for parent in original_parents[u_ind]:  # inverse_adjacency_list[abstract_state_ind]
-            if parent != abstract_state_ind and parent not in controllable_abstract_states:  # and parent < len(abstract_to_concrete) - 2:
+            if parent != abstract_state_ind and parent not in controllable_abstract_states:
+                # and parent < len(abstract_to_concrete) - 2:
                 # and parent not in controllable_abstract_states:  # and parent not in
                 # updated_parents:
-                if not adjacency_list[parent][u_ind]:
-                    raise "Where did " + str(parent) + " come from?"
+                if adjacency_list[parent] is None or not adjacency_list[parent][u_ind]:
+                    pdb.set_trace()
+                    # raise "Where did " + str(parent) + " come from?"
                 '''
                 parent_neighbors = get_abstract_transition(concrete_to_abstract,
                                                            abstract_to_concrete,
@@ -1863,10 +1923,13 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
                                                                symmetry_abstract_states,
                                                                controllable_abstract_states,
                                                                symmetry_under_approx_abstract_targets_rtree_idx3d,
+                                                               abstract_states_to_rtree_ids,
+                                                               rtree_ids_to_abstract_states,
                                                                abstract_paths)
         # if abstract_state_ind in neighbors_2:
         #    print("how did this happen?")
         adjacency_list[len(abstract_to_concrete) - 2][u_ind] = copy.deepcopy(neighbors_2)
+        original_neighbors[u_ind] = np.setdiff1d(np.array(original_neighbors[u_ind]), np.array(neighbors_2)).tolist()
         # neighbors_to_update = np.setdiff1d(np.array(neighbors), np.array(updated_neighbors_1)).tolist()
         for neighbor in neighbors_2:
             # if neighbor not in original_neighbors[u_ind] and neighbor < len(abstract_to_concrete) - 2:
@@ -1876,6 +1939,8 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
                     if len(abstract_to_concrete) - 2 not in inverse_adjacency_list[neighbor][u_ind]:
                         inverse_adjacency_list[neighbor][u_ind].append(len(abstract_to_concrete) - 2)
                 else:
+                    if adjacency_list[neighbor] is None or inverse_adjacency_list[neighbor] is None:
+                        pdb.set_trace()
                     for idx, parent in enumerate(inverse_adjacency_list[neighbor][u_ind]):
                         if parent == abstract_state_ind:
                             inverse_adjacency_list[neighbor][u_ind][idx] = len(abstract_to_concrete) - 2
@@ -1904,9 +1969,12 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
                                                              symmetry_abstract_states,
                                                              controllable_abstract_states,
                                                              symmetry_under_approx_abstract_targets_rtree_idx3d,
+                                                             abstract_states_to_rtree_ids,
+                                                             rtree_ids_to_abstract_states,
                                                              abstract_paths)
         # if abstract_state_ind in neighbors:
         #    print("how did this happen?")
+        original_neighbors[u_ind] = np.setdiff1d(np.array(original_neighbors[u_ind]), np.array(neighbors)).tolist()
         adjacency_list[len(abstract_to_concrete) - 1][u_ind] = copy.deepcopy(neighbors)
         # neighbors_to_update = np.setdiff1d(np.array(neighbors), np.array(updated_neighbors_2)).tolist()
         for neighbor in neighbors:
@@ -1917,6 +1985,8 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
                     if len(abstract_to_concrete) - 1 not in inverse_adjacency_list[neighbor][u_ind]:
                         inverse_adjacency_list[neighbor][u_ind].append(len(abstract_to_concrete) - 1)
                 else:
+                    if adjacency_list[neighbor] is None or inverse_adjacency_list[neighbor] is None:
+                        pdb.set_trace()
                     for idx, parent in enumerate(inverse_adjacency_list[neighbor][u_ind]):
                         if parent == abstract_state_ind:
                             inverse_adjacency_list[neighbor][u_ind][idx] = len(abstract_to_concrete) - 1
@@ -1926,6 +1996,14 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
             # if (neighbor == -1 or neighbor in controllable_abstract_states) \
             #        and len(abstract_to_concrete) - 1 not in target_parents:
             #    target_parents.append(len(abstract_to_concrete) - 1)
+        for neighbor in original_neighbors[u_ind]:
+            if neighbor != abstract_state_ind:
+                if adjacency_list[neighbor] is None or inverse_adjacency_list[neighbor] is None:
+                    pdb.set_trace()
+                for idx, parent in enumerate(inverse_adjacency_list[neighbor][u_ind]):
+                    if parent == abstract_state_ind:
+                        inverse_adjacency_list[neighbor][u_ind].pop(idx)
+
         '''
         for original_neighbor in original_neighbors[u_ind]:
             if abstract_state_ind != original_neighbor:
@@ -1972,7 +2050,8 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
     '''
 
     return concrete_to_abstract, abstract_to_concrete, symmetry_abstract_states, \
-           adjacency_list, inverse_adjacency_list, target_parents
+           adjacency_list, inverse_adjacency_list, target_parents, abstract_states_to_rtree_ids, \
+           rtree_ids_to_abstract_states, next_rtree_id_candidate
 
 
 def refine(concrete_to_abstract, abstract_to_concrete, abstract_edges,
@@ -1981,6 +2060,8 @@ def refine(concrete_to_abstract, abstract_to_concrete, abstract_edges,
            adjacency_list, inverse_adjacency_list, refinement_candidates, target_parents, controllable_abstract_states,
            unsafe_abstract_states,
            symmetry_transformed_targets_and_obstacles, symmetry_under_approx_abstract_targets_rtree_idx3d,
+           abstract_states_to_rtree_ids,
+           rtree_ids_to_abstract_states, next_rtree_id_candidate,
            symmetry_over_approx_abstract_targets_rtree_idx3d,
            abstract_paths, reachability_rtree_idx3d, sym_x,
            symbol_step, X_low,
@@ -2038,29 +2119,35 @@ def refine(concrete_to_abstract, abstract_to_concrete, abstract_edges,
             progress = True
             if len(concrete_indices) < len(abstract_to_concrete[abstract_state_ind]):
                 concrete_to_abstract, abstract_to_concrete, symmetry_abstract_states, \
-                adjacency_list, inverse_adjacency_list, target_parents = split_abstract_state(abstract_state_ind,
-                                                                                              concrete_indices,
-                                                                                              abstract_to_concrete,
-                                                                                              concrete_to_abstract,
-                                                                                              abstract_edges,
-                                                                                              concrete_edges,
-                                                                                              inverse_concrete_edges,
-                                                                                              concrete_target_parents,
-                                                                                              adjacency_list,
-                                                                                              inverse_adjacency_list,
-                                                                                              target_parents,
-                                                                                              controllable_abstract_states,
-                                                                                              abstract_paths,
-                                                                                              symmetry_transformed_targets_and_obstacles,
-                                                                                              symmetry_abstract_states,
-                                                                                              symmetry_under_approx_abstract_targets_rtree_idx3d,
-                                                                                              symmetry_over_approx_abstract_targets_rtree_idx3d,
-                                                                                              sym_x, symbol_step, X_low,
-                                                                                              X_up,
-                                                                                              obstacles_rects,
-                                                                                              obstacle_indices,
-                                                                                              targets_rects,
-                                                                                              target_indices)
+                adjacency_list, inverse_adjacency_list, \
+                target_parents, abstract_states_to_rtree_ids, \
+                rtree_ids_to_abstract_states, \
+                next_rtree_id_candidate = split_abstract_state(abstract_state_ind,
+                                                               concrete_indices,
+                                                               abstract_to_concrete,
+                                                               concrete_to_abstract,
+                                                               abstract_edges,
+                                                               concrete_edges,
+                                                               inverse_concrete_edges,
+                                                               concrete_target_parents,
+                                                               adjacency_list,
+                                                               inverse_adjacency_list,
+                                                               target_parents,
+                                                               controllable_abstract_states,
+                                                               abstract_paths,
+                                                               symmetry_transformed_targets_and_obstacles,
+                                                               symmetry_abstract_states,
+                                                               symmetry_under_approx_abstract_targets_rtree_idx3d,
+                                                               abstract_states_to_rtree_ids,
+                                                               rtree_ids_to_abstract_states,
+                                                               next_rtree_id_candidate,
+                                                               symmetry_over_approx_abstract_targets_rtree_idx3d,
+                                                               sym_x, symbol_step, X_low,
+                                                               X_up,
+                                                               obstacles_rects,
+                                                               obstacle_indices,
+                                                               targets_rects,
+                                                               target_indices)
                 remaining_abstract_states = np.setdiff1d(remaining_abstract_states, abstract_state_ind)
                 remaining_abstract_states = np.append(remaining_abstract_states, len(abstract_to_concrete) - 1)
                 remaining_abstract_states = np.append(remaining_abstract_states, len(abstract_to_concrete) - 2)
@@ -2083,7 +2170,9 @@ def refine(concrete_to_abstract, abstract_to_concrete, abstract_edges,
         # cut the original abstract state from all connections
     return progress, num_new_abstract_states, concrete_to_abstract, abstract_to_concrete, symmetry_abstract_states, \
            adjacency_list, inverse_adjacency_list, refinement_candidates, \
-           target_parents, remaining_abstract_states, deleted_abstract_states
+           target_parents, remaining_abstract_states, deleted_abstract_states, abstract_states_to_rtree_ids, \
+           rtree_ids_to_abstract_states, \
+           next_rtree_id_candidate
 
 
 # def simulate_control(abstract_controller, )
@@ -2119,11 +2208,15 @@ def abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_
 
     symmetry_transformed_targets_and_obstacles, \
     concrete_to_abstract, abstract_to_concrete, \
-    symmetry_abstract_states = create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets,
-                                                               obstacles, sym_x, X_low, X_up,
-                                                               intersection_radius_threshold,
-                                                               symmetry_under_approx_abstract_targets_rtree_idx3d,
-                                                               symmetry_over_approx_abstract_targets_rtree_idx3d)
+    symmetry_abstract_states, abstract_states_to_rtree_ids, \
+    rtree_ids_to_abstract_states, next_rtree_id_candidate = create_symmetry_abstract_states(
+        symbols_to_explore,
+        symbol_step, targets,
+        obstacles, sym_x, X_low,
+        X_up,
+        intersection_radius_threshold,
+        symmetry_under_approx_abstract_targets_rtree_idx3d,
+        symmetry_over_approx_abstract_targets_rtree_idx3d)
 
     # Now, create the edges in the discrete model
     # We add two to the dimensions of the adjacency matrix: one for the unsafe state and one for the target.
@@ -2135,6 +2228,8 @@ def abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_
         abstract_to_concrete,
         concrete_to_abstract,
         symmetry_abstract_states, symmetry_under_approx_abstract_targets_rtree_idx3d,
+        abstract_states_to_rtree_ids,
+        rtree_ids_to_abstract_states,
         symbol_step,
         targets_rects,
         target_indices,
@@ -2194,7 +2289,10 @@ def abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_
         # np.setdiff1d(np.array(copy.deepcopy(target_parents)), controllable_abstract_states_temp).tolist()
         temp_t_refine = time.time()
         progress, num_new_abstract_states, concrete_to_abstract, abstract_to_concrete, symmetry_abstract_states, adjacency_list, \
-        inverse_adjacency_list, refinement_candidates, target_parents, remaining_abstract_states, deleted_abstract_states = refine(
+        inverse_adjacency_list, refinement_candidates, target_parents, remaining_abstract_states, deleted_abstract_states, \
+        abstract_states_to_rtree_ids, \
+        rtree_ids_to_abstract_states, \
+        next_rtree_id_candidate = refine(
             concrete_to_abstract,
             abstract_to_concrete,
             abstract_edges,
@@ -2211,6 +2309,8 @@ def abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_
             unsafe_abstract_states,
             symmetry_transformed_targets_and_obstacles,
             symmetry_under_approx_abstract_targets_rtree_idx3d,
+            abstract_states_to_rtree_ids,
+            rtree_ids_to_abstract_states, next_rtree_id_candidate,
             symmetry_over_approx_abstract_targets_rtree_idx3d,
             abstract_paths,
             reachability_rtree_idx3d,
