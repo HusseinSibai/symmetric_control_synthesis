@@ -1465,11 +1465,14 @@ def get_concrete_transition(s_ind, u_ind, concrete_edges, inverse_concrete_edges
     return neighbors
 
 
-def plot_abstract_states(symmetry_abstract_states):
+def plot_abstract_states(symmetry_abstract_states, deleted_abstract_states):
     obstacle_color = 'r'
     target_color = 'g'
-    for idx, abstract_state in enumerate(symmetry_abstract_states):
+    indices_to_plot = np.array(range(len(symmetry_abstract_states)))
+    indices_to_plot = np.setdiff1d(indices_to_plot, np.array(deleted_abstract_states)).tolist()
+    for idx in indices_to_plot:  # enumerate(symmetry_abstract_states)
         # print("Plotting abstract state: ", idx)
+        abstract_state = symmetry_abstract_states[idx]
         plt.figure("Abstract state: " + str(idx))
         currentAxis = plt.gca()
         abstract_obstacles = abstract_state.abstract_obstacles
@@ -1500,7 +1503,7 @@ def plot_abstract_states(symmetry_abstract_states):
         plt.ylim([-10, 10])
         plt.xlim([-10, 10])
         plt.savefig("Abstract state: " + str(idx))
-        plt.show()
+        # plt.show()
         plt.cla()
         plt.close()
 
@@ -2338,6 +2341,8 @@ def abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_
     print(
         ['Controller synthesis along with refinement for reach-avoid specification: ', time.time() - t_synthesis_start,
          ' seconds'])
+    print(['Total time for symmetry abstraction-refinement-based controller synthesis'
+           ' for reach-avoid specification: ', time.time() - t_synthesis_start + t_abstraction,' seconds'])
     print(['Pure refinement took a total of: ', t_refine, ' seconds'])
     print(['Pure synthesis took a total of: ', t_synthesis, ' seconds'])
     print(['Number of splits of abstract states: ', refinement_itr])
@@ -2362,7 +2367,7 @@ def abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_
                                                  'specification\n')
     else:
         print('The reach-avoid specification cannot be satisfied from any initial state\n')
-    plot_abstract_states(symmetry_abstract_states)
+    plot_abstract_states(symmetry_abstract_states, deleted_abstract_states)
 
     # TODO: implement the refinement subroutine. Choose an action, check its reachable set, split the corresponding
     #  concrete states into two sets: one with this action being unsafe, the others are the rest. fix the adjacency

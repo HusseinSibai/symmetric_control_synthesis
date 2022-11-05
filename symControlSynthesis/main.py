@@ -59,8 +59,8 @@ Obstacle_up = np.array([[2.5, 3, 100], [5.5, 9.5, 100], [0, 9.5, 100], [13, 0, 1
 Obstacle_low = np.array([[2, -3, -100], [5, 3.5, -100], [-3, -3, -100], [-3, -3, -100],
                          [-3, 6.5, -100], [10, -3, -100]])
 
-sym_x = 10 * np.ones((1, n_x))
-sym_x[0, 2] = 10
+sym_x = 25 * np.ones((1, n_x))
+sym_x[0, 2] = 20
 
 sym_u = 5 * np.ones((1, n_u))
 
@@ -151,7 +151,7 @@ for s_ind in range(Symbolic_reduced.shape[0]):
 plt.ylim([-0.35, 0.35])
 plt.xlim([-0.75, 0.75])
 plt.savefig("Abstract reachable sets")
-plt.show()
+# plt.show()
 # plot(Symbolic_reduced_list);
 # print(np.array(mat_out).shape)
 # print("Symbolic_reduced,U_discrete,unsafe_trans")
