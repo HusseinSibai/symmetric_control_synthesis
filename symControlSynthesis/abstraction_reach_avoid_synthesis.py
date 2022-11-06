@@ -2081,7 +2081,7 @@ def refine(concrete_to_abstract, abstract_to_concrete, abstract_edges,
     deleted_abstract_states = []
     # refinement_candidates_temp = copy.deepcopy(refinement_candidates)
     # len_refinement_candidates = len(refinement_candidates)
-    max_num_of_refinements = len(refinement_candidates)
+    max_num_of_refinements = 3  # len(refinement_candidates)
     while itr < max_num_of_refinements:  # remaining_abstract_states.shape[0] / 10):
         # for abstract_state_ind in target_parents:
         itr += 1
