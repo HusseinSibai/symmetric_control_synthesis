@@ -1303,7 +1303,7 @@ def get_abstract_transition_without_concrete(abstract_state_ind, u_ind,
         reachable_rect,
         over_approximate=False)
 
-    if -1 in neighbors and -2 not in neighbors and \
+    if target_rect_after_transition_under_approximation is not None and -1 in neighbors and -2 not in neighbors and \
             np.all(target_rect_after_transition_under_approximation[0, :2] <= np.array([0, 0])) and \
             np.all(np.array([0, 0]) <= target_rect_after_transition_under_approximation[1, :2]) and \
             (target_rect_after_transition_under_approximation[0, 2] <= 0 <= target_rect_after_transition_under_approximation[1, 2] or
@@ -1828,6 +1828,7 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
     # original_concrete = copy.deepcopy(abstract_to_concrete[abstract_state_ind])
     adjacency_list[abstract_state_ind] = None  # [[] * len(abstract_paths)]  # cut the original abstract state from
     # all connections
+    inverse_adjacency_list[abstract_state_ind] = None  # [[] * len(abstract_paths)]
     abstract_to_concrete[abstract_state_ind] = []
     adjacency_list.append([])
     for u_ind in range(len(abstract_paths)):
@@ -2002,11 +2003,19 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
                 else:
                     if adjacency_list[neighbor] is None or inverse_adjacency_list[neighbor] is None:
                         pdb.set_trace()
+                    parent_idx_to_modify = None
+                    add_new_item = False
                     for idx, parent in enumerate(inverse_adjacency_list[neighbor][u_ind]):
                         if parent == abstract_state_ind:
-                            inverse_adjacency_list[neighbor][u_ind][idx] = len(abstract_to_concrete) - 1
+                            parent_idx_to_modify = idx
+                            break
                         elif parent == len(abstract_to_concrete) - 2:
-                            inverse_adjacency_list[neighbor][u_ind].append(len(abstract_to_concrete) - 1)
+                            add_new_item = True
+                            break
+                    if parent_idx_to_modify is not None:
+                        inverse_adjacency_list[neighbor][u_ind][parent_idx_to_modify] = len(abstract_to_concrete) - 1
+                    elif add_new_item:
+                        inverse_adjacency_list[neighbor][u_ind].append(len(abstract_to_concrete) - 1)
                         # updated_neighbors_2.append(neighbor)
             # if (neighbor == -1 or neighbor in controllable_abstract_states) \
             #        and len(abstract_to_concrete) - 1 not in target_parents:
@@ -2016,9 +2025,13 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
                 if adjacency_list[neighbor] is None or inverse_adjacency_list[neighbor] is None:
                     pdb.set_trace()
                 else:
+                    parent_idx_to_delete = None
                     for idx, parent in enumerate(inverse_adjacency_list[neighbor][u_ind]):
                         if parent == abstract_state_ind:
-                            inverse_adjacency_list[neighbor][u_ind].pop(idx)
+                            parent_idx_to_delete = idx
+                            break
+                    if parent_idx_to_delete is not None:
+                        inverse_adjacency_list[neighbor][u_ind].pop(parent_idx_to_delete)
 
         '''
         for original_neighbor in original_neighbors[u_ind]:
@@ -2046,8 +2059,6 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
                 if abstract_state_ind in inverse_adjacency_list[original_neighbor][u_ind]:
                     raise "how did this stay here?"
     '''
-
-    inverse_adjacency_list[abstract_state_ind] = None  # [[] * len(abstract_paths)]
     for idx, parent in enumerate(target_parents):
         if parent == abstract_state_ind:
             target_parents.pop(idx)
