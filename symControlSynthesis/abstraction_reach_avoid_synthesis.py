@@ -1298,11 +1298,20 @@ def get_abstract_transition_without_concrete(abstract_state_ind, u_ind,
         reachable_rect,
         over_approximate=True)
 
-    target_rect_after_transition_under_approximation = transform_rect_to_abstract_frames(
-        symmetry_abstract_states[abstract_state_ind].rtree_target_rect_under_approx,
+    target_poly_after_transition_under_approximation = transform_poly_to_abstract_frames(
+        symmetry_abstract_states[abstract_state_ind].abstract_targets[0],
         reachable_rect,
         over_approximate=False)
 
+    origin = np.zeros((3, 1))
+    another_origin = np.zeros((3, 1))
+    another_origin[2] = 2 * math.pi
+    if (not pc.is_empty(target_poly_after_transition_under_approximation)) and -1 in neighbors and -2 not in neighbors \
+            and (target_poly_after_transition_under_approximation.contains(origin)
+                 or target_poly_after_transition_under_approximation.contains(another_origin)):
+        return [-1]
+
+    '''
     if target_rect_after_transition_under_approximation is not None and -1 in neighbors and -2 not in neighbors and \
             np.all(target_rect_after_transition_under_approximation[0, :2] <= np.array([0, 0])) and \
             np.all(np.array([0, 0]) <= target_rect_after_transition_under_approximation[1, :2]) and \
@@ -1311,6 +1320,7 @@ def get_abstract_transition_without_concrete(abstract_state_ind, u_ind,
              target_rect_after_transition_under_approximation[0, 2] <= 2 * math.pi <=
              target_rect_after_transition_under_approximation[1, 2]):
         return [-1]
+    '''
 
     hits = list(symmetry_under_approx_abstract_targets_rtree_idx3d.intersection((target_rect_after_transition[0, 0],
                                                                                  target_rect_after_transition[0, 1],
@@ -1332,8 +1342,8 @@ def get_abstract_transition_without_concrete(abstract_state_ind, u_ind,
         #    neighbors.append(idx)
         # if not pc.is_empty(pc.intersect(hit.object.abstract_targets[0], target_poly_after_transition)):
         # if do_rects_inter(hit.object.rtree_target_rect_under_approx, target_rect_after_transition) \
-        if rtree_ids_to_abstract_states[hit.id] not in neighbors and \
-                hit.id in abstract_states_to_rtree_ids.values() and \
+        # hit.id in abstract_states_to_rtree_ids.values() and \
+        if hit.id in rtree_ids_to_abstract_states and rtree_ids_to_abstract_states[hit.id] not in neighbors and \
                 not pc.is_empty(get_poly_intersection(hit.object.abstract_targets[0], target_poly_after_transition)):
             if rtree_ids_to_abstract_states[hit.id] in controllable_abstract_states:
                 if -1 not in neighbors:
@@ -1345,7 +1355,7 @@ def get_abstract_transition_without_concrete(abstract_state_ind, u_ind,
         pdb.set_trace()
         print("No neighbors for abstract_state_ind ", abstract_state_ind, " with control ", u_ind)
         # print("No neighbors!")
-        raise "No neighbors!"
+        # raise "No neighbors!"
     return neighbors
 
 
@@ -1378,7 +1388,7 @@ def update_parent_after_split(parent_abstract_state_ind, new_child_abstract_stat
         neighbors.append(new_child_abstract_state_ind_2)
     # abstract_to_concrete_edges[abstract_state_ind][u_ind] = neighbors
     if not neighbors:
-        print("No neighbors for parent ", parent_abstract_state_ind)
+        print("Warning: No neighbors for parent ", parent_abstract_state_ind)
         # pdb.set_trace()
     return neighbors
 
@@ -1867,45 +1877,47 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
                 # and parent not in controllable_abstract_states:  # and parent not in
                 # updated_parents:
                 if adjacency_list[parent] is None or not adjacency_list[parent][u_ind]:
-                    pdb.set_trace()
+                    print("Warning: parent ", parent, " was split before and the adjacency list of ", abstract_state_ind, " was not updated")
+                    # pdb.set_trace()
+                else:
                     # raise "Where did " + str(parent) + " come from?"
-                '''
-                parent_neighbors = get_abstract_transition(concrete_to_abstract,
-                                                           abstract_to_concrete,
-                                                           abstract_edges,
-                                                           concrete_edges,
-                                                           inverse_concrete_edges,
-                                                           concrete_target_parents,
-                                                           parent, u_ind,
-                                                           sym_x,
-                                                           symbol_step, X_low,
-                                                           X_up, abstract_paths,
-                                                           obstacles_rects,
-                                                           obstacle_indices,
-                                                           targets_rects,
-                                                           target_indices)
-                '''
-                # parent_neighbors = get_abstract_transition_without_concrete(parent, u_ind,
-                #                                                            symmetry_abstract_states,
-                #                                                            symmetry_under_approx_abstract_targets_rtree_idx3d,
-                #                                                            abstract_paths)
-                parent_children = update_parent_after_split(parent, len(abstract_to_concrete) - 1,
-                                                            len(abstract_to_concrete) - 2, u_ind,
-                                                            symmetry_abstract_states,
-                                                            abstract_paths)
-                child_idx_to_delete = None
-                for idx, child in enumerate(adjacency_list[parent][u_ind]):
-                    if child == abstract_state_ind:
-                        child_idx_to_delete = idx
-                        break
-                if child_idx_to_delete is not None:
-                    adjacency_list[parent][u_ind].pop(child_idx_to_delete)
-                    updated_parents.append(parent)
-                for child in parent_children:
-                    if child not in adjacency_list[parent][u_ind]:
-                        adjacency_list[parent][u_ind].append(child)
-                    if parent not in inverse_adjacency_list[child][u_ind]:
-                        inverse_adjacency_list[child][u_ind].append(parent)
+                    '''
+                    parent_neighbors = get_abstract_transition(concrete_to_abstract,
+                                                               abstract_to_concrete,
+                                                               abstract_edges,
+                                                               concrete_edges,
+                                                               inverse_concrete_edges,
+                                                               concrete_target_parents,
+                                                               parent, u_ind,
+                                                               sym_x,
+                                                               symbol_step, X_low,
+                                                               X_up, abstract_paths,
+                                                               obstacles_rects,
+                                                               obstacle_indices,
+                                                               targets_rects,
+                                                               target_indices)
+                    '''
+                    # parent_neighbors = get_abstract_transition_without_concrete(parent, u_ind,
+                    #                                                            symmetry_abstract_states,
+                    #                                                            symmetry_under_approx_abstract_targets_rtree_idx3d,
+                    #                                                            abstract_paths)
+                    parent_children = update_parent_after_split(parent, len(abstract_to_concrete) - 1,
+                                                                len(abstract_to_concrete) - 2, u_ind,
+                                                                symmetry_abstract_states,
+                                                                abstract_paths)
+                    child_idx_to_delete = None
+                    for idx, child in enumerate(adjacency_list[parent][u_ind]):
+                        if child == abstract_state_ind:
+                            child_idx_to_delete = idx
+                            break
+                    if child_idx_to_delete is not None:
+                        adjacency_list[parent][u_ind].pop(child_idx_to_delete)
+                        updated_parents.append(parent)
+                    for child in parent_children:
+                        if child not in adjacency_list[parent][u_ind]:
+                            adjacency_list[parent][u_ind].append(child)
+                        if parent not in inverse_adjacency_list[child][u_ind]:
+                            inverse_adjacency_list[child][u_ind].append(parent)
                 # if abstract_state_ind in parent_neighbors:
                 #    print("how did this happen?")
                 # adjacency_list[parent][u_ind] = copy.deepcopy(parent_neighbors)
@@ -1966,15 +1978,17 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
                         inverse_adjacency_list[neighbor][u_ind].append(len(abstract_to_concrete) - 2)
                 else:
                     if adjacency_list[neighbor] is None or inverse_adjacency_list[neighbor] is None:
-                        pdb.set_trace()
-                    parent_idx_to_modify = None
-                    for idx, parent in enumerate(inverse_adjacency_list[neighbor][u_ind]):
-                        if parent == abstract_state_ind:
-                            parent_idx_to_modify = idx
-                            break
-                    if parent_idx_to_modify is not None:
-                        inverse_adjacency_list[neighbor][u_ind][parent_idx_to_modify] = len(abstract_to_concrete) - 2
-                        # updated_neighbors_1.append(neighbor)
+                        print("Warning: get_abstract_transition_without_concrete returned a child ", neighbor, " which was deleted before! ")
+                        # pdb.set_trace()
+                    else:
+                        parent_idx_to_modify = None
+                        for idx, parent in enumerate(inverse_adjacency_list[neighbor][u_ind]):
+                            if parent == abstract_state_ind:
+                                parent_idx_to_modify = idx
+                                break
+                        if parent_idx_to_modify is not None:
+                            inverse_adjacency_list[neighbor][u_ind][parent_idx_to_modify] = len(abstract_to_concrete) - 2
+                            # updated_neighbors_1.append(neighbor)
 
             # if (neighbor == -1 or neighbor in controllable_abstract_states) and \
             #        len(abstract_to_concrete) - 2 not in target_parents:
@@ -2016,21 +2030,24 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
                         inverse_adjacency_list[neighbor][u_ind].append(len(abstract_to_concrete) - 1)
                 else:
                     if adjacency_list[neighbor] is None or inverse_adjacency_list[neighbor] is None:
-                        pdb.set_trace()
-                    parent_idx_to_modify = None
-                    add_new_item = False
-                    for idx, parent in enumerate(inverse_adjacency_list[neighbor][u_ind]):
-                        if parent == abstract_state_ind:
-                            parent_idx_to_modify = idx
-                            break
-                        elif parent == len(abstract_to_concrete) - 2:
-                            add_new_item = True
-                            break
-                    if parent_idx_to_modify is not None:
-                        inverse_adjacency_list[neighbor][u_ind][parent_idx_to_modify] = len(abstract_to_concrete) - 1
-                    elif add_new_item:
-                        inverse_adjacency_list[neighbor][u_ind].append(len(abstract_to_concrete) - 1)
-                        # updated_neighbors_2.append(neighbor)
+                        print("Warning: get_abstract_transition_without_concrete returned a child ", neighbor,
+                              " which was deleted before! ")
+                        # pdb.set_trace()
+                    else:
+                        parent_idx_to_modify = None
+                        add_new_item = False
+                        for idx, parent in enumerate(inverse_adjacency_list[neighbor][u_ind]):
+                            if parent == abstract_state_ind:
+                                parent_idx_to_modify = idx
+                                break
+                            elif parent == len(abstract_to_concrete) - 2:
+                                add_new_item = True
+                                break
+                        if parent_idx_to_modify is not None:
+                            inverse_adjacency_list[neighbor][u_ind][parent_idx_to_modify] = len(abstract_to_concrete) - 1
+                        elif add_new_item:
+                            inverse_adjacency_list[neighbor][u_ind].append(len(abstract_to_concrete) - 1)
+                            # updated_neighbors_2.append(neighbor)
             # if (neighbor == -1 or neighbor in controllable_abstract_states) \
             #        and len(abstract_to_concrete) - 1 not in target_parents:
             #    target_parents.append(len(abstract_to_concrete) - 1)
