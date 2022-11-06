@@ -924,8 +924,6 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
                 # if np.all(max_intersection_rect[1, :] - max_intersection_rect[0, :] >= 2 * symbol_step):
                 if max_rad >= intersection_radius_threshold:  # 2 * symbol_step:
                     abstract_state = hits[max_rad_idx].object
-                    inter_poly_1 = symmetry_transformed_targets_and_obstacles[s].abstract_targets[0]
-                    inter_poly_2 = abstract_state.abstract_targets[0]
                     new_abstract_state = add_concrete_state_to_symmetry_abstract_state(s, abstract_state,
                                                                                        symmetry_transformed_targets_and_obstacles)
                     inter_poly_3 = new_abstract_state.abstract_targets[0]
@@ -1364,7 +1362,7 @@ def update_parent_after_split(parent_abstract_state_ind, new_child_abstract_stat
     # abstract_to_concrete_edges[abstract_state_ind][u_ind] = neighbors
     if not neighbors:
         print("No neighbors for parent ", parent_abstract_state_ind)
-        pdb.set_trace()
+        # pdb.set_trace()
     return neighbors
 
 
@@ -1876,10 +1874,13 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
                                                             len(abstract_to_concrete) - 2, u_ind,
                                                             symmetry_abstract_states,
                                                             abstract_paths)
+                child_idx_to_delete = None
                 for idx, child in enumerate(adjacency_list[parent][u_ind]):
                     if child == abstract_state_ind:
-                        adjacency_list[parent][u_ind].pop(idx)
+                        child_idx_to_delete = idx
                         break
+                if child_idx_to_delete is not None:
+                    adjacency_list[parent][u_ind].pop(child_idx_to_delete)
                 for child in parent_children:
                     adjacency_list[parent][u_ind].append(child)
                     inverse_adjacency_list[child][u_ind].append(parent)
