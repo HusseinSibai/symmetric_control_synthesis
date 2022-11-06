@@ -1298,11 +1298,16 @@ def get_abstract_transition_without_concrete(abstract_state_ind, u_ind,
         reachable_rect,
         over_approximate=True)
 
+    target_rect_after_transition_under_approximation = transform_rect_to_abstract_frames(
+        symmetry_abstract_states[abstract_state_ind].rtree_target_rect_under_approx,
+        reachable_rect,
+        over_approximate=False)
+
     if -1 in neighbors and -2 not in neighbors and \
-            np.all(target_rect_after_transition[0, :2] <= np.array([0, 0])) and \
-            np.all(np.array([0, 0]) <= target_rect_after_transition[1, :2]) and \
-            (target_rect_after_transition[0, 2] <= 0 <= target_rect_after_transition[1, 2] or
-             target_rect_after_transition[0, 2] <= 2 * math.pi <= target_rect_after_transition[1, 2]):
+            np.all(target_rect_after_transition_under_approximation[0, :2] <= np.array([0, 0])) and \
+            np.all(np.array([0, 0]) <= target_rect_after_transition_under_approximation[1, :2]) and \
+            (target_rect_after_transition_under_approximation[0, 2] <= 0 <= target_rect_after_transition_under_approximation[1, 2] or
+             target_rect_after_transition_under_approximation[0, 2] <= 2 * math.pi <= target_rect_after_transition_under_approximation[1, 2]):
         return [-1]
 
     hits = list(symmetry_under_approx_abstract_targets_rtree_idx3d.intersection((target_rect_after_transition[0, 0],
@@ -1882,8 +1887,10 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
                 if child_idx_to_delete is not None:
                     adjacency_list[parent][u_ind].pop(child_idx_to_delete)
                 for child in parent_children:
-                    adjacency_list[parent][u_ind].append(child)
-                    inverse_adjacency_list[child][u_ind].append(parent)
+                    if child not in adjacency_list[parent][u_ind]:
+                        adjacency_list[parent][u_ind].append(child)
+                    if parent not in inverse_adjacency_list[child][u_ind]:
+                        inverse_adjacency_list[child][u_ind].append(parent)
                 # if abstract_state_ind in parent_neighbors:
                 #    print("how did this happen?")
                 # adjacency_list[parent][u_ind] = copy.deepcopy(parent_neighbors)
@@ -1945,9 +1952,13 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
                 else:
                     if adjacency_list[neighbor] is None or inverse_adjacency_list[neighbor] is None:
                         pdb.set_trace()
+                    parent_idx_to_modify = None
                     for idx, parent in enumerate(inverse_adjacency_list[neighbor][u_ind]):
                         if parent == abstract_state_ind:
-                            inverse_adjacency_list[neighbor][u_ind][idx] = len(abstract_to_concrete) - 2
+                            parent_idx_to_modify = idx
+                            break
+                    if parent_idx_to_modify is not None:
+                        inverse_adjacency_list[neighbor][u_ind][parent_idx_to_modify] = len(abstract_to_concrete) - 2
                             # updated_neighbors_1.append(neighbor)
 
             # if (neighbor == -1 or neighbor in controllable_abstract_states) and \
@@ -2004,9 +2015,10 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
             if neighbor != abstract_state_ind:
                 if adjacency_list[neighbor] is None or inverse_adjacency_list[neighbor] is None:
                     pdb.set_trace()
-                for idx, parent in enumerate(inverse_adjacency_list[neighbor][u_ind]):
-                    if parent == abstract_state_ind:
-                        inverse_adjacency_list[neighbor][u_ind].pop(idx)
+                else:
+                    for idx, parent in enumerate(inverse_adjacency_list[neighbor][u_ind]):
+                        if parent == abstract_state_ind:
+                            inverse_adjacency_list[neighbor][u_ind].pop(idx)
 
         '''
         for original_neighbor in original_neighbors[u_ind]:
