@@ -1133,13 +1133,13 @@ def create_symmetry_abstract_transitions(Symbolic_reduced, abstract_paths, abstr
                                                 obstacle_indices,
                                                 targets_rects, target_indices)
             '''
-            neighbors = get_abstract_transition_without_concrete(abstract_state_ind, u_ind,
-                                                                 symmetry_abstract_states,
-                                                                 [],
-                                                                 symmetry_under_approx_abstract_targets_rtree_idx3d,
-                                                                 abstract_states_to_rtree_ids,
-                                                                 rtree_ids_to_abstract_states,
-                                                                 abstract_paths)
+            neighbors = list(get_abstract_transition_without_concrete(abstract_state_ind, u_ind,
+                                                                      symmetry_abstract_states,
+                                                                      [],
+                                                                      symmetry_under_approx_abstract_targets_rtree_idx3d,
+                                                                      abstract_states_to_rtree_ids,
+                                                                      rtree_ids_to_abstract_states,
+                                                                      abstract_paths))
             adjacency_list[abstract_state_ind][u_ind] = copy.deepcopy(neighbors)
             for next_abstract_state_ind in adjacency_list[abstract_state_ind][u_ind]:
                 if next_abstract_state_ind >= 0 and \
@@ -1250,7 +1250,7 @@ def get_abstract_transition_without_concrete(abstract_state_ind, u_ind,
                                              abstract_states_to_rtree_ids,
                                              rtree_ids_to_abstract_states,
                                              abstract_paths):
-    neighbors = []
+    neighbors = set()
     # rc, x1 = pc.cheby_ball(symmetry_abstract_states[abstract_state_ind].abstract_obstacles)
     # obstacle_rect = np.array([x1 - rc, x1 + rc])
     reachable_rect = np.column_stack(pc.bounding_box(abstract_paths[u_ind][-1])).T
@@ -1264,7 +1264,7 @@ def get_abstract_transition_without_concrete(abstract_state_ind, u_ind,
         if not pc.is_empty(get_poly_intersection(abstract_paths[u_ind][t_ind],
                                                  symmetry_abstract_states[abstract_state_ind].abstract_obstacles,
                                                  check_convex=False)):
-            neighbors.append(-2)
+            neighbors.add(-2)
             break
     # not pc.is_empty(get_poly_intersection(abstract_paths[u_ind][-1],
     #                                      symmetry_abstract_states[abstract_state_ind].abstract_targets_over_approximation[0],
@@ -1272,7 +1272,7 @@ def get_abstract_transition_without_concrete(abstract_state_ind, u_ind,
     if not symmetry_abstract_states[abstract_state_ind].empty_abstract_target and \
             do_rects_inter(reachable_rect,
                            symmetry_abstract_states[abstract_state_ind].rtree_target_rect_over_approx):
-        neighbors.append(-1)
+        neighbors.add(-1)
         # if -2 not in neighbors:
         # target_poly_after_transition = transform_poly_to_abstract_frames(
         #    symmetry_abstract_states[abstract_state_ind].abstract_targets[0],
@@ -1309,7 +1309,7 @@ def get_abstract_transition_without_concrete(abstract_state_ind, u_ind,
     if (not pc.is_empty(target_poly_after_transition_under_approximation)) and -1 in neighbors and -2 not in neighbors \
             and (target_poly_after_transition_under_approximation.contains(origin)
                  or target_poly_after_transition_under_approximation.contains(another_origin)):
-        return [-1]
+        return {-1}
 
     '''
     if target_rect_after_transition_under_approximation is not None and -1 in neighbors and -2 not in neighbors and \
@@ -1322,23 +1322,23 @@ def get_abstract_transition_without_concrete(abstract_state_ind, u_ind,
         return [-1]
     '''
 
-    covered_hits = []
     original_angle_interval = [target_rect_after_transition[0, 2], target_rect_after_transition[1, 2]]
     decomposed_angle_intervals = get_decomposed_angle_intervals(original_angle_interval)
     for interval in decomposed_angle_intervals:
         target_rect_after_transition_temp = copy.deepcopy(target_rect_after_transition)
         target_rect_after_transition_temp[0, 2] = interval[0]
         target_rect_after_transition_temp[1, 2] = interval[1]
-        hits = list(symmetry_under_approx_abstract_targets_rtree_idx3d.intersection((target_rect_after_transition_temp[0, 0],
-                                                                                     target_rect_after_transition_temp[0, 1],
-                                                                                     target_rect_after_transition_temp[0, 2],
-                                                                                     target_rect_after_transition_temp[
-                                                                                         1, 0],
-                                                                                     target_rect_after_transition_temp[
-                                                                                         1, 1],
-                                                                                     target_rect_after_transition_temp[
-                                                                                         1, 2]),
-                                                                                    objects=True))
+        hits = list(
+            symmetry_under_approx_abstract_targets_rtree_idx3d.intersection((target_rect_after_transition_temp[0, 0],
+                                                                             target_rect_after_transition_temp[0, 1],
+                                                                             target_rect_after_transition_temp[0, 2],
+                                                                             target_rect_after_transition_temp[
+                                                                                 1, 0],
+                                                                             target_rect_after_transition_temp[
+                                                                                 1, 1],
+                                                                             target_rect_after_transition_temp[
+                                                                                 1, 2]),
+                                                                            objects=True))
         # hits = np.setdiff1d(hits, np.array(covered_hits)).tolist()
         target_poly_after_transition = pc.box2poly(target_rect_after_transition_temp.T)
         # for idx, abstract_state in enumerate(symmetry_abstract_states):
@@ -1349,14 +1349,15 @@ def get_abstract_transition_without_concrete(abstract_state_ind, u_ind,
             # if not pc.is_empty(pc.intersect(hit.object.abstract_targets[0], target_poly_after_transition)):
             # if do_rects_inter(hit.object.rtree_target_rect_under_approx, target_rect_after_transition) \
             # hit.id in abstract_states_to_rtree_ids.values() and \
-            if hit.id in rtree_ids_to_abstract_states and rtree_ids_to_abstract_states[hit.id] not in neighbors and \
+            # and rtree_ids_to_abstract_states[hit.id] not in neighbors
+            if hit.id in rtree_ids_to_abstract_states and \
                     not pc.is_empty(
                         get_poly_intersection(hit.object.abstract_targets[0], target_poly_after_transition)):
                 if rtree_ids_to_abstract_states[hit.id] in controllable_abstract_states:
                     if -1 not in neighbors:
-                        neighbors.append(-1)
+                        neighbors.add(-1)
                 else:
-                    neighbors.append(rtree_ids_to_abstract_states[hit.id])
+                    neighbors.add(rtree_ids_to_abstract_states[hit.id])
     # abstract_to_concrete_edges[abstract_state_ind][u_ind] = neighbors
     if not neighbors:
         pdb.set_trace()
@@ -1966,18 +1967,18 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
                                               targets_rects,
                                               target_indices)
         '''
-        neighbors_2 = get_abstract_transition_without_concrete(len(abstract_to_concrete) - 2, u_ind,
-                                                               symmetry_abstract_states,
-                                                               controllable_abstract_states,
-                                                               symmetry_under_approx_abstract_targets_rtree_idx3d,
-                                                               abstract_states_to_rtree_ids,
-                                                               rtree_ids_to_abstract_states,
-                                                               abstract_paths)
+        neighbors_2 = list(get_abstract_transition_without_concrete(len(abstract_to_concrete) - 2, u_ind,
+                                                                    symmetry_abstract_states,
+                                                                    controllable_abstract_states,
+                                                                    symmetry_under_approx_abstract_targets_rtree_idx3d,
+                                                                    abstract_states_to_rtree_ids,
+                                                                    rtree_ids_to_abstract_states,
+                                                                    abstract_paths))
         # if abstract_state_ind in neighbors_2:
         #    print("how did this happen?")
         adjacency_list[len(abstract_to_concrete) - 2][u_ind] = copy.deepcopy(neighbors_2)
         # neighbors_to_update = np.setdiff1d(np.array(neighbors), np.array(updated_neighbors_1)).tolist()
-        neighbor_indices_to_delete = [] # these are neighbors resulting from new over-approximation error
+        neighbor_indices_to_delete = []  # these are neighbors resulting from new over-approximation error
         for idx, neighbor in enumerate(neighbors_2):
             # if neighbor not in original_neighbors[u_ind] and neighbor < len(abstract_to_concrete) - 2:
             #    raise "how?"
@@ -2027,13 +2028,13 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
                                             targets_rects,
                                             target_indices)
         '''
-        neighbors = get_abstract_transition_without_concrete(len(abstract_to_concrete) - 1, u_ind,
-                                                             symmetry_abstract_states,
-                                                             controllable_abstract_states,
-                                                             symmetry_under_approx_abstract_targets_rtree_idx3d,
-                                                             abstract_states_to_rtree_ids,
-                                                             rtree_ids_to_abstract_states,
-                                                             abstract_paths)
+        neighbors = list(get_abstract_transition_without_concrete(len(abstract_to_concrete) - 1, u_ind,
+                                                                  symmetry_abstract_states,
+                                                                  controllable_abstract_states,
+                                                                  symmetry_under_approx_abstract_targets_rtree_idx3d,
+                                                                  abstract_states_to_rtree_ids,
+                                                                  rtree_ids_to_abstract_states,
+                                                                  abstract_paths))
         # if abstract_state_ind in neighbors:
         #    print("how did this happen?")
         adjacency_list[len(abstract_to_concrete) - 1][u_ind] = copy.deepcopy(neighbors)
