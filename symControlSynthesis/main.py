@@ -62,7 +62,7 @@ Obstacle_low = np.array([[2, -3, -100], [5, 3.5, -100], [-3, -3, -100], [-3, -3,
 sym_x = 10 * np.ones((1, n_x))
 sym_x[0, 2] = 10
 
-sym_u = 5 * np.ones((1, n_u))
+sym_u = 3 * np.ones((1, n_u))
 
 time_step = np.linspace(0, 3, 3).reshape((1, 3))  # np.array([0,0.5,1,2,3]) #
 

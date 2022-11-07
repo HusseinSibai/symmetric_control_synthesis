@@ -1322,34 +1322,41 @@ def get_abstract_transition_without_concrete(abstract_state_ind, u_ind,
         return [-1]
     '''
 
-    hits = list(symmetry_under_approx_abstract_targets_rtree_idx3d.intersection((target_rect_after_transition[0, 0],
-                                                                                 target_rect_after_transition[0, 1],
-                                                                                 target_rect_after_transition[0, 2],
-                                                                                 target_rect_after_transition[
-                                                                                     1, 0],
-                                                                                 target_rect_after_transition[
-                                                                                     1, 1],
-                                                                                 target_rect_after_transition[
-                                                                                     1, 2]),
-                                                                                objects=True))
-
-    target_poly_after_transition = pc.box2poly(target_rect_after_transition.T)
-
-    # for idx, abstract_state in enumerate(symmetry_abstract_states):
-    for hit in hits:
-        # if abstract_to_concrete[idx] \
-        #        and does_rect_contain(abstract_state.rtree_target_rect_under_approx, target_rect_after_transition):
-        #    neighbors.append(idx)
-        # if not pc.is_empty(pc.intersect(hit.object.abstract_targets[0], target_poly_after_transition)):
-        # if do_rects_inter(hit.object.rtree_target_rect_under_approx, target_rect_after_transition) \
-        # hit.id in abstract_states_to_rtree_ids.values() and \
-        if hit.id in rtree_ids_to_abstract_states and rtree_ids_to_abstract_states[hit.id] not in neighbors and \
-                not pc.is_empty(get_poly_intersection(hit.object.abstract_targets[0], target_poly_after_transition)):
-            if rtree_ids_to_abstract_states[hit.id] in controllable_abstract_states:
-                if -1 not in neighbors:
-                    neighbors.append(-1)
-            else:
-                neighbors.append(rtree_ids_to_abstract_states[hit.id])
+    covered_hits = []
+    original_angle_interval = [target_rect_after_transition[0, 2], target_rect_after_transition[1, 2]]
+    decomposed_angle_intervals = get_decomposed_angle_intervals(original_angle_interval)
+    for interval in decomposed_angle_intervals:
+        target_rect_after_transition_temp = copy.deepcopy(target_rect_after_transition)
+        target_rect_after_transition_temp[0, 2] = interval[0]
+        target_rect_after_transition_temp[1, 2] = interval[1]
+        hits = list(symmetry_under_approx_abstract_targets_rtree_idx3d.intersection((target_rect_after_transition_temp[0, 0],
+                                                                                     target_rect_after_transition_temp[0, 1],
+                                                                                     target_rect_after_transition_temp[0, 2],
+                                                                                     target_rect_after_transition_temp[
+                                                                                         1, 0],
+                                                                                     target_rect_after_transition_temp[
+                                                                                         1, 1],
+                                                                                     target_rect_after_transition_temp[
+                                                                                         1, 2]),
+                                                                                    objects=True))
+        # hits = np.setdiff1d(hits, np.array(covered_hits)).tolist()
+        target_poly_after_transition = pc.box2poly(target_rect_after_transition_temp.T)
+        # for idx, abstract_state in enumerate(symmetry_abstract_states):
+        for hit in hits:
+            # if abstract_to_concrete[idx] \
+            #        and does_rect_contain(abstract_state.rtree_target_rect_under_approx, target_rect_after_transition):
+            #    neighbors.append(idx)
+            # if not pc.is_empty(pc.intersect(hit.object.abstract_targets[0], target_poly_after_transition)):
+            # if do_rects_inter(hit.object.rtree_target_rect_under_approx, target_rect_after_transition) \
+            # hit.id in abstract_states_to_rtree_ids.values() and \
+            if hit.id in rtree_ids_to_abstract_states and rtree_ids_to_abstract_states[hit.id] not in neighbors and \
+                    not pc.is_empty(
+                        get_poly_intersection(hit.object.abstract_targets[0], target_poly_after_transition)):
+                if rtree_ids_to_abstract_states[hit.id] in controllable_abstract_states:
+                    if -1 not in neighbors:
+                        neighbors.append(-1)
+                else:
+                    neighbors.append(rtree_ids_to_abstract_states[hit.id])
     # abstract_to_concrete_edges[abstract_state_ind][u_ind] = neighbors
     if not neighbors:
         pdb.set_trace()
@@ -1734,7 +1741,8 @@ def get_decomposed_angle_intervals(original_angle_interval):
         original_angle_interval[1] -= 2 * math.pi
     if original_angle_interval[0] < 2 * math.pi < original_angle_interval[1]:
         decomposed_angle_intervals.append([0, original_angle_interval[1] - 2 * math.pi])
-        decomposed_angle_intervals.append([original_angle_interval[0], 2 * math.pi])
+        decomposed_angle_intervals.append([original_angle_interval[0], original_angle_interval[1]])  # 2 * math.pi
+        # decomposed_angle_intervals.append([original_angle_interval[0] + 2 * math.pi, 4 * math.pi])
     else:
         decomposed_angle_intervals.append(original_angle_interval)
     return decomposed_angle_intervals
@@ -1872,12 +1880,13 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
         #                                  np.array(updated_parents)).tolist()
         updated_parents = []
         for parent in original_parents[u_ind]:  # inverse_adjacency_list[abstract_state_ind]
-            if parent != abstract_state_ind: # and parent not in controllable_abstract_states:
+            if parent != abstract_state_ind:  # and parent not in controllable_abstract_states:
                 # and parent < len(abstract_to_concrete) - 2:
                 # and parent not in controllable_abstract_states:  # and parent not in
                 # updated_parents:
                 if adjacency_list[parent] is None or not adjacency_list[parent][u_ind]:
-                    print("Warning: parent ", parent, " was split before and the adjacency list of ", abstract_state_ind, " was not updated")
+                    print("Warning: parent ", parent, " was split before and the adjacency list of ",
+                          abstract_state_ind, " was not updated")
                     # pdb.set_trace()
                 else:
                     # raise "Where did " + str(parent) + " come from?"
@@ -1967,9 +1976,9 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
         # if abstract_state_ind in neighbors_2:
         #    print("how did this happen?")
         adjacency_list[len(abstract_to_concrete) - 2][u_ind] = copy.deepcopy(neighbors_2)
-        original_neighbors[u_ind] = np.setdiff1d(np.array(original_neighbors[u_ind]), np.array(neighbors_2)).tolist()
         # neighbors_to_update = np.setdiff1d(np.array(neighbors), np.array(updated_neighbors_1)).tolist()
-        for neighbor in neighbors_2:
+        neighbor_indices_to_delete = [] # these are neighbors resulting from new over-approximation error
+        for idx, neighbor in enumerate(neighbors_2):
             # if neighbor not in original_neighbors[u_ind] and neighbor < len(abstract_to_concrete) - 2:
             #    raise "how?"
             if neighbor >= 0:
@@ -1977,22 +1986,31 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
                     if len(abstract_to_concrete) - 2 not in inverse_adjacency_list[neighbor][u_ind]:
                         inverse_adjacency_list[neighbor][u_ind].append(len(abstract_to_concrete) - 2)
                 else:
-                    if adjacency_list[neighbor] is None or inverse_adjacency_list[neighbor] is None:
-                        print("Warning: get_abstract_transition_without_concrete returned a child ", neighbor, " which was deleted before! ")
-                        # pdb.set_trace()
+                    if neighbor not in original_neighbors[u_ind]:
+                        neighbor_indices_to_delete.append(idx)
+                        print("Warning: new child", neighbor, " was going to be added as a child of ",
+                              len(abstract_to_concrete) - 2,
+                              "which was not a child of the original parent ", abstract_state_ind)
                     else:
-                        parent_idx_to_modify = None
-                        for idx, parent in enumerate(inverse_adjacency_list[neighbor][u_ind]):
-                            if parent == abstract_state_ind:
-                                parent_idx_to_modify = idx
-                                break
-                        if parent_idx_to_modify is not None:
-                            inverse_adjacency_list[neighbor][u_ind][parent_idx_to_modify] = len(abstract_to_concrete) - 2
+                        if adjacency_list[neighbor] is None or inverse_adjacency_list[neighbor] is None:
+                            print("Warning: get_abstract_transition_without_concrete returned a child ", neighbor,
+                                  " which was deleted before! ")
+                            # pdb.set_trace()
+                        else:
+                            parent_idx_to_modify = None
+                            for idx, parent in enumerate(inverse_adjacency_list[neighbor][u_ind]):
+                                if parent == abstract_state_ind:
+                                    parent_idx_to_modify = idx
+                                    break
+                            if parent_idx_to_modify is not None:
+                                inverse_adjacency_list[neighbor][u_ind][parent_idx_to_modify] = len(
+                                    abstract_to_concrete) - 2
                             # updated_neighbors_1.append(neighbor)
-
             # if (neighbor == -1 or neighbor in controllable_abstract_states) and \
             #        len(abstract_to_concrete) - 2 not in target_parents:
             #    target_parents.append(len(abstract_to_concrete) - 2)
+        for idx in sorted(neighbor_indices_to_delete, reverse=True):
+            del adjacency_list[len(abstract_to_concrete) - 2][u_ind][idx]
 
         '''
         neighbors = get_abstract_transition(concrete_to_abstract,
@@ -2018,10 +2036,10 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
                                                              abstract_paths)
         # if abstract_state_ind in neighbors:
         #    print("how did this happen?")
-        original_neighbors[u_ind] = np.setdiff1d(np.array(original_neighbors[u_ind]), np.array(neighbors)).tolist()
         adjacency_list[len(abstract_to_concrete) - 1][u_ind] = copy.deepcopy(neighbors)
         # neighbors_to_update = np.setdiff1d(np.array(neighbors), np.array(updated_neighbors_2)).tolist()
-        for neighbor in neighbors:
+        neighbor_indices_to_delete = []
+        for idx, neighbor in enumerate(neighbors):
             # if neighbor not in original_neighbors[u_ind] and neighbor < len(abstract_to_concrete) - 2:
             #    raise "how?"
             if neighbor >= 0:
@@ -2029,28 +2047,39 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
                     if len(abstract_to_concrete) - 1 not in inverse_adjacency_list[neighbor][u_ind]:
                         inverse_adjacency_list[neighbor][u_ind].append(len(abstract_to_concrete) - 1)
                 else:
-                    if adjacency_list[neighbor] is None or inverse_adjacency_list[neighbor] is None:
-                        print("Warning: get_abstract_transition_without_concrete returned a child ", neighbor,
-                              " which was deleted before! ")
-                        # pdb.set_trace()
+                    if neighbor not in original_neighbors[u_ind]:
+                        print("Warning: new child", neighbor, " was going to be "
+                                                              "added as a child of ", len(abstract_to_concrete) - 1,
+                              "which was not a child of the original parent ", abstract_state_ind)
+                        neighbor_indices_to_delete.append(idx)
                     else:
-                        parent_idx_to_modify = None
-                        add_new_item = False
-                        for idx, parent in enumerate(inverse_adjacency_list[neighbor][u_ind]):
-                            if parent == abstract_state_ind:
-                                parent_idx_to_modify = idx
-                                break
-                            elif parent == len(abstract_to_concrete) - 2:
-                                add_new_item = True
-                                break
-                        if parent_idx_to_modify is not None:
-                            inverse_adjacency_list[neighbor][u_ind][parent_idx_to_modify] = len(abstract_to_concrete) - 1
-                        elif add_new_item:
-                            inverse_adjacency_list[neighbor][u_ind].append(len(abstract_to_concrete) - 1)
-                            # updated_neighbors_2.append(neighbor)
+                        if adjacency_list[neighbor] is None or inverse_adjacency_list[neighbor] is None:
+                            print("Warning: get_abstract_transition_without_concrete returned a child ", neighbor,
+                                  " which was deleted before! ")
+                            # pdb.set_trace()
+                        else:
+                            parent_idx_to_modify = None
+                            add_new_item = False
+                            for idx, parent in enumerate(inverse_adjacency_list[neighbor][u_ind]):
+                                if parent == abstract_state_ind:
+                                    parent_idx_to_modify = idx
+                                    break
+                                elif parent == len(abstract_to_concrete) - 2:
+                                    add_new_item = True
+                                    break
+                            if parent_idx_to_modify is not None:
+                                inverse_adjacency_list[neighbor][u_ind][parent_idx_to_modify] = len(
+                                    abstract_to_concrete) - 1
+                            elif add_new_item:
+                                inverse_adjacency_list[neighbor][u_ind].append(len(abstract_to_concrete) - 1)
+                                # updated_neighbors_2.append(neighbor)
             # if (neighbor == -1 or neighbor in controllable_abstract_states) \
             #        and len(abstract_to_concrete) - 1 not in target_parents:
             #    target_parents.append(len(abstract_to_concrete) - 1)
+        for idx in sorted(neighbor_indices_to_delete, reverse=True):
+            del adjacency_list[len(abstract_to_concrete) - 1][u_ind][idx]
+        original_neighbors[u_ind] = np.setdiff1d(np.array(original_neighbors[u_ind]), np.array(neighbors_2)).tolist()
+        original_neighbors[u_ind] = np.setdiff1d(np.array(original_neighbors[u_ind]), np.array(neighbors)).tolist()
         for neighbor in original_neighbors[u_ind]:
             if neighbor != abstract_state_ind:
                 if adjacency_list[neighbor] is None or inverse_adjacency_list[neighbor] is None:
@@ -2151,7 +2180,7 @@ def refine(concrete_to_abstract, abstract_to_concrete, abstract_edges,
     # refinement_candidates_temp = copy.deepcopy(refinement_candidates)
     # len_refinement_candidates = len(refinement_candidates)
     max_num_of_refinements = 3  # len(refinement_candidates)
-    while itr < max_num_of_refinements:  # remaining_abstract_states.shape[0] / 10):
+    while itr < max_num_of_refinements and len(refinement_candidates):  # remaining_abstract_states.shape[0] / 10):
         # for abstract_state_ind in target_parents:
         itr += 1
         # abstract_state = symmetry_abstract_states[abstract_state_ind]
