@@ -810,7 +810,7 @@ def rect_to_indices(rect, symbol_step, ref_lower_bound, sym_x, over_approximate=
 
 def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, obstacles, sym_x, X_low, X_up,
                                     intersection_radius_threshold, symmetry_under_approx_abstract_targets_rtree_idx3d,
-                                    symmetry_over_approx_abstract_targets_rtree_idx3d):
+                                    reachability_rtree_idx3d):
     t_start = time.time()
     print('\n%s\tStart of the symmetry abstraction \n', time.time() - t_start)
     symmetry_transformed_targets_and_obstacles = {}  # [None] * int(matrix_dim_full[0])
@@ -819,6 +819,7 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
     symmetry_abstract_states = []
     abstract_states_to_rtree_ids = {}
     rtree_ids_to_abstract_states = {}
+    target_parents = set()
     next_rtree_id_candidate = 0
     for s in symbols_to_explore:
         s_subscript = np.array(np.unravel_index(s, tuple((sym_x[0, :]).astype(int))))
@@ -926,7 +927,6 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
                     abstract_state = hits[max_rad_idx].object
                     new_abstract_state = add_concrete_state_to_symmetry_abstract_state(s, abstract_state,
                                                                                        symmetry_transformed_targets_and_obstacles)
-                    inter_poly_3 = new_abstract_state.abstract_targets[0]
                     ##########################
                     rtree_target_rect_under_approx = abstract_state.rtree_target_rect_under_approx
                     original_angle_interval = [rtree_target_rect_under_approx[0, 2],
@@ -963,6 +963,19 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
                             rtree_target_rect_under_approx_temp[1, 1], rtree_target_rect_under_approx_temp[1, 2]),
                                                                                   obj=new_abstract_state)
                     ##########################
+                    if rtree_ids_to_abstract_states[hits[max_rad_idx].id] not in target_parents:
+                        original_concrete_angle_interval= [abstract_targets_rects_over_approx[0][0, 2],
+                                                            abstract_targets_rects_over_approx[0][1, 2]]
+                        decomposed_concrete_angle_intervals = get_decomposed_angle_intervals(original_concrete_angle_interval)
+                        for interval in decomposed_concrete_angle_intervals:
+                            num_hits_control = reachability_rtree_idx3d.count(
+                                (abstract_targets_rects_over_approx[0][0, 0], abstract_targets_rects_over_approx[0][0, 1], interval[0],
+                                 abstract_targets_rects_over_approx[0][1, 0], abstract_targets_rects_over_approx[0][1, 1], interval[1]))
+                            if num_hits_control:
+                                target_parents.add(rtree_ids_to_abstract_states[hits[max_rad_idx].id])
+                                break
+                    ##########################
+
                     '''
                     symmetry_under_approx_abstract_targets_rtree_idx3d.delete(hits[max_rad_idx].id,
                                                                               hits[max_rad_idx].bbox)
@@ -1007,6 +1020,18 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
                     rtree_target_rect_under_approx_temp[0, 2], rtree_target_rect_under_approx_temp[1, 0],
                     rtree_target_rect_under_approx_temp[1, 1], rtree_target_rect_under_approx_temp[1, 2]),
                                                                           obj=new_abstract_state)
+            ######################
+            original_concrete_angle_interval = [abstract_targets_rects_over_approx[0][0, 2],
+                                                abstract_targets_rects_over_approx[0][1, 2]]
+            decomposed_concrete_angle_intervals = get_decomposed_angle_intervals(original_concrete_angle_interval)
+            for interval in decomposed_concrete_angle_intervals:
+                num_hits_control = reachability_rtree_idx3d.count(
+                    (abstract_targets_rects_over_approx[0][0, 0], abstract_targets_rects_over_approx[0][0, 1], interval[0],
+                     abstract_targets_rects_over_approx[0][1, 0], abstract_targets_rects_over_approx[0][1, 1], interval[1]))
+                if num_hits_control:
+                    target_parents.add(len(symmetry_abstract_states))
+                    break
+            ######################
             # symmetry_under_approx_abstract_targets_rtree_idx3d.insert(len(symmetry_abstract_states), (
             #    rect[0, 0], rect[0, 1], rect[0, 2], rect[1, 0], rect[1, 1], rect[1, 2]), obj=new_abstract_state)
             concrete_to_abstract[s] = len(symmetry_abstract_states)
@@ -1033,7 +1058,7 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
     print("concrete_to_abstract: ", len(concrete_to_abstract))
     print("abstract_to_concrete: ", len(abstract_to_concrete))
     return symmetry_transformed_targets_and_obstacles, concrete_to_abstract, abstract_to_concrete, \
-           symmetry_abstract_states, abstract_states_to_rtree_ids, rtree_ids_to_abstract_states, next_rtree_id_candidate
+           symmetry_abstract_states, abstract_states_to_rtree_ids, rtree_ids_to_abstract_states, next_rtree_id_candidate, target_parents
 
 
 def add_concrete_state_to_symmetry_abstract_state(curr_concrete_state_idx, abstract_state,
@@ -1554,10 +1579,12 @@ def create_symmetry_abstract_reachable_sets(Symbolic_reduced, n, reachability_rt
             curr_max_reachable_rect_radius = np.linalg.norm(rect[1, :] - rect[0, :]) / 2
             if intersection_radius_threshold is None or curr_max_reachable_rect_radius > intersection_radius_threshold:
                 intersection_radius_threshold = curr_max_reachable_rect_radius
+
             reachability_rtree_idx3d.insert(reachable_rect_global_cntr, (rect[0, 0], rect[0, 1],
                                                                          rect[0, 2], rect[1, 0],
                                                                          rect[1, 1], rect[1, 2]),
-                                            obj=(s_ind, u_ind))
+                                            obj=u_ind)
+
             reachable_rect_global_cntr += 1
             original_abstract_path = []
             for t_ind in range(Symbolic_reduced.shape[3]):
@@ -1598,6 +1625,117 @@ def create_targets_and_obstacles(Target_low, Target_up, Obstacle_low, Obstacle_u
 
     return targets, targets_rects, target_indices, obstacles, obstacles_rects, obstacle_indices
 
+def successor_in_or_intersects_target(abstract_state_ind, u_ind, abstract_paths, controllable_region,
+                                      symmetry_abstract_states):
+    reachable_rect = np.column_stack(pc.bounding_box(abstract_paths[u_ind][-1])).T
+
+    if symmetry_abstract_states[abstract_state_ind].empty_abstract_target or \
+            not do_rects_inter(reachable_rect,
+                           symmetry_abstract_states[abstract_state_ind].rtree_target_rect_over_approx):
+        return 0 # does not intersect target
+
+    target_poly_after_transition_under_approximation = transform_poly_to_abstract_frames(
+        symmetry_abstract_states[abstract_state_ind].abstract_targets[0],
+        reachable_rect,
+        over_approximate=False)
+
+    origin = np.zeros((3, 1))
+    another_origin = np.zeros((3, 1))
+    another_origin[2] = 2 * math.pi
+    if (not pc.is_empty(target_poly_after_transition_under_approximation)) \
+            and (target_poly_after_transition_under_approximation.contains(origin)
+                 or target_poly_after_transition_under_approximation.contains(another_origin)):
+        return 2 # contained in target
+
+    # for reg in controllable_regions_list:
+    target_poly_after_transition_under_approximation = \
+        pc.mldivide(target_poly_after_transition_under_approximation, controllable_region)
+    if pc.is_empty(target_poly_after_transition_under_approximation):
+        return 2 # contained in target
+
+    return 1 # intersects but not contained
+
+def successor_avoids_obstacles(abstract_state_ind, u_ind, abstract_paths, symmetry_abstract_states):
+    for t_ind in range(len(abstract_paths[u_ind])):
+        if not pc.is_empty(get_poly_intersection(abstract_paths[u_ind][t_ind],
+                                                 symmetry_abstract_states[abstract_state_ind].abstract_obstacles,
+                                                 check_convex=False)):
+            return False
+    return True
+
+def symmetry_abstract_synthesis_helper_without_transitions(abstract_states_to_explore,
+                                                           abstract_to_concrete,
+                                                           abstract_paths,
+                                                           symmetry_abstract_states, target_parents,
+                                                           refinement_candidates,
+                                                           global_controllable_abstract_states,
+                                                           controllable_region,
+                                                           controller, reachability_rtree_idx3d):
+    t_start = time.time()
+    num_controllable_states = 0
+    controllable_abstract_states = set()
+    unsafe_abstract_states = []
+    first_call = False
+    # if target_parents:
+    # abstract_states_to_explore = copy.deepcopy(list(target_parents))
+    # else:
+    # abstract_states_to_explore = list(range(len(abstract_to_concrete)))
+    # first_call = True
+    while True:
+        num_new_symbols = 0
+        temp_controllable_abstract_states = set()
+        for abstract_s in abstract_states_to_explore:
+            # for u_ind in range(len(abstract_paths)):
+            rect = symmetry_abstract_states[abstract_s].rtree_target_rect_over_approx
+            original_angle_interval = [rect[0, 2], rect[1, 2]]
+            decomposed_angle_intervals = get_decomposed_angle_intervals(original_angle_interval)
+            hits = []
+            for interval in decomposed_angle_intervals:
+                hits.extend(list(reachability_rtree_idx3d.intersection(
+                        (rect[0, 0], rect[0, 1], interval[0], rect[1, 0], rect[1, 1], interval[1]),
+                        objects=True)))
+            unique_controls = set()
+            for hit in hits:
+                unique_controls.add(hit.object)
+            for u_ind in unique_controls:
+                print("Evaluating state ", abstract_s, " out of ", len(abstract_states_to_explore),
+                      " with control ", u_ind, "out of ", len(unique_controls))
+                reach_res = successor_in_or_intersects_target(abstract_s, u_ind, abstract_paths, controllable_region,
+                                                              symmetry_abstract_states)
+                avoid_res = successor_avoids_obstacles(abstract_s, u_ind, abstract_paths, symmetry_abstract_states)
+                if reach_res == 2 and avoid_res:
+                    controller[abstract_s] = u_ind
+                    temp_controllable_abstract_states.add(abstract_s)
+                    controllable_region = pc.union(controllable_region,
+                                                   symmetry_abstract_states[abstract_s].abstract_targets[0])
+                    reachability_rtree_idx3d.insert(abstract_s, (
+                        rect[0, 0], rect[0, 1], rect[0, 2], rect[1, 0], rect[1, 1], rect[1, 2]), obj=u_ind)
+                    num_new_symbols += 1
+                    break
+                elif reach_res == 1: #  and abstract_s not in target_parents:
+                    target_parents.add(abstract_s)
+                    if len(abstract_to_concrete[abstract_s]) > 1:
+                        refinement_candidates.add(abstract_s)
+
+        if num_new_symbols:
+            print(time.time() - t_start, " ", num_new_symbols,
+                  " new controllable states have been found in this synthesis iteration\n")
+            controllable_abstract_states = controllable_abstract_states.union(temp_controllable_abstract_states)
+            num_controllable_states += num_new_symbols
+            refinement_candidates = refinement_candidates.difference(temp_controllable_abstract_states)
+            temp_controllable_abstract_states = list(temp_controllable_abstract_states)
+            # if first_call:
+            #    abstract_states_to_explore = copy.deepcopy(target_parents)
+            #else:
+            abstract_states_to_explore = np.setdiff1d(abstract_states_to_explore,
+                                                      temp_controllable_abstract_states).tolist()
+            # np.setdiff1d(refinement_candidates, temp_controllable_abstract_states).tolist()
+            print(num_controllable_states, ' symbols are controllable to satisfy the reach-avoid specification\n')
+        else:
+            print('No new controllable state has been found in this synthesis iteration\n', time.time() - t_start)
+            break
+
+    return controller, controllable_abstract_states, unsafe_abstract_states, abstract_states_to_explore
 
 def symmetry_abstract_synthesis_helper(abstract_to_concrete, remaining_abstract_states, adjacency_list,
                                        inverse_adjacency_list, target_parents, refinement_candidates,
@@ -2156,6 +2294,75 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
            adjacency_list, inverse_adjacency_list, target_parents, abstract_states_to_rtree_ids, \
            rtree_ids_to_abstract_states, next_rtree_id_candidate
 
+def split_abstract_state_without_transitions(abstract_state_ind, concrete_indices,
+                         abstract_to_concrete, concrete_to_abstract, target_parents,
+                         symmetry_transformed_targets_and_obstacles, symmetry_abstract_states):
+    abstract_state_1 = None
+    abstract_state_2 = None
+    if len(concrete_indices) >= len(abstract_to_concrete[abstract_state_ind]):
+        print("The concrete indices provided are all that ", abstract_state_ind, " represents, so no need to split.")
+        return concrete_to_abstract, abstract_to_concrete, symmetry_abstract_states, \
+               adjacency_list, inverse_adjacency_list, target_parents
+    rest_of_concrete_indices = np.setdiff1d(np.array(abstract_to_concrete[abstract_state_ind]), concrete_indices)
+    for concrete_state_idx in concrete_indices:
+        abstract_state_1 = add_concrete_state_to_symmetry_abstract_state(concrete_state_idx,
+                                                                         abstract_state_1,
+                                                                         symmetry_transformed_targets_and_obstacles)
+    for concrete_state_idx in rest_of_concrete_indices:
+        abstract_state_2 = add_concrete_state_to_symmetry_abstract_state(concrete_state_idx,
+                                                                         abstract_state_2,
+                                                                         symmetry_transformed_targets_and_obstacles)
+
+    symmetry_abstract_states.append(abstract_state_1)
+    abstract_to_concrete.append(abstract_state_1.concrete_state_idx)
+    for idx in abstract_state_1.concrete_state_idx:
+        concrete_to_abstract[idx] = len(abstract_to_concrete) - 1
+    symmetry_abstract_states.append(abstract_state_2)
+    abstract_to_concrete.append(abstract_state_2.concrete_state_idx)
+    for idx in abstract_state_2.concrete_state_idx:
+        concrete_to_abstract[idx] = len(abstract_to_concrete) - 1
+
+    return concrete_to_abstract, abstract_to_concrete, target_parents
+
+def refine_without_transitions(concrete_to_abstract, abstract_to_concrete, symmetry_abstract_states,
+           remaining_abstract_states, refinement_candidates, target_parents, controllable_abstract_states,
+           symmetry_transformed_targets_and_obstacles,
+           abstract_paths):
+    itr = 0
+    progress = False
+    num_new_abstract_states = 0
+    deleted_abstract_states = []
+    max_num_of_refinements = 3
+    while itr < max_num_of_refinements and len(refinement_candidates):
+        itr += 1
+        abstract_state_ind = random.choice(tuple(refinement_candidates))
+        concrete_indices_len = len(abstract_to_concrete[abstract_state_ind])
+        if concrete_indices_len > 1:
+            concrete_indices = random.choices(abstract_to_concrete[abstract_state_ind],
+                                              k=int(concrete_indices_len / 2))
+            concrete_indices = list(dict.fromkeys(concrete_indices))
+            progress = True
+            if len(concrete_indices) < len(abstract_to_concrete[abstract_state_ind]):
+                concrete_to_abstract, abstract_to_concrete, target_parents = \
+                    split_abstract_state_without_transitions(abstract_state_ind, concrete_indices,
+                         abstract_to_concrete, concrete_to_abstract, target_parents,
+                         symmetry_transformed_targets_and_obstacles, symmetry_abstract_states)
+                remaining_abstract_states = np.setdiff1d(remaining_abstract_states, np.array([abstract_state_ind]))
+                remaining_abstract_states = np.append(remaining_abstract_states, len(abstract_to_concrete) - 1)
+                remaining_abstract_states = np.append(remaining_abstract_states, len(abstract_to_concrete) - 2)
+                if len(abstract_to_concrete[-1]) > 1:
+                    refinement_candidates.add(len(abstract_to_concrete) - 1)
+                if len(abstract_to_concrete[-2]) > 1:
+                    refinement_candidates.add(len(abstract_to_concrete) - 2)
+                refinement_candidates.remove(abstract_state_ind)
+                deleted_abstract_states.append(abstract_state_ind)
+                num_new_abstract_states += 1
+        else:
+            refinement_candidates.remove(abstract_state_ind)
+
+    return progress, num_new_abstract_states, concrete_to_abstract, abstract_to_concrete, \
+           refinement_candidates, target_parents, remaining_abstract_states, deleted_abstract_states
+
 
 def refine(concrete_to_abstract, abstract_to_concrete, abstract_edges,
            concrete_edges, inverse_concrete_edges, concrete_target_parents, symmetry_abstract_states,
@@ -2277,8 +2484,128 @@ def refine(concrete_to_abstract, abstract_to_concrete, abstract_edges,
            rtree_ids_to_abstract_states, \
            next_rtree_id_candidate
 
+def abstract_synthesis_without_precomputed_transitions(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Target_up,
+                       Obstacle_low, Obstacle_up, X_low, X_up):
+    t_start = time.time()
+    n = state_dimensions.shape[1]
 
-# def simulate_control(abstract_controller, )
+    p = index.Property()
+    p.dimension = 3
+    p.dat_extension = 'data'
+    p.idx_extension = 'index'
+    reachability_rtree_idx3d = index.Index('3d_index_abstract_without_transitions',
+                                           properties=p)
+    symmetry_under_approx_abstract_targets_rtree_idx3d = index.Index('3d_index_under_approx_abstract_targets_without_transitions',
+                                                                     properties=p)
+
+    symbol_step = (X_up - X_low) / sym_x[0, :]
+
+    targets, targets_rects, target_indices, obstacles, obstacles_rects, obstacle_indices = \
+        create_targets_and_obstacles(Target_low, Target_up, Obstacle_low, Obstacle_up, symbol_step, sym_x, X_low)
+
+    abstract_paths, reachable_rect_global_cntr, intersection_radius_threshold = \
+        create_symmetry_abstract_reachable_sets(Symbolic_reduced, n, reachability_rtree_idx3d)
+
+    matrix_dim_full = [np.prod(sym_x[0, :]), np.prod(sym_u), 2 * n]
+    symbols_to_explore = np.setdiff1d(np.array(range(int(matrix_dim_full[0]))), target_indices)
+    symbols_to_explore = np.setdiff1d(symbols_to_explore, obstacle_indices)
+
+    # intersection_radius_threshold = intersection_radius_threshold * 10
+    symmetry_transformed_targets_and_obstacles, \
+    concrete_to_abstract, abstract_to_concrete, \
+    symmetry_abstract_states, abstract_states_to_rtree_ids, \
+    rtree_ids_to_abstract_states, next_rtree_id_candidate, target_parents = create_symmetry_abstract_states(
+        symbols_to_explore,
+        symbol_step, targets,
+        obstacles, sym_x, X_low,
+        X_up,
+        intersection_radius_threshold, symmetry_under_approx_abstract_targets_rtree_idx3d, reachability_rtree_idx3d)
+
+    t_abstraction = time.time() - t_start
+    print(['Construction of symmetry-based abstraction took: ', t_abstraction, ' seconds'])
+    num_abstract_states_before_refinement = len(abstract_to_concrete)
+
+    controller = {}  # [-1] * len(abstract_to_concrete)
+    t_synthesis_start = time.time()
+    t_refine = 0
+    t_synthesis = 0
+    print('\n%s\tStart of the control synthesis\n', time.time() - t_start)
+    refinement_itr = 0
+    max_num_refinement_steps = 10000
+    remaining_abstract_states = set(list(range(len(abstract_to_concrete))))
+    abstract_states_to_explore = list(range(len(abstract_to_concrete)))
+    controllable_abstract_states = set()
+    refinement_candidates = set() # copy.deepcopy(target_parents)
+    # target_parents = []
+    controllable_region = pc.Region(list_poly=[])
+    while refinement_itr < max_num_refinement_steps:
+        temp_t_synthesis = time.time()
+        controller, controllable_abstract_states_temp, unsafe_abstract_states, abstract_states_to_explore = \
+            symmetry_abstract_synthesis_helper_without_transitions(abstract_states_to_explore,
+                                                                   abstract_to_concrete,
+                                                                   abstract_paths,
+                                                                   symmetry_abstract_states, target_parents,
+                                                                   refinement_candidates,
+                                                                   controllable_abstract_states,
+                                                                   controllable_region,
+                                                                   controller, reachability_rtree_idx3d)
+        t_synthesis += time.time() - temp_t_synthesis
+
+        remaining_abstract_states = remaining_abstract_states.difference(controllable_abstract_states_temp)
+        controllable_abstract_states = controllable_abstract_states.union(controllable_abstract_states_temp)
+        refinement_candidates = refinement_candidates.difference(controllable_abstract_states)
+
+        temp_t_refine = time.time()
+        progress, num_new_abstract_states, concrete_to_abstract, abstract_to_concrete, \
+        refinement_candidates, target_parents, remaining_abstract_states, deleted_abstract_states = \
+            refine_without_transitions(concrete_to_abstract, abstract_to_concrete, symmetry_abstract_states,
+           remaining_abstract_states, refinement_candidates, target_parents, controllable_abstract_states,
+           symmetry_transformed_targets_and_obstacles,
+           abstract_paths)
+        t_refine += time.time() - temp_t_refine
+        abstract_states_to_explore = np.setdiff1d(np.array(abstract_states_to_explore), deleted_abstract_states).tolist()
+        target_parents = np.setdiff1d(np.array(target_parents), controllable_abstract_states).tolist()
+        target_parents = np.setdiff1d(np.array(target_parents), deleted_abstract_states).tolist()
+        refinement_itr += num_new_abstract_states
+        if not refinement_candidates:
+            print("No states to refine anymore.")
+            break
+        print("progress: ", progress)
+        # print("adjacency_list after refinement: ", adjacency_list)
+        print("target parents: ", target_parents)
+        # print("concrete target parents: ", concrete_target_parents)
+
+    print(['Construction of symmetry-based abstraction took: ', t_abstraction, ' seconds'])
+    print(
+        ['Controller synthesis along with refinement for reach-avoid specification: ', time.time() - t_synthesis_start,
+         ' seconds'])
+    print(['Total time for symmetry abstraction-refinement-based controller synthesis'
+           ' for reach-avoid specification: ', time.time() - t_synthesis_start + t_abstraction, ' seconds'])
+    print(['Pure refinement took a total of: ', t_refine, ' seconds'])
+    print(['Pure synthesis took a total of: ', t_synthesis, ' seconds'])
+    print(['Number of splits of abstract states: ', refinement_itr])
+    print(['Number of abstract states before refinement is: ', num_abstract_states_before_refinement])
+    num_abstract_states = 0
+    for abstract_s_idx in range(len(abstract_to_concrete)):
+        if abstract_to_concrete[abstract_s_idx]:
+            num_abstract_states += 1
+    print(['Number of abstract states after refinement is: ', num_abstract_states])
+    print(['Number of concrete states is: ', len(concrete_to_abstract)])
+    if len(controllable_abstract_states):
+        print(len(controllable_abstract_states), 'abstract symbols are controllable to satisfy the reach-avoid '
+                                                 'specification\n')
+        controllable_concrete_states = []
+        for abstract_s in controllable_abstract_states:
+            if not abstract_to_concrete[abstract_s]:
+                print(abstract_s, " does not represent any concrete state, why is it controllable?")
+            controllable_concrete_states.extend(abstract_to_concrete[abstract_s])
+            print("Controllable abstract state ", abstract_s, " represents the following concrete states: ",
+                  abstract_to_concrete[abstract_s])
+        print(len(controllable_concrete_states), 'concrete symbols are controllable to satisfy the reach-avoid '
+                                                 'specification\n')
+    else:
+        print('The reach-avoid specification cannot be satisfied from any initial state\n')
+    plot_abstract_states(symmetry_abstract_states, deleted_abstract_states)
 
 def abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Target_up,
                        Obstacle_low, Obstacle_up, X_low, X_up):

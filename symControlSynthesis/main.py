@@ -10,7 +10,7 @@ matplotlib.use("macOSX")
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle, Polygon
 
-from abstraction_reach_avoid_synthesis import synthesize, abstract_synthesis
+from abstraction_reach_avoid_synthesis import synthesize, abstract_synthesis, abstract_synthesis_without_precomputed_transitions
 from Reach_avoid_synthesis_sets import reach_avoid_synthesis_sets
 from Reach_avoid_synthesis_sets_forward_pass import reach_avoid_synthesis_sets_forward_pass
 
@@ -59,8 +59,8 @@ Obstacle_up = np.array([[2.5, 3, 100], [5.5, 9.5, 100], [0, 9.5, 100], [13, 0, 1
 Obstacle_low = np.array([[2, -3, -100], [5, 3.5, -100], [-3, -3, -100], [-3, -3, -100],
                          [-3, 6.5, -100], [10, -3, -100]])
 
-sym_x = 30 * np.ones((1, n_x))
-sym_x[0, 2] = 20
+sym_x = 10 * np.ones((1, n_x))
+sym_x[0, 2] = 10
 
 sym_u = 5 * np.ones((1, n_u))
 
@@ -169,8 +169,10 @@ U_discrete = np.array(U_discrete)
 
 N = 30
 M = 5
-abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Target_up,
+abstract_synthesis_without_precomputed_transitions(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Target_up,
                    Obstacle_low, Obstacle_up, X_low, X_up)
+# abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Target_up,
+#                   Obstacle_low, Obstacle_up, X_low, X_up)
 # synthesize(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Target_up,
 #               Obstacle_low, Obstacle_up, X_low, X_up, U_low, U_up, N, M)
 # initial_set = np.array([[4.5, 0.5, 0.5], [5, 1, 1]]) Controller = reach_avoid_synthesis_sets_forward_pass(
