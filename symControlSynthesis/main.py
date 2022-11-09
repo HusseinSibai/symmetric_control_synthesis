@@ -21,8 +21,8 @@ OA_method = 3.1  # Hussein: this is 3.1 instead of 3 since we are computing the 
 
 # State space definition N / E for camera range: 10 * 6.5 m
 # orientation range[-pi, pi]; psi = 0 is pointing North
-X_up = np.array([10, 6.5, math.pi])
-X_low = np.array([0, 0, -math.pi])
+X_up = np.array([10, 6.5, 2 * math.pi])
+X_low = np.array([0, 0, 0])
 n_x = len(X_up)
 
 # Input space surge velocity: [-0.18, 0.18] m / s
@@ -59,8 +59,8 @@ Obstacle_up = np.array([[2.5, 3, 100], [5.5, 9.5, 100], [0, 9.5, 100], [13, 0, 1
 Obstacle_low = np.array([[2, -3, -100], [5, 3.5, -100], [-3, -3, -100], [-3, -3, -100],
                          [-3, 6.5, -100], [10, -3, -100]])
 
-sym_x = 10 * np.ones((1, n_x))
-sym_x[0, 2] = 10
+sym_x = 20 * np.ones((1, n_x))
+sym_x[0, 2] = 15
 
 sym_u = 5 * np.ones((1, n_u))
 
@@ -73,8 +73,8 @@ state_dimensions = np.zeros((1, n_x))
 # Shrink state space / safety
 X_up = X_up + 3  # - error_6D(1:n_x);
 X_low = X_low - 3  # + error_6D(1:n_x);
-X_low[2] = -math.pi
-X_up[2] = math.pi
+X_low[2] = 0 # -math.pi
+X_up[2] = 2 * math.pi
 
 # Shrink target set
 Target_up = Target_up  # - error_6D(1:n_x);

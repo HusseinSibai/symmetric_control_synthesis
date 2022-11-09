@@ -155,6 +155,25 @@ def fix_angle_interval_in_poly(poly: pc.Polytope):
     p = pc.Polytope(A, b)
     return p
 
+def get_poly_list_with_decomposed_angle_intervals(poly: pc.Polytope):
+    A = copy.deepcopy(poly.A)
+    b = copy.deepcopy(poly.b)
+    n = A.shape[0]
+    i_low = None
+    i_up = None
+    for i in range(n):
+        if A[i, 2] == 1:
+            i_up = i
+        if A[i, 2] == -1:
+            i_low = i
+    b_i_low_neg, b_i_up = fix_angle_interval(-1 * b[i_low], b[i_up])
+    interval_list = get_decomposed_angle_intervals([-b_i_low_neg, b_i_up])
+    result = pc.Region(list_poly=[])
+    for interval in interval_list:
+        b[i_low] = -1 * interval[0]
+        b[i_up] = b_i_up * interval[1]
+        result.list_poly.append(pc.Polytope(A, b))
+    return result
 
 def project_region_to_position_coordinates(reg: pc.Region):
     if reg.dim <= 2:
@@ -274,15 +293,53 @@ def get_poly_intersection(poly_1: pc.Region, poly_2: pc.Region, project_to_pos=F
 def get_poly_union(poly_1: pc.Region, poly_2: pc.Region, check_convex=False, project_to_pos=False, order_matters=False):
     if True:  # project_to_pos:
         return pc.union(poly_1, poly_2, check_convex=check_convex)
+    else:
+        result = pc.Region(list_poly=[])
+        temp_result = pc.union(poly_1, poly_2, check_convex=check_convex)
+        if type(temp_result) == pc.Polytope:
+            temp_result = pc.Region(list_poly=[temp_result])
+        for poly in temp_result.list_poly:
+            A = copy.deepcopy(poly.A)
+            b = copy.deepcopy(poly.b)
+            n = A.shape[0]
+            i_low = None
+            i_up = None
+            pos_indices = []
+            for i in range(n):
+                if A[i, 2] == 1:
+                    i_up = i
+                    # b1[i] = fix_angle_to_positive_value(b[i]) # fix_angle(b[i])
+                elif A[i, 2] == -1:
+                    i_low = i
+                else:
+                    pos_indices.append(i)
+            A_pos = A[pos_indices, :2]
+            b_pos = b[pos_indices]
+            p_pos = pc.Polytope(A_pos, b_pos)
+            original_interval = fix_angle_interval(-1 * b[i_low], b[i_up])
+            interval_list = get_decomposed_angle_intervals(list(original_interval))
+            # union_interval_list = get_intervals_union(-1 * b[i_low_1], b[i_up_1], -1 * b[i_low_2], b[i_up_2],
+            #                                         order_matters=order_matters)
+            for interval in interval_list:
+                b_inter_left = -1 * interval[0]
+                b_inter_right = interval[1]
+                A_new = np.zeros((p_pos.A.shape[0] + 2, A.shape[1]))
+                b_new = np.zeros((p_pos.A.shape[0] + 2,))
+                for i in range(p_pos.A.shape[0]):
+                    for j in range(p_pos.A.shape[1]):
+                        A_new[i, j] = p_pos.A[i, j]
+                    b_new[i] = p_pos.b[i]
+                A_new[p_pos.A.shape[0], 2] = 1
+                b_new[p_pos.A.shape[0]] = b_inter_right
+                A_new[p_pos.A.shape[0] + 1, 2] = -1
+                b_new[p_pos.A.shape[0] + 1] = b_inter_left
+                result = pc.union(result, pc.Polytope(A_new, b_new), check_convex=check_convex)
+    '''
     result = pc.Region(list_poly=[])
     if pc.is_empty(poly_1):
         return poly_2
     if pc.is_empty(poly_2):
         return poly_1
-    # reg_pos_1 = project_region_to_position_coordinates(poly_1)
-    # reg_pos_2 = project_region_to_position_coordinates(poly_2)
-    # reg_pos_union = pc.union(reg_pos_1, reg_pos_2)
-    # for poly in reg_pos_union:
     if type(poly_1) == pc.Region:
         poly_1_list = poly_1.list_poly
     else:
@@ -329,22 +386,25 @@ def get_poly_union(poly_1: pc.Region, poly_2: pc.Region, check_convex=False, pro
             # print("p_inter_pos: ", p_inter_pos)
             # if not pc.is_empty(p_union_pos):
             for poly_union_pos in p_union_pos.list_poly:
-                union_interval = get_intervals_union(-1 * b1[i_low_1], b1[i_up_1], -1 * b2[i_low_2], b2[i_up_2],
-                                                     order_matters)
-                if union_interval is not None:
-                    b_inter_left = -1 * union_interval[0]
-                    b_inter_right = union_interval[1]
-                    A_new = np.zeros((poly_union_pos.A.shape[0] + 2, A1.shape[1]))
-                    b_new = np.zeros((poly_union_pos.A.shape[0] + 2,))
-                    for i in range(poly_union_pos.A.shape[0]):
-                        for j in range(poly_union_pos.A.shape[1]):
-                            A_new[i, j] = poly_union_pos.A[i, j]
-                        b_new[i] = poly_union_pos.b[i]
-                    A_new[poly_union_pos.A.shape[0], 2] = 1
-                    b_new[poly_union_pos.A.shape[0]] = b_inter_right
-                    A_new[poly_union_pos.A.shape[0] + 1, 2] = -1
-                    b_new[poly_union_pos.A.shape[0] + 1] = b_inter_left
-                    result = pc.union(result, pc.Polytope(A_new, b_new), check_convex=check_convex)
+                union_interval_list = get_intervals_union(-1 * b1[i_low_1], b1[i_up_1], -1 * b2[i_low_2], b2[i_up_2],
+                                                     order_matters=order_matters)
+                if union_interval_list is not None:
+                    for union_interval in union_interval_list:
+                        b_inter_left = -1 * union_interval[0]
+                        b_inter_right = union_interval[1]
+                        A_new = np.zeros((poly_union_pos.A.shape[0] + 2, A1.shape[1]))
+                        b_new = np.zeros((poly_union_pos.A.shape[0] + 2,))
+                        for i in range(poly_union_pos.A.shape[0]):
+                            for j in range(poly_union_pos.A.shape[1]):
+                                A_new[i, j] = poly_union_pos.A[i, j]
+                            b_new[i] = poly_union_pos.b[i]
+                        A_new[poly_union_pos.A.shape[0], 2] = 1
+                        b_new[poly_union_pos.A.shape[0]] = b_inter_right
+                        A_new[poly_union_pos.A.shape[0] + 1, 2] = -1
+                        b_new[poly_union_pos.A.shape[0] + 1] = b_inter_left
+                        result = pc.union(result, pc.Polytope(A_new, b_new), check_convex=check_convex)
+    '''
+
     return result
 
 
@@ -425,32 +485,45 @@ def get_intervals_union(a_s, b_s, a_l, b_l, order_matters=False):
     a_s, b_s = fix_angle_interval(a_s, b_s)
     a_l, b_l = fix_angle_interval(a_l, b_l)
     if b_s - a_s >= 2 * math.pi - 0.01 or b_l - a_l >= 2 * math.pi - 0.01:  # to not lose over-approximation of reachability analysis
-        return 0, 2 * math.pi
+        return [[0, 2 * math.pi]]
     if does_interval_contain(a_s, b_s, a_l, b_l):
-        return a_l, b_l
+        result = [[a_l, b_l]]
     if does_interval_contain(a_l, b_l, a_s, b_s):
-        return a_s, b_s
+        result = [[a_s, b_s]]
     if is_within_range(a_s, a_l, b_l):
         while a_l > b_s:
             b_s += 2 * math.pi
-        result = [a_l, b_s]
+        result = [[a_l, b_s]]
     elif is_within_range(b_s, a_l, b_l):
         while a_s > b_l:
             b_l += 2 * math.pi
-        result = [a_s, b_l]
+        result = [[a_s, b_l]]
     else:
-        while a_s > b_l:
-            b_l += 2 * math.pi
-        a_s, b_l = fix_angle_interval(a_s, b_l)
-        if order_matters or not b_l - a_s > 2 * math.pi:
-            result = [a_s, b_l]
+        if order_matters:
+            result = [[a_s, b_s], [a_l, b_l]]
         else:
-            while a_l > b_s:
-                b_s += 2 * math.pi
-            result = [a_l, b_s]
+            while a_s > b_l:
+                b_l += 2 * math.pi
+            a_s, b_l = fix_angle_interval(a_s, b_l)
+            if order_matters or not b_l - a_s > 2 * math.pi:
+                result = [[a_s, b_l]]
+            else:
+                while a_l > b_s:
+                    b_s += 2 * math.pi
+                result = [[a_l, b_s]]
     # if disjoint, choose a direction to join them
-    result[0], result[1] = fix_angle_interval(result[0], result[1])
-    return result
+    result_list = []
+    if order_matters:
+        for interval in result:
+            new_interval_l, new_interval_u = fix_angle_interval(interval[0], interval[1])
+            new_intervals = get_decomposed_angle_intervals([new_interval_l, new_interval_u])
+            for new_interval in new_intervals:
+                result_list.append(new_interval)
+        # result[0], result[1] = fix_angle_interval(result[0], result[1])
+    else:
+        result_l, result_u = fix_angle_interval(result[0][0], result[0][1])
+        result_list.append([result_l, result_u])
+    return result_list
 
 
 def transform_rect_to_abstract(rect: np.array, state: np.array, overapproximate=False):
@@ -680,9 +753,9 @@ def transform_poly_to_abstract_frames(concrete_poly, frames_rect, over_approxima
                                                                      frames_rect[0, 2]]), project_to_pos)
 
     if over_approximate:
-        result = get_poly_union(poly_1, poly_4, project_to_pos, order_matters=True)  # pc.union(poly_1, poly_2)
-        result = get_poly_union(result, poly_2, project_to_pos, order_matters=True)  # pc.union(result, poly_3)
-        result = get_poly_union(result, poly_3, project_to_pos, order_matters=True)  # pc.union(result, poly_4)
+        result = get_poly_union(poly_1, poly_4, project_to_pos, order_matters=False)  # pc.union(poly_1, poly_2)
+        result = get_poly_union(result, poly_2, project_to_pos, order_matters=False)  # pc.union(result, poly_3)
+        result = get_poly_union(result, poly_3, project_to_pos, order_matters=False)  # pc.union(result, poly_4)
     else:
         result = get_poly_intersection(poly_1, poly_2, project_to_pos, check_convex)  # pc.intersect(poly_1, poly_2)
         result = get_poly_intersection(result, poly_3, project_to_pos, check_convex)
@@ -752,8 +825,9 @@ def get_convex_union(list_array: List[np.array], order_matters=False) -> np.arra
     for i in range(1, len(list_array)):
         result[0, :2] = np.minimum(result[0, :2], list_array[i][0, :2])
         result[1, :2] = np.maximum(result[1, :2], list_array[i][1, :2])
-        union_interval = get_intervals_union(result[0, 2], result[1, 2], list_array[i][0, 2], list_array[i][1, 2],
-                                             order_matters=order_matters)
+        union_interval_list = get_intervals_union(result[0, 2], result[1, 2], list_array[i][0, 2], list_array[i][1, 2],
+                                             order_matters=False)
+        union_interval = union_interval_list[0]
         result[0, 2] = union_interval[0]
         result[1, 2] = union_interval[1]
     return result
@@ -989,8 +1063,7 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
                     concrete_to_abstract[s] = rtree_ids_to_abstract_states[hits[max_rad_idx].id]  # hits[max_rad_idx].id
                     abstract_states_to_rtree_ids[rtree_ids_to_abstract_states[hits[max_rad_idx].id]] = \
                         next_rtree_id_candidate
-                    abstract_to_concrete[rtree_ids_to_abstract_states[hits[max_rad_idx].id]].append(
-                        s)  # hits[max_rad_idx].id
+                    abstract_to_concrete[rtree_ids_to_abstract_states[hits[max_rad_idx].id]].append(s)  # hits[max_rad_idx].id
                     rtree_ids_to_abstract_states[next_rtree_id_candidate] = \
                         copy.deepcopy(rtree_ids_to_abstract_states[hits[max_rad_idx].id])
                     del rtree_ids_to_abstract_states[hits[max_rad_idx].id]
@@ -1648,10 +1721,12 @@ def successor_in_or_intersects_target(abstract_state_ind, u_ind, abstract_paths,
         return 2 # contained in target
 
     # for reg in controllable_regions_list:
-    target_poly_after_transition_under_approximation = \
-        pc.mldivide(target_poly_after_transition_under_approximation, controllable_region)
-    if pc.is_empty(target_poly_after_transition_under_approximation):
-        return 2 # contained in target
+    if not pc.is_empty(target_poly_after_transition_under_approximation):
+        # reg = get_poly_list_with_decomposed_angle_intervals(target_poly_after_transition_under_approximation)
+        target_poly_after_transition_under_approximation = \
+            pc.mldivide(target_poly_after_transition_under_approximation, controllable_region)
+        if pc.is_empty(target_poly_after_transition_under_approximation):
+            return 2 # contained in target
 
     return 1 # intersects but not contained
 
@@ -1670,12 +1745,14 @@ def symmetry_abstract_synthesis_helper_without_transitions(abstract_states_to_ex
                                                            refinement_candidates,
                                                            global_controllable_abstract_states,
                                                            controllable_region,
-                                                           controller, reachability_rtree_idx3d):
+                                                           controller, reachability_rtree_idx3d,
+                                                           reachable_rect_global_cntr):
     t_start = time.time()
     num_controllable_states = 0
     controllable_abstract_states = set()
     unsafe_abstract_states = []
-    first_call = False
+    newly_added_rects_lower_bound = 0
+    # first_call = False
     # if target_parents:
     # abstract_states_to_explore = copy.deepcopy(list(target_parents))
     # else:
@@ -1684,7 +1761,8 @@ def symmetry_abstract_synthesis_helper_without_transitions(abstract_states_to_ex
     while True:
         num_new_symbols = 0
         temp_controllable_abstract_states = set()
-        for abstract_s in abstract_states_to_explore:
+        newly_added_rects_lower_bound_temp = 0
+        for abstract_s in target_parents: # abstract_states_to_explore
             # for u_ind in range(len(abstract_paths)):
             rect = symmetry_abstract_states[abstract_s].rtree_target_rect_over_approx
             original_angle_interval = [rect[0, 2], rect[1, 2]]
@@ -1696,33 +1774,42 @@ def symmetry_abstract_synthesis_helper_without_transitions(abstract_states_to_ex
                         objects=True)))
             unique_controls = set()
             for hit in hits:
-                unique_controls.add(hit.object)
+                if hit.id >= newly_added_rects_lower_bound:
+                    unique_controls.add(hit.object)
             for u_ind in unique_controls:
-                print("Evaluating state ", abstract_s, " out of ", len(abstract_states_to_explore),
-                      " with control ", u_ind, "out of ", len(unique_controls))
+                # print("Evaluating state ", abstract_s, " out of ", len(abstract_states_to_explore),
+                #      " with control ", u_ind, "out of ", len(unique_controls))
                 reach_res = successor_in_or_intersects_target(abstract_s, u_ind, abstract_paths, controllable_region,
                                                               symmetry_abstract_states)
                 avoid_res = successor_avoids_obstacles(abstract_s, u_ind, abstract_paths, symmetry_abstract_states)
                 if reach_res == 2 and avoid_res:
                     controller[abstract_s] = u_ind
                     temp_controllable_abstract_states.add(abstract_s)
-                    controllable_region = pc.union(controllable_region,
-                                                   symmetry_abstract_states[abstract_s].abstract_targets[0])
-                    reachability_rtree_idx3d.insert(abstract_s, (
+                    reg = get_poly_list_with_decomposed_angle_intervals(
+                        symmetry_abstract_states[abstract_s].abstract_targets[0])
+                    controllable_region = get_poly_union(controllable_region,
+                                                         reg)
+                    reachability_rtree_idx3d.insert(reachable_rect_global_cntr, (
                         rect[0, 0], rect[0, 1], rect[0, 2], rect[1, 0], rect[1, 1], rect[1, 2]), obj=u_ind)
                     num_new_symbols += 1
+                    if newly_added_rects_lower_bound_temp == 0:
+                        newly_added_rects_lower_bound_temp = reachable_rect_global_cntr
+                    reachable_rect_global_cntr += 1
                     break
-                elif reach_res == 1: #  and abstract_s not in target_parents:
-                    target_parents.add(abstract_s)
-                    if len(abstract_to_concrete[abstract_s]) > 1:
-                        refinement_candidates.add(abstract_s)
+                # elif reach_res == 1: #  and abstract_s not in target_parents:
+                # target_parents.add(abstract_s)
+                if len(abstract_to_concrete[abstract_s]) > 1:
+                    refinement_candidates.add(abstract_s)
 
         if num_new_symbols:
             print(time.time() - t_start, " ", num_new_symbols,
                   " new controllable states have been found in this synthesis iteration\n")
             controllable_abstract_states = controllable_abstract_states.union(temp_controllable_abstract_states)
             num_controllable_states += num_new_symbols
+            newly_added_rects_lower_bound = newly_added_rects_lower_bound_temp
+            newly_added_rects_lower_bound_temp = 0
             refinement_candidates = refinement_candidates.difference(temp_controllable_abstract_states)
+            target_parents = target_parents.difference(temp_controllable_abstract_states)
             temp_controllable_abstract_states = list(temp_controllable_abstract_states)
             # if first_call:
             #    abstract_states_to_explore = copy.deepcopy(target_parents)
@@ -1735,7 +1822,8 @@ def symmetry_abstract_synthesis_helper_without_transitions(abstract_states_to_ex
             print('No new controllable state has been found in this synthesis iteration\n', time.time() - t_start)
             break
 
-    return controller, controllable_abstract_states, unsafe_abstract_states, abstract_states_to_explore
+    return controller, controllable_abstract_states, unsafe_abstract_states, abstract_states_to_explore, \
+           reachable_rect_global_cntr, target_parents
 
 def symmetry_abstract_synthesis_helper(abstract_to_concrete, remaining_abstract_states, adjacency_list,
                                        inverse_adjacency_list, target_parents, refinement_candidates,
@@ -2301,8 +2389,7 @@ def split_abstract_state_without_transitions(abstract_state_ind, concrete_indice
     abstract_state_2 = None
     if len(concrete_indices) >= len(abstract_to_concrete[abstract_state_ind]):
         print("The concrete indices provided are all that ", abstract_state_ind, " represents, so no need to split.")
-        return concrete_to_abstract, abstract_to_concrete, symmetry_abstract_states, \
-               adjacency_list, inverse_adjacency_list, target_parents
+        return concrete_to_abstract, abstract_to_concrete, target_parents
     rest_of_concrete_indices = np.setdiff1d(np.array(abstract_to_concrete[abstract_state_ind]), concrete_indices)
     for concrete_state_idx in concrete_indices:
         abstract_state_1 = add_concrete_state_to_symmetry_abstract_state(concrete_state_idx,
@@ -2322,6 +2409,8 @@ def split_abstract_state_without_transitions(abstract_state_ind, concrete_indice
     for idx in abstract_state_2.concrete_state_idx:
         concrete_to_abstract[idx] = len(abstract_to_concrete) - 1
 
+    abstract_to_concrete[abstract_state_ind] = []
+
     return concrete_to_abstract, abstract_to_concrete, target_parents
 
 def refine_without_transitions(concrete_to_abstract, abstract_to_concrete, symmetry_abstract_states,
@@ -2332,7 +2421,7 @@ def refine_without_transitions(concrete_to_abstract, abstract_to_concrete, symme
     progress = False
     num_new_abstract_states = 0
     deleted_abstract_states = []
-    max_num_of_refinements = 3
+    max_num_of_refinements = len(refinement_candidates)
     while itr < max_num_of_refinements and len(refinement_candidates):
         itr += 1
         abstract_state_ind = random.choice(tuple(refinement_candidates))
@@ -2340,16 +2429,17 @@ def refine_without_transitions(concrete_to_abstract, abstract_to_concrete, symme
         if concrete_indices_len > 1:
             concrete_indices = random.choices(abstract_to_concrete[abstract_state_ind],
                                               k=int(concrete_indices_len / 2))
-            concrete_indices = list(dict.fromkeys(concrete_indices))
+            if concrete_indices:
+                concrete_indices = list(set(concrete_indices))
             progress = True
             if len(concrete_indices) < len(abstract_to_concrete[abstract_state_ind]):
                 concrete_to_abstract, abstract_to_concrete, target_parents = \
                     split_abstract_state_without_transitions(abstract_state_ind, concrete_indices,
                          abstract_to_concrete, concrete_to_abstract, target_parents,
                          symmetry_transformed_targets_and_obstacles, symmetry_abstract_states)
-                remaining_abstract_states = np.setdiff1d(remaining_abstract_states, np.array([abstract_state_ind]))
-                remaining_abstract_states = np.append(remaining_abstract_states, len(abstract_to_concrete) - 1)
-                remaining_abstract_states = np.append(remaining_abstract_states, len(abstract_to_concrete) - 2)
+                # remaining_abstract_states.remove(abstract_state_ind) # np.setdiff1d(, np.array([abstract_state_ind]))
+                # remaining_abstract_states.add(len(abstract_to_concrete) - 1)
+                # remaining_abstract_states.add(len(abstract_to_concrete) - 2)
                 if len(abstract_to_concrete[-1]) > 1:
                     refinement_candidates.add(len(abstract_to_concrete) - 1)
                 if len(abstract_to_concrete[-2]) > 1:
@@ -2535,12 +2625,14 @@ def abstract_synthesis_without_precomputed_transitions(Symbolic_reduced, sym_x, 
     remaining_abstract_states = set(list(range(len(abstract_to_concrete))))
     abstract_states_to_explore = list(range(len(abstract_to_concrete)))
     controllable_abstract_states = set()
+    controllable_concrete_states = set()
     refinement_candidates = set() # copy.deepcopy(target_parents)
     # target_parents = []
     controllable_region = pc.Region(list_poly=[])
     while refinement_itr < max_num_refinement_steps:
         temp_t_synthesis = time.time()
-        controller, controllable_abstract_states_temp, unsafe_abstract_states, abstract_states_to_explore = \
+        controller, controllable_abstract_states_temp, unsafe_abstract_states, abstract_states_to_explore, \
+        reachable_rect_global_cntr, target_parents = \
             symmetry_abstract_synthesis_helper_without_transitions(abstract_states_to_explore,
                                                                    abstract_to_concrete,
                                                                    abstract_paths,
@@ -2548,10 +2640,11 @@ def abstract_synthesis_without_precomputed_transitions(Symbolic_reduced, sym_x, 
                                                                    refinement_candidates,
                                                                    controllable_abstract_states,
                                                                    controllable_region,
-                                                                   controller, reachability_rtree_idx3d)
+                                                                   controller, reachability_rtree_idx3d,
+                                                                   reachable_rect_global_cntr)
         t_synthesis += time.time() - temp_t_synthesis
 
-        remaining_abstract_states = remaining_abstract_states.difference(controllable_abstract_states_temp)
+        # remaining_abstract_states = remaining_abstract_states.difference(controllable_abstract_states_temp)
         controllable_abstract_states = controllable_abstract_states.union(controllable_abstract_states_temp)
         refinement_candidates = refinement_candidates.difference(controllable_abstract_states)
 
@@ -2563,9 +2656,39 @@ def abstract_synthesis_without_precomputed_transitions(Symbolic_reduced, sym_x, 
            symmetry_transformed_targets_and_obstacles,
            abstract_paths)
         t_refine += time.time() - temp_t_refine
-        abstract_states_to_explore = np.setdiff1d(np.array(abstract_states_to_explore), deleted_abstract_states).tolist()
-        target_parents = np.setdiff1d(np.array(target_parents), controllable_abstract_states).tolist()
-        target_parents = np.setdiff1d(np.array(target_parents), deleted_abstract_states).tolist()
+        if progress:
+            abstract_states_to_explore = np.setdiff1d(np.array(abstract_states_to_explore),
+                                                      deleted_abstract_states).tolist()
+            target_parents = target_parents.difference(set(deleted_abstract_states))
+            for i in range(0, 2 * num_new_abstract_states, 2):
+                abstract_states_to_explore.append(len(abstract_to_concrete) - 1 - i)
+                abstract_states_to_explore.append(len(abstract_to_concrete) - 1 - (i + 1))
+                target_parents.add(len(abstract_to_concrete) - 1 - i)
+                target_parents.add(len(abstract_to_concrete) - 1 - (i + 1))
+        if controllable_abstract_states_temp:
+            # update target parents only if there is a significant number of newly added controllable states.
+            new_controllable_concrete_states = 0
+            for abstract_state_ind in controllable_abstract_states_temp:
+                controllable_concrete_states = controllable_concrete_states.union(
+                    abstract_to_concrete[abstract_state_ind])
+                new_controllable_concrete_states += len(abstract_to_concrete[abstract_state_ind])
+            if new_controllable_concrete_states > 10:
+                for abstract_state_ind in abstract_states_to_explore:
+                    if abstract_state_ind not in target_parents:
+                        is_target_parent = False
+                        rect = symmetry_abstract_states[abstract_state_ind].rtree_target_rect_over_approx
+                        original_angle_interval = [rect[0, 2], rect[1, 2]]
+                        decomposed_angle_intervals = get_decomposed_angle_intervals(original_angle_interval)
+                        for interval in decomposed_angle_intervals:
+                            is_target_parent = reachability_rtree_idx3d.count(
+                                (rect[0, 0], rect[0, 1], interval[0], rect[1, 0], rect[1, 1], interval[1]))
+                            if is_target_parent:
+                                break
+                        if is_target_parent:
+                            target_parents.add(abstract_state_ind)
+
+        # target_parents = np.setdiff1d(np.array(target_parents), controllable_abstract_states).tolist()
+        # target_parents = np.setdiff1d(np.array(target_parents), deleted_abstract_states).tolist()
         refinement_itr += num_new_abstract_states
         if not refinement_candidates:
             print("No states to refine anymore.")
@@ -2594,11 +2717,9 @@ def abstract_synthesis_without_precomputed_transitions(Symbolic_reduced, sym_x, 
     if len(controllable_abstract_states):
         print(len(controllable_abstract_states), 'abstract symbols are controllable to satisfy the reach-avoid '
                                                  'specification\n')
-        controllable_concrete_states = []
         for abstract_s in controllable_abstract_states:
             if not abstract_to_concrete[abstract_s]:
                 print(abstract_s, " does not represent any concrete state, why is it controllable?")
-            controllable_concrete_states.extend(abstract_to_concrete[abstract_s])
             print("Controllable abstract state ", abstract_s, " represents the following concrete states: ",
                   abstract_to_concrete[abstract_s])
         print(len(controllable_concrete_states), 'concrete symbols are controllable to satisfy the reach-avoid '
