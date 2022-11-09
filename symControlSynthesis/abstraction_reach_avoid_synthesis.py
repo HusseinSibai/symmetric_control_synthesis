@@ -274,19 +274,21 @@ def get_poly_intersection(poly_1: pc.Region, poly_2: pc.Region, project_to_pos=F
             if not pc.is_empty(p_inter_pos):
                 inter_interval = get_intervals_intersection(-1 * b1[i_low_1], b1[i_up_1], -1 * b2[i_low_2], b2[i_up_2])
                 if inter_interval is not None:
-                    b_inter_left = -1 * inter_interval[0]
-                    b_inter_right = inter_interval[1]
-                    A_new = np.zeros((p_inter_pos.A.shape[0] + 2, A1.shape[1]))
-                    b_new = np.zeros((p_inter_pos.A.shape[0] + 2,))
-                    for i in range(p_inter_pos.A.shape[0]):
-                        for j in range(p_inter_pos.A.shape[1]):
-                            A_new[i, j] = p_inter_pos.A[i, j]
-                        b_new[i] = p_inter_pos.b[i]
-                    A_new[p_inter_pos.A.shape[0], 2] = 1
-                    b_new[p_inter_pos.A.shape[0]] = b_inter_right
-                    A_new[p_inter_pos.A.shape[0] + 1, 2] = -1
-                    b_new[p_inter_pos.A.shape[0] + 1] = b_inter_left
-                    result = pc.union(result, pc.Polytope(A_new, b_new), check_convex=check_convex)
+                    intervals = [inter_interval] # get_decomposed_angle_intervals(inter_interval)
+                    for interval in intervals:
+                        b_inter_left = -1 * interval[0]
+                        b_inter_right = interval[1]
+                        A_new = np.zeros((p_inter_pos.A.shape[0] + 2, A1.shape[1]))
+                        b_new = np.zeros((p_inter_pos.A.shape[0] + 2,))
+                        for i in range(p_inter_pos.A.shape[0]):
+                            for j in range(p_inter_pos.A.shape[1]):
+                                A_new[i, j] = p_inter_pos.A[i, j]
+                            b_new[i] = p_inter_pos.b[i]
+                        A_new[p_inter_pos.A.shape[0], 2] = 1
+                        b_new[p_inter_pos.A.shape[0]] = b_inter_right
+                        A_new[p_inter_pos.A.shape[0] + 1, 2] = -1
+                        b_new[p_inter_pos.A.shape[0] + 1] = b_inter_left
+                        result = pc.union(result, pc.Polytope(A_new, b_new), check_convex=check_convex)
     return result
 
 
@@ -462,12 +464,12 @@ def get_intervals_intersection(a_s, b_s, a_l, b_l):
     b_l = fix_angle_to_positive_value(b_l)
     '''
     if b_s - a_s >= 2 * math.pi - 0.01 and b_l - a_l >= 2 * math.pi - 0.01:
-        return 0, 2 * math.pi
-    if does_interval_contain(a_s, b_s, a_l, b_l):
-        return a_s, b_s
-    if does_interval_contain(a_l, b_l, a_s, b_s):
-        return a_l, b_l
-    if is_within_range(a_s, a_l, b_l):
+        result = [0, 2 * math.pi]
+    elif does_interval_contain(a_s, b_s, a_l, b_l):
+        result = [a_s, b_s]
+    elif does_interval_contain(a_l, b_l, a_s, b_s):
+        result = [a_l, b_l]
+    elif is_within_range(a_s, a_l, b_l):
         while a_s > b_l:
             b_l += 2 * math.pi
         result = [a_s, b_l]
@@ -1001,6 +1003,12 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
                     abstract_state = hits[max_rad_idx].object
                     new_abstract_state = add_concrete_state_to_symmetry_abstract_state(s, abstract_state,
                                                                                        symmetry_transformed_targets_and_obstacles)
+                    if pc.is_empty(get_poly_intersection(
+                            symmetry_transformed_targets_and_obstacles[s].abstract_targets[0],
+                            new_abstract_state.abstract_targets[0])):
+                        print("A concrete state has a relative target that is not "
+                              "intersecting the relative target of the abstract state it was added to."
+                              " This shouldn't happen.")
                     ##########################
                     rtree_target_rect_under_approx = abstract_state.rtree_target_rect_under_approx
                     original_angle_interval = [rtree_target_rect_under_approx[0, 2],
@@ -1038,7 +1046,7 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
                                                                                   obj=new_abstract_state)
                     ##########################
                     if rtree_ids_to_abstract_states[hits[max_rad_idx].id] not in target_parents:
-                        original_concrete_angle_interval= [abstract_targets_rects_over_approx[0][0, 2],
+                        original_concrete_angle_interval = [abstract_targets_rects_over_approx[0][0, 2],
                                                             abstract_targets_rects_over_approx[0][1, 2]]
                         decomposed_concrete_angle_intervals = get_decomposed_angle_intervals(original_concrete_angle_interval)
                         for interval in decomposed_concrete_angle_intervals:
@@ -1158,8 +1166,8 @@ def add_concrete_state_to_symmetry_abstract_state(curr_concrete_state_idx, abstr
         while pc.is_empty(intersection_poly):
             pdb.set_trace()
             if True:  # abstract_state.empty_abstract_target or concrete_state.empty_abstract_target:
-                raise "empty abstract_target_poly error, grid must be refined, it's too far to see the position of " \
-                      "the target similarly even within the same grid cell! "
+                raise "empty abstract_target_poly error! Adding a concrete state" \
+                      " to an abstract state without relative target intersection "
             else:
                 abstract_state.empty_abstract_target = True
                 inter_poly_1 = copy.deepcopy(concrete_state.abstract_targets_without_angles[target_idx])
@@ -1769,13 +1777,15 @@ def symmetry_abstract_synthesis_helper_without_transitions(abstract_states_to_ex
             decomposed_angle_intervals = get_decomposed_angle_intervals(original_angle_interval)
             hits = []
             for interval in decomposed_angle_intervals:
-                hits.extend(list(reachability_rtree_idx3d.intersection(
-                        (rect[0, 0], rect[0, 1], interval[0], rect[1, 0], rect[1, 1], interval[1]),
+                # change this to nearest to the under approximation of the target, much faster
+                hits.extend(list(reachability_rtree_idx3d.nearest(
+                        (rect[0, 0], rect[0, 1], interval[0], rect[1, 0], rect[1, 1], interval[1]), num_results=3,
                         objects=True)))
             unique_controls = set()
             for hit in hits:
                 if hit.id >= newly_added_rects_lower_bound:
                     unique_controls.add(hit.object)
+            unique_controls = set(random.choices(list(unique_controls), k=3))
             for u_ind in unique_controls:
                 # print("Evaluating state ", abstract_s, " out of ", len(abstract_states_to_explore),
                 #      " with control ", u_ind, "out of ", len(unique_controls))
@@ -2392,10 +2402,18 @@ def split_abstract_state_without_transitions(abstract_state_ind, concrete_indice
         return concrete_to_abstract, abstract_to_concrete, target_parents
     rest_of_concrete_indices = np.setdiff1d(np.array(abstract_to_concrete[abstract_state_ind]), concrete_indices)
     for concrete_state_idx in concrete_indices:
+        if pc.is_empty(get_poly_intersection(symmetry_transformed_targets_and_obstacles[concrete_state_idx].abstract_targets[0],
+                                             symmetry_abstract_states[abstract_state_ind].abstract_targets[0])):
+            print("A concrete state has a relative target that is no longer "
+                  "intersecting the relative target of the abstract state it belongs to. This shouldn't happen.")
         abstract_state_1 = add_concrete_state_to_symmetry_abstract_state(concrete_state_idx,
                                                                          abstract_state_1,
                                                                          symmetry_transformed_targets_and_obstacles)
     for concrete_state_idx in rest_of_concrete_indices:
+        if pc.is_empty(get_poly_intersection(symmetry_transformed_targets_and_obstacles[concrete_state_idx].abstract_targets[0],
+                                             symmetry_abstract_states[abstract_state_ind].abstract_targets[0])):
+            print("A concrete state has a relative target that is no longer "
+                  "intersecting the relative target of the abstract state it belongs to. This shouldn't happen.")
         abstract_state_2 = add_concrete_state_to_symmetry_abstract_state(concrete_state_idx,
                                                                          abstract_state_2,
                                                                          symmetry_transformed_targets_and_obstacles)
