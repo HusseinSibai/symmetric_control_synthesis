@@ -470,10 +470,14 @@ def get_intervals_intersection(a_s, b_s, a_l, b_l):
     elif does_interval_contain(a_l, b_l, a_s, b_s):
         result = [a_l, b_l]
     elif is_within_range(a_s, a_l, b_l):
+        while a_s <= a_l:
+            a_s += 2 * math.pi
         while a_s > b_l:
             b_l += 2 * math.pi
         result = [a_s, b_l]
     elif is_within_range(b_s, a_l, b_l):
+        while b_s >= b_l:
+            b_s -= 2 * math.pi
         while a_l > b_s:
             b_s += 2 * math.pi
         result = [a_l, b_s]
@@ -1001,14 +1005,16 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
                 # if np.all(max_intersection_rect[1, :] - max_intersection_rect[0, :] >= 2 * symbol_step):
                 if max_rad >= intersection_radius_threshold:  # 2 * symbol_step:
                     abstract_state = hits[max_rad_idx].object
-                    new_abstract_state = add_concrete_state_to_symmetry_abstract_state(s, abstract_state,
+                    new_abstract_state = add_concrete_state_to_symmetry_abstract_state(s, copy.deepcopy(abstract_state),
                                                                                        symmetry_transformed_targets_and_obstacles)
+                    '''
                     if pc.is_empty(get_poly_intersection(
                             symmetry_transformed_targets_and_obstacles[s].abstract_targets[0],
                             new_abstract_state.abstract_targets[0])):
                         print("A concrete state has a relative target that is not "
                               "intersecting the relative target of the abstract state it was added to."
                               " This shouldn't happen.")
+                    '''
                     ##########################
                     rtree_target_rect_under_approx = abstract_state.rtree_target_rect_under_approx
                     original_angle_interval = [rtree_target_rect_under_approx[0, 2],
@@ -1080,8 +1086,9 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
                     break
         if not added_to_existing_state:  # concrete_to_abstract[s] is None:
             # create a new abstract state since there isn't a current one suitable for s.
-            new_abstract_state = AbstractState(abstract_targets_polys, abstract_pos_targets_polys,
-                                               abstract_obstacles, [s],
+            new_abstract_state = AbstractState(copy.deepcopy(abstract_targets_polys),
+                                               copy.deepcopy(abstract_pos_targets_polys),
+                                               copy.deepcopy(abstract_obstacles), [s],
                                                abstract_targets_rects_over_approx[0], empty_abstract_target)
             # for target_idx in range(len(new_abstract_state.abstract_targets)):
             #    rect = abstract_targets_rects[target_idx]
@@ -1138,6 +1145,13 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
     print(['Done creation of symmetry abstract states in: ', time.time() - t_start, ' seconds'])
     print("concrete_to_abstract: ", len(concrete_to_abstract))
     print("abstract_to_concrete: ", len(abstract_to_concrete))
+    '''
+    for abstract_state_ind in range(len(abstract_to_concrete)):
+        for concrete_state_idx in abstract_to_concrete[abstract_state_ind]:
+            if pc.is_empty(get_poly_intersection(symmetry_transformed_targets_and_obstacles[concrete_state_idx].abstract_targets[0],
+                                                 symmetry_abstract_states[abstract_state_ind].abstract_targets[0])):
+                print("Intersection is wrong.")
+    '''
     return symmetry_transformed_targets_and_obstacles, concrete_to_abstract, abstract_to_concrete, \
            symmetry_abstract_states, abstract_states_to_rtree_ids, rtree_ids_to_abstract_states, next_rtree_id_candidate, target_parents
 
@@ -1706,6 +1720,7 @@ def create_targets_and_obstacles(Target_low, Target_up, Obstacle_low, Obstacle_u
 
     return targets, targets_rects, target_indices, obstacles, obstacles_rects, obstacle_indices
 
+
 def successor_in_or_intersects_target(abstract_state_ind, u_ind, abstract_paths, controllable_region,
                                       symmetry_abstract_states):
     reachable_rect = np.column_stack(pc.bounding_box(abstract_paths[u_ind][-1])).T
@@ -1738,6 +1753,7 @@ def successor_in_or_intersects_target(abstract_state_ind, u_ind, abstract_paths,
 
     return 1 # intersects but not contained
 
+
 def successor_avoids_obstacles(abstract_state_ind, u_ind, abstract_paths, symmetry_abstract_states):
     for t_ind in range(len(abstract_paths[u_ind])):
         if not pc.is_empty(get_poly_intersection(abstract_paths[u_ind][t_ind],
@@ -1745,6 +1761,7 @@ def successor_avoids_obstacles(abstract_state_ind, u_ind, abstract_paths, symmet
                                                  check_convex=False)):
             return False
     return True
+
 
 def symmetry_abstract_synthesis_helper_without_transitions(abstract_states_to_explore,
                                                            abstract_to_concrete,
@@ -1756,7 +1773,7 @@ def symmetry_abstract_synthesis_helper_without_transitions(abstract_states_to_ex
                                                            controller, reachability_rtree_idx3d,
                                                            reachable_rect_global_cntr):
     t_start = time.time()
-    num_controllable_states = 0
+    num_controllable_states = len(global_controllable_abstract_states)
     controllable_abstract_states = set()
     unsafe_abstract_states = []
     newly_added_rects_lower_bound = 0
@@ -1834,6 +1851,7 @@ def symmetry_abstract_synthesis_helper_without_transitions(abstract_states_to_ex
 
     return controller, controllable_abstract_states, unsafe_abstract_states, abstract_states_to_explore, \
            reachable_rect_global_cntr, target_parents
+
 
 def symmetry_abstract_synthesis_helper(abstract_to_concrete, remaining_abstract_states, adjacency_list,
                                        inverse_adjacency_list, target_parents, refinement_candidates,
@@ -2004,11 +2022,11 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
     rest_of_concrete_indices = np.setdiff1d(np.array(abstract_to_concrete[abstract_state_ind]), concrete_indices)
     for concrete_state_idx in concrete_indices:
         abstract_state_1 = add_concrete_state_to_symmetry_abstract_state(concrete_state_idx,
-                                                                         abstract_state_1,
+                                                                         copy.deepcopy(abstract_state_1),
                                                                          symmetry_transformed_targets_and_obstacles)
     for concrete_state_idx in rest_of_concrete_indices:
         abstract_state_2 = add_concrete_state_to_symmetry_abstract_state(concrete_state_idx,
-                                                                         abstract_state_2,
+                                                                         copy.deepcopy(abstract_state_2),
                                                                          symmetry_transformed_targets_and_obstacles)
 
     symmetry_abstract_states.append(abstract_state_1)
@@ -2392,6 +2410,7 @@ def split_abstract_state(abstract_state_ind, concrete_indices,
            adjacency_list, inverse_adjacency_list, target_parents, abstract_states_to_rtree_ids, \
            rtree_ids_to_abstract_states, next_rtree_id_candidate
 
+
 def split_abstract_state_without_transitions(abstract_state_ind, concrete_indices,
                          abstract_to_concrete, concrete_to_abstract, target_parents,
                          symmetry_transformed_targets_and_obstacles, symmetry_abstract_states):
@@ -2407,7 +2426,7 @@ def split_abstract_state_without_transitions(abstract_state_ind, concrete_indice
             print("A concrete state has a relative target that is no longer "
                   "intersecting the relative target of the abstract state it belongs to. This shouldn't happen.")
         abstract_state_1 = add_concrete_state_to_symmetry_abstract_state(concrete_state_idx,
-                                                                         abstract_state_1,
+                                                                         copy.deepcopy(abstract_state_1),
                                                                          symmetry_transformed_targets_and_obstacles)
     for concrete_state_idx in rest_of_concrete_indices:
         if pc.is_empty(get_poly_intersection(symmetry_transformed_targets_and_obstacles[concrete_state_idx].abstract_targets[0],
@@ -2415,7 +2434,7 @@ def split_abstract_state_without_transitions(abstract_state_ind, concrete_indice
             print("A concrete state has a relative target that is no longer "
                   "intersecting the relative target of the abstract state it belongs to. This shouldn't happen.")
         abstract_state_2 = add_concrete_state_to_symmetry_abstract_state(concrete_state_idx,
-                                                                         abstract_state_2,
+                                                                         copy.deepcopy(abstract_state_2),
                                                                          symmetry_transformed_targets_and_obstacles)
 
     symmetry_abstract_states.append(abstract_state_1)
@@ -2431,6 +2450,7 @@ def split_abstract_state_without_transitions(abstract_state_ind, concrete_indice
 
     return concrete_to_abstract, abstract_to_concrete, target_parents
 
+
 def refine_without_transitions(concrete_to_abstract, abstract_to_concrete, symmetry_abstract_states,
            remaining_abstract_states, refinement_candidates, target_parents, controllable_abstract_states,
            symmetry_transformed_targets_and_obstacles,
@@ -2439,7 +2459,7 @@ def refine_without_transitions(concrete_to_abstract, abstract_to_concrete, symme
     progress = False
     num_new_abstract_states = 0
     deleted_abstract_states = []
-    max_num_of_refinements = len(refinement_candidates)
+    max_num_of_refinements = 10 # len(refinement_candidates)
     while itr < max_num_of_refinements and len(refinement_candidates):
         itr += 1
         abstract_state_ind = random.choice(tuple(refinement_candidates))
@@ -2591,6 +2611,7 @@ def refine(concrete_to_abstract, abstract_to_concrete, abstract_edges,
            target_parents, remaining_abstract_states, deleted_abstract_states, abstract_states_to_rtree_ids, \
            rtree_ids_to_abstract_states, \
            next_rtree_id_candidate
+
 
 def abstract_synthesis_without_precomputed_transitions(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Target_up,
                        Obstacle_low, Obstacle_up, X_low, X_up):
