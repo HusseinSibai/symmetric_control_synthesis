@@ -11,8 +11,8 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle, Polygon
 
 from abstraction_reach_avoid_synthesis import synthesize, abstract_synthesis
-from Reach_avoid_synthesis_sets import reach_avoid_synthesis_sets
-from Reach_avoid_synthesis_sets_forward_pass import reach_avoid_synthesis_sets_forward_pass
+# from Reach_avoid_synthesis_sets import reach_avoid_synthesis_sets
+# from Reach_avoid_synthesis_sets_forward_pass import reach_avoid_synthesis_sets_forward_pass
 
 ## Initialization of the problem
 
@@ -54,15 +54,15 @@ Target_low = np.array([[7, 0, math.pi / 3]])  # math.pi / 3
 # Hussein: change the angles bounds from -pi, pi to - 100, 100, respectively
 # Obstacle_up = [[[2.5], [5.5]], [[3],[6.5]], [[math.pi], [math.pi]]];
 # Obstacle_low = [[[2], [5]], [[0],[3.5]], [[-math.pi], [-math.pi]]];
-Obstacle_up = np.array([[2.5, 3, math.pi], [5.5, 9.5, math.pi], [0, 9.5, math.pi], [13, 0, math.pi],
-                        [13, 9.5, math.pi], [13, 9.5, math.pi]])
-Obstacle_low = np.array([[2, -3, -math.pi], [5, 3.5, -math.pi], [-3, -3, -math.pi], [-3, -3, -math.pi],
-                         [-3, 6.5, -math.pi], [10, -3, -math.pi]])
+Obstacle_up = np.array([[2.5, 3, 100], [5.5, 9.5, 100], [0, 9.5, 100], [13, 0, 100],
+                        [13, 9.5, 100], [13, 9.5, 100]])
+Obstacle_low = np.array([[2, -3, -100], [5, 3.5, -100], [-3, -3, -100], [-3, -3, -100],
+                         [-3, 6.5, -100], [10, -3, -100]])
 
-sym_x = 40 * np.ones((1, n_x))
-sym_x[0, 2] = 15
+sym_x = 25 * np.ones((1, n_x))
+sym_x[0, 2] = 20
 
-sym_u = 9 * np.ones((1, n_u))
+sym_u = 5 * np.ones((1, n_u))
 
 time_step = np.linspace(0, 3, 3).reshape((1, 3))  # np.array([0,0.5,1,2,3]) #
 
@@ -73,8 +73,8 @@ state_dimensions = np.zeros((1, n_x))
 # Shrink state space / safety
 X_up = X_up + 3  # - error_6D(1:n_x);
 X_low = X_low - 3  # + error_6D(1:n_x);
-X_low[2] = -math.pi
-X_up[2] = math.pi
+X_low[2] = 0
+X_up[2] = 2 * math.pi
 
 # Shrink target set
 Target_up = Target_up  # - error_6D(1:n_x);
@@ -87,11 +87,11 @@ symbol_step = (X_up - X_low) / sym_x
 # Abstraction creation
 t_abstraction = time.time()
 eng = matlab.engine.start_matlab()
-eng.addpath(r'/Users/hsibai/Downloads/IFAC20_ship_matlab')
+eng.addpath(r'/Users/loaner/Downloads/IFAC20_ship_matlab')
 eng.addpath(
-    r'/Users/hsibai/Downloads/IFAC20_ship_matlab/TIRA:/Users/hsibai/Downloads/IFAC20_ship_matlab/TIRA/Input_files'
-    r':/Users/hsibai/Downloads/IFAC20_ship_matlab/TIRA/OA_methods:/Users/hsibai/Downloads/IFAC20_ship_matlab/TIRA'
-    r'/SDMM_hybrid:/Users/hsibai/Downloads/IFAC20_ship_matlab/TIRA/Utilities:')
+    r'/Users/loaner/Downloads/IFAC20_ship_matlab/TIRA:/Users/loaner/Downloads/IFAC20_ship_matlab/TIRA/Input_files'
+    r':/Users/loaner/Downloads/IFAC20_ship_matlab/TIRA/OA_methods:/Users/loaner/Downloads/IFAC20_ship_matlab/TIRA'
+    r'/SDMM_hybrid:/Users/loaner/Downloads/IFAC20_ship_matlab/TIRA/Utilities:')
 
 X_low_matlab = matlab.double(X_low.tolist())
 X_up_matlab = matlab.double(X_up.tolist())

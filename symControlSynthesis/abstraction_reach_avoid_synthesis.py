@@ -6,7 +6,7 @@ from typing import List, Dict
 import numpy.matlib
 from z3 import *
 import polytope as pc
-from yices import *
+# from yices import *
 import random
 import copy
 import os
