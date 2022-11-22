@@ -11,8 +11,8 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle, Polygon
 
 from abstraction_reach_avoid_synthesis import synthesize, abstract_synthesis, abstract_synthesis_without_precomputed_transitions
-from Reach_avoid_synthesis_sets import reach_avoid_synthesis_sets
-from Reach_avoid_synthesis_sets_forward_pass import reach_avoid_synthesis_sets_forward_pass
+# from Reach_avoid_synthesis_sets import reach_avoid_synthesis_sets
+# from Reach_avoid_synthesis_sets_forward_pass import reach_avoid_synthesis_sets_forward_pass
 
 ## Initialization of the problem
 
@@ -59,8 +59,8 @@ Obstacle_up = np.array([[2.5, 3, 100], [5.5, 9.5, 100], [0, 9.5, 100], [13, 0, 1
 Obstacle_low = np.array([[2, -3, -100], [5, 3.5, -100], [-3, -3, -100], [-3, -3, -100],
                          [-3, 6.5, -100], [10, -3, -100]])
 
-sym_x = 20 * np.ones((1, n_x))
-sym_x[0, 2] = 15
+sym_x = 10 * np.ones((1, n_x))
+sym_x[0, 2] = 10
 
 sym_u = 5 * np.ones((1, n_u))
 
@@ -87,11 +87,18 @@ symbol_step = (X_up - X_low) / sym_x
 # Abstraction creation
 t_abstraction = time.time()
 eng = matlab.engine.start_matlab()
+'''
 eng.addpath(r'/Users/hsibai/Downloads/IFAC20_ship_matlab')
 eng.addpath(
     r'/Users/hsibai/Downloads/IFAC20_ship_matlab/TIRA:/Users/hsibai/Downloads/IFAC20_ship_matlab/TIRA/Input_files'
     r':/Users/hsibai/Downloads/IFAC20_ship_matlab/TIRA/OA_methods:/Users/hsibai/Downloads/IFAC20_ship_matlab/TIRA'
     r'/SDMM_hybrid:/Users/hsibai/Downloads/IFAC20_ship_matlab/TIRA/Utilities:')
+'''
+eng.addpath(r'/Users/loaner/Downloads/IFAC20_ship_matlab')
+eng.addpath(
+    r'/Users/loaner/Downloads/IFAC20_ship_matlab/TIRA:/Users/loaner/Downloads/IFAC20_ship_matlab/TIRA/Input_files'
+    r':/Users/loaner/Downloads/IFAC20_ship_matlab/TIRA/OA_methods:/Users/loaner/Downloads/IFAC20_ship_matlab/TIRA'
+    r'/SDMM_hybrid:/Users/loaner/Downloads/IFAC20_ship_matlab/TIRA/Utilities:')
 
 X_low_matlab = matlab.double(X_low.tolist())
 X_up_matlab = matlab.double(X_up.tolist())
