@@ -59,8 +59,8 @@ Obstacle_up = np.array([[2.5, 3, 100], [5.5, 9.5, 100], [0, 9.5, 100], [13, 0, 1
 Obstacle_low = np.array([[2, -3, -100], [5, 3.5, -100], [-3, -3, -100], [-3, -3, -100],
                          [-3, 6.5, -100], [10, -3, -100]])
 
-sym_x = 10 * np.ones((1, n_x))
-sym_x[0, 2] = 10
+sym_x = 25 * np.ones((1, n_x))
+sym_x[0, 2] = 20
 
 sym_u = 5 * np.ones((1, n_u))
 
@@ -176,8 +176,8 @@ U_discrete = np.array(U_discrete)
 
 N = 30
 M = 5
-abstract_synthesis_without_precomputed_transitions(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Target_up,
-                   Obstacle_low, Obstacle_up, X_low, X_up)
+abstract_synthesis_without_precomputed_transitions(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low,
+                                                   Target_up, Obstacle_low, Obstacle_up, X_low, X_up)
 # abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Target_up,
 #                   Obstacle_low, Obstacle_up, X_low, X_up)
 # synthesize(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Target_up,

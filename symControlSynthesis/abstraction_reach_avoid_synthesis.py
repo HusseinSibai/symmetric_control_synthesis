@@ -38,6 +38,7 @@ class AbstractState:
         self.set_of_allowed_controls = None
         self.abstract_targets_over_approximation = copy.deepcopy(abstract_targets)
         self.empty_abstract_target = empty_abstract_target
+        # self.uncontrolled_region = copy.deepcopy(self.abstract_targets_over_approximation)
 
 
 def transform_poly_to_abstract(reg: pc.Region, state: np.array, project_to_pos=False):
@@ -1699,7 +1700,8 @@ def create_symmetry_abstract_reachable_sets(Symbolic_reduced, n, reachability_rt
                 poly = pc.box2poly(rect.T)
                 original_abstract_path.append(poly)
             abstract_paths.append(original_abstract_path)
-            controllable_region = get_poly_union(controllable_region, original_abstract_path[-1])
+            reg = get_poly_list_with_decomposed_angle_intervals(original_abstract_path[-1])
+            controllable_region = get_poly_union(controllable_region, reg)
     return abstract_paths, reachable_rect_global_cntr, intersection_radius_threshold, controllable_region
 
 
@@ -1732,19 +1734,9 @@ def create_targets_and_obstacles(Target_low, Target_up, Obstacle_low, Obstacle_u
     return targets, targets_rects, target_indices, obstacles, obstacles_rects, obstacle_indices
 
 
-def successor_in_or_intersects_target(abstract_state_ind, u_ind, abstract_paths, controllable_region,
-                                      symmetry_abstract_states):
-    reachable_rect = np.column_stack(pc.bounding_box(abstract_paths[u_ind][-1])).T
-
-    if symmetry_abstract_states[abstract_state_ind].empty_abstract_target or \
-            not do_rects_inter(reachable_rect,
-                               symmetry_abstract_states[abstract_state_ind].rtree_target_rect_over_approx):
-        return 0  # does not intersect target
-
+def set_in_target(last_set: np.array, target: pc.Polytope):
     target_poly_after_transition_under_approximation = transform_poly_to_abstract_frames(
-        symmetry_abstract_states[abstract_state_ind].abstract_targets[0],
-        reachable_rect,
-        over_approximate=False)
+        target, last_set, over_approximate=False)
 
     origin = np.zeros((3, 1))
     another_origin = np.zeros((3, 1))
@@ -1753,14 +1745,39 @@ def successor_in_or_intersects_target(abstract_state_ind, u_ind, abstract_paths,
             and (target_poly_after_transition_under_approximation.contains(origin)
                  or target_poly_after_transition_under_approximation.contains(another_origin)):
         return 2  # contained in target
+    return 0
 
+
+def successor_in_or_intersects_target(abstract_state_ind, u_ind, abstract_paths,
+                                      symmetry_abstract_states):
+    reachable_rect = np.column_stack(pc.bounding_box(abstract_paths[u_ind][-1])).T
+
+    if symmetry_abstract_states[abstract_state_ind].empty_abstract_target or \
+            not do_rects_inter(reachable_rect,
+                               symmetry_abstract_states[abstract_state_ind].rtree_target_rect_over_approx):
+        return 0  # does not intersect target
+
+    res = set_in_target(symmetry_abstract_states[abstract_state_ind].abstract_targets[0], reachable_rect)
+    if res == 2:
+        return 2
+
+    '''
+    print("abstract_state_ind: ", abstract_state_ind)
+    target_poly_after_transition_over_approximation = transform_poly_to_abstract_frames(
+        symmetry_abstract_states[abstract_state_ind].abstract_targets[0],
+        reachable_rect,
+        over_approximate=True)
+    print("target_poly_after_transition_over_approximation: ", target_poly_after_transition_over_approximation)
+    '''
     # for reg in controllable_regions_list:
-    if not pc.is_empty(target_poly_after_transition_under_approximation):
-        # reg = get_poly_list_with_decomposed_angle_intervals(target_poly_after_transition_under_approximation)
-        target_poly_after_transition_under_approximation = \
-            pc.mldivide(target_poly_after_transition_under_approximation, controllable_region)
-        if pc.is_empty(target_poly_after_transition_under_approximation):
-            return 2  # contained in target
+    # if not pc.is_empty(target_poly_after_transition_over_approximation):
+    # reg = get_poly_list_with_decomposed_angle_intervals(target_poly_after_transition_under_approximation)
+
+    # uncontrolled_region = \
+    #    pc.mldivide(target_poly_after_transition_over_approximation, controllable_region)
+    # print("uncontrolled_region: ", uncontrolled_region)
+    # if pc.is_empty(uncontrolled_region):
+    #    return 2  # contained in target
 
     return 1  # intersects but not contained
 
@@ -1801,7 +1818,7 @@ def symmetry_abstract_synthesis_helper_without_transitions(local_abstract_states
         newly_added_rects_lower_bound_temp = 0
         for abstract_s in local_abstract_states_to_explore:  # target_parents: # abstract_states_to_explore
             # for u_ind in range(len(abstract_paths)):
-            rect = symmetry_abstract_states[abstract_s].rtree_target_rect_over_approx
+            rect = symmetry_abstract_states[abstract_s].rtree_target_rect_under_approx
             original_angle_interval = [rect[0, 2], rect[1, 2]]
             decomposed_angle_intervals = get_decomposed_angle_intervals(original_angle_interval)
             hits = []
@@ -1820,7 +1837,6 @@ def symmetry_abstract_synthesis_helper_without_transitions(local_abstract_states
                     # print("Evaluating state ", abstract_s, " out of ", len(abstract_states_to_explore),
                     #      " with control ", u_ind, "out of ", len(unique_controls))
                     reach_res = successor_in_or_intersects_target(abstract_s, u_ind, abstract_paths,
-                                                                  controllable_region,
                                                                   symmetry_abstract_states)
                     avoid_res = successor_avoids_obstacles(abstract_s, u_ind, abstract_paths, symmetry_abstract_states)
                     if reach_res == 2 and avoid_res:
@@ -1828,8 +1844,7 @@ def symmetry_abstract_synthesis_helper_without_transitions(local_abstract_states
                         temp_controllable_abstract_states.add(abstract_s)
                         reg = get_poly_list_with_decomposed_angle_intervals(
                             symmetry_abstract_states[abstract_s].abstract_targets[0])
-                        controllable_region = get_poly_union(controllable_region,
-                                                             reg)
+                        controllable_region = get_poly_union(controllable_region, reg)
                         rect_under_approx = symmetry_abstract_states[abstract_s].rtree_target_rect_under_approx
                         reachability_rtree_idx3d.insert(reachable_rect_global_cntr, (
                             rect_under_approx[0, 0], rect_under_approx[0, 1], rect_under_approx[0, 2],
@@ -2732,7 +2747,7 @@ def abstract_synthesis_without_precomputed_transitions(Symbolic_reduced, sym_x, 
         controllable_abstract_states = controllable_abstract_states.union(controllable_abstract_states_temp)
         refinement_candidates = refinement_candidates.difference(controllable_abstract_states)
 
-        if controllable_abstract_states_temp:
+        if controllable_abstract_states_temp and not refinement_candidates:
             # update target parents only if there is a significant number of newly added controllable states.
             new_controllable_concrete_states = 0
             for abstract_state_ind in controllable_abstract_states_temp:
