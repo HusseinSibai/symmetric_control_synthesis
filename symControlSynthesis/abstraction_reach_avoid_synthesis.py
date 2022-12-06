@@ -2233,6 +2233,7 @@ def abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_
             else:
                 local_abstract_states_to_explore = copy.deepcopy(abstract_states_to_explore)
                 potential_new_target_parents = False
+                continuous_failure_counter = 0
         else:
             temp_t_refine = time.time()
             progress, num_new_abstract_states, concrete_to_abstract, abstract_to_concrete, \
