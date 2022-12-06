@@ -10,7 +10,9 @@ matplotlib.use("macOSX")
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle, Polygon
 
-from abstraction_reach_avoid_synthesis import synthesize, abstract_synthesis, abstract_synthesis_without_precomputed_transitions
+from abstraction_reach_avoid_synthesis import abstract_synthesis
+
+# , abstract_synthesis, synthesize,
 # from Reach_avoid_synthesis_sets import reach_avoid_synthesis_sets
 # from Reach_avoid_synthesis_sets_forward_pass import reach_avoid_synthesis_sets_forward_pass
 
@@ -59,7 +61,7 @@ Obstacle_up = np.array([[2.5, 3, 100], [5.5, 9.5, 100], [0, 9.5, 100], [13, 0, 1
 Obstacle_low = np.array([[2, -3, -100], [5, 3.5, -100], [-3, -3, -100], [-3, -3, -100],
                          [-3, 6.5, -100], [10, -3, -100]])
 
-sym_x = 25 * np.ones((1, n_x))
+sym_x = 20 * np.ones((1, n_x))
 sym_x[0, 2] = 20
 
 sym_u = 5 * np.ones((1, n_u))
@@ -73,7 +75,7 @@ state_dimensions = np.zeros((1, n_x))
 # Shrink state space / safety
 X_up = X_up + 3  # - error_6D(1:n_x);
 X_low = X_low - 3  # + error_6D(1:n_x);
-X_low[2] = 0 # -math.pi
+X_low[2] = 0  # -math.pi
 X_up[2] = 2 * math.pi
 
 # Shrink target set
@@ -176,8 +178,8 @@ U_discrete = np.array(U_discrete)
 
 N = 30
 M = 5
-abstract_synthesis_without_precomputed_transitions(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low,
-                                                   Target_up, Obstacle_low, Obstacle_up, X_low, X_up)
+abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low,
+                   Target_up, Obstacle_low, Obstacle_up, X_low, X_up)
 # abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Target_up,
 #                   Obstacle_low, Obstacle_up, X_low, X_up)
 # synthesize(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Target_up,
