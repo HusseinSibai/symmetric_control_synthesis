@@ -2224,7 +2224,7 @@ def abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_
             '''
         else:
             continuous_failure_counter += 1
-        print("target parents: ", target_parents)
+        # print("target parents: ", target_parents)
         if not refinement_candidates:
             if not potential_new_target_parents:
                 if continuous_failure_counter >= continuous_failure_counter_max:

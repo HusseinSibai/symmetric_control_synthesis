@@ -61,10 +61,10 @@ Obstacle_up = np.array([[2.5, 3, 100], [5.5, 9.5, 100], [0, 9.5, 100], [13, 0, 1
 Obstacle_low = np.array([[2, -3, -100], [5, 3.5, -100], [-3, -3, -100], [-3, -3, -100],
                          [-3, 6.5, -100], [10, -3, -100]])
 
-sym_x = 30 * np.ones((1, n_x))
+sym_x = 20 * np.ones((1, n_x))
 sym_x[0, 2] = 30
 
-sym_u = 5 * np.ones((1, n_u))
+sym_u = 9 * np.ones((1, n_u))
 
 time_step = np.linspace(0, 3, 3).reshape((1, 3))  # np.array([0,0.5,1,2,3]) #
 
@@ -90,17 +90,17 @@ symbol_step = (X_up - X_low) / sym_x
 t_abstraction = time.time()
 eng = matlab.engine.start_matlab()
 '''
-eng.addpath(r'/Users/hsibai/Downloads/IFAC20_ship_matlab')
+eng.addpath(r'/Users/husseinsibai/Downloads/IFAC20_ship_matlab')
 eng.addpath(
-    r'/Users/hsibai/Downloads/IFAC20_ship_matlab/TIRA:/Users/hsibai/Downloads/IFAC20_ship_matlab/TIRA/Input_files'
-    r':/Users/hsibai/Downloads/IFAC20_ship_matlab/TIRA/OA_methods:/Users/hsibai/Downloads/IFAC20_ship_matlab/TIRA'
-    r'/SDMM_hybrid:/Users/hsibai/Downloads/IFAC20_ship_matlab/TIRA/Utilities:')
+    r'/Users/husseinsibai/Downloads/IFAC20_ship_matlab/TIRA:/Users/husseinsibai/Downloads/IFAC20_ship_matlab/TIRA/Input_files'
+    r':/Users/husseinsibai/Downloads/IFAC20_ship_matlab/TIRA/OA_methods:/Users/husseinsibai/Downloads/IFAC20_ship_matlab/TIRA'
+    r'/SDMM_hybrid:/Users/husseinsibai/Downloads/IFAC20_ship_matlab/TIRA/Utilities:')
 '''
-eng.addpath(r'/Users/loaner/Downloads/IFAC20_ship_matlab')
+eng.addpath(r'/Users/husseinsibai/Downloads/IFAC20_ship_matlab')
 eng.addpath(
-    r'/Users/loaner/Downloads/IFAC20_ship_matlab/TIRA:/Users/loaner/Downloads/IFAC20_ship_matlab/TIRA/Input_files'
-    r':/Users/loaner/Downloads/IFAC20_ship_matlab/TIRA/OA_methods:/Users/loaner/Downloads/IFAC20_ship_matlab/TIRA'
-    r'/SDMM_hybrid:/Users/loaner/Downloads/IFAC20_ship_matlab/TIRA/Utilities:')
+    r'/Users/husseinsibai/Downloads/IFAC20_ship_matlab/TIRA:/Users/husseinsibai/Downloads/IFAC20_ship_matlab/TIRA/Input_files'
+    r':/Users/husseinsibai/Downloads/IFAC20_ship_matlab/TIRA/OA_methods:/Users/husseinsibai/Downloads/IFAC20_ship_matlab/TIRA'
+    r'/SDMM_hybrid:/Users/husseinsibai/Downloads/IFAC20_ship_matlab/TIRA/Utilities:')
 
 X_low_matlab = matlab.double(X_low.tolist())
 X_up_matlab = matlab.double(X_up.tolist())
