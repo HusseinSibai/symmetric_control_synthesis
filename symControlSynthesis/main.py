@@ -87,11 +87,29 @@ symbol_step = (X_up - X_low) / sym_x
 # Abstraction creation
 t_abstraction = time.time()
 eng = matlab.engine.start_matlab()
-eng.addpath(r'/Users/loaner/Downloads/IFAC20_ship_matlab')
-eng.addpath(
-    r'/Users/loaner/Downloads/IFAC20_ship_matlab/TIRA:/Users/loaner/Downloads/IFAC20_ship_matlab/TIRA/Input_files'
-    r':/Users/loaner/Downloads/IFAC20_ship_matlab/TIRA/OA_methods:/Users/loaner/Downloads/IFAC20_ship_matlab/TIRA'
-    r'/SDMM_hybrid:/Users/loaner/Downloads/IFAC20_ship_matlab/TIRA/Utilities:')
+#matlab_path = r'/Users/loaner/Downloads/IFAC20_ship_matlab'
+#TIRA_path = r'/Users/loaner/Downloads/IFAC20_ship_matlab/TIRA'
+#input_path = r'/Users/loaner/Downloads/IFAC20_ship_matlab/TIRA/Input_files'
+#oa_methods_path = r'/Users/loaner/Downloads/IFAC20_ship_matlab/TIRA/OA_methods'
+#utilities_path = r'/Users/loaner/Downloads/IFAC20_ship_matlab/TIRA/Utilities'
+matlab_path = r'/Users/bradley/school/formal_methods_research/IFAC20_ship_matlab'
+TIRA_path = r'/Users/bradley/school/formal_methods_research/IFAC20_ship_matlab/TIRA'
+input_path = r'/Users/bradley/school/formal_methods_research/IFAC20_ship_matlab/TIRA/Input_files'
+oa_methods_path = r'/Users/bradley/school/formal_methods_research/IFAC20_ship_matlab/TIRA/OA_methods'
+utilities_path = r'/Users/bradley/school/formal_methods_research/IFAC20_ship_matlab/TIRA/Utilities'
+sdmm_path = r'/Users/bradley/school/formal_methods_research/IFAC20_ship_matlab/TIRA/SDMM_hybrid'
+#eng.addpath(r'/Users/loaner/Downloads/IFAC20_ship_matlab')
+#eng.addpath(
+#    r'/Users/loaner/Downloads/IFAC20_ship_matlab/TIRA:/Users/loaner/Downloads/IFAC20_ship_matlab/TIRA/Input_files'
+#    r':/Users/loaner/Downloads/IFAC20_ship_matlab/TIRA/OA_methods:/Users/loaner/Downloads/IFAC20_ship_matlab/TIRA'
+#    r'/SDMM_hybrid:/Users/loaner/Downloads/IFAC20_ship_matlab/TIRA/Utilities:')
+
+eng.addpath(matlab_path)
+eng.addpath(TIRA_path)
+eng.addpath(input_path)
+eng.addpath(oa_methods_path)
+eng.addpath(utilities_path)
+eng.addpath(sdmm_path)
 
 X_low_matlab = matlab.double(X_low.tolist())
 X_up_matlab = matlab.double(X_up.tolist())
