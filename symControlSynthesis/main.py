@@ -10,7 +10,9 @@ matplotlib.use("macOSX")
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle, Polygon
 
-from abstraction_reach_avoid_synthesis import synthesize, abstract_synthesis
+from abstraction_reach_avoid_synthesis import abstract_synthesis
+
+# , abstract_synthesis, synthesize,
 # from Reach_avoid_synthesis_sets import reach_avoid_synthesis_sets
 # from Reach_avoid_synthesis_sets_forward_pass import reach_avoid_synthesis_sets_forward_pass
 
@@ -21,8 +23,8 @@ OA_method = 3.1  # Hussein: this is 3.1 instead of 3 since we are computing the 
 
 # State space definition N / E for camera range: 10 * 6.5 m
 # orientation range[-pi, pi]; psi = 0 is pointing North
-X_up = np.array([10, 6.5, math.pi])
-X_low = np.array([0, 0, -math.pi])
+X_up = np.array([10, 6.5, 2 * math.pi])
+X_low = np.array([0, 0, 0])
 n_x = len(X_up)
 
 # Input space surge velocity: [-0.18, 0.18] m / s
@@ -59,8 +61,8 @@ Obstacle_up = np.array([[2.5, 3, 100], [5.5, 9.5, 100], [0, 9.5, 100], [13, 0, 1
 Obstacle_low = np.array([[2, -3, -100], [5, 3.5, -100], [-3, -3, -100], [-3, -3, -100],
                          [-3, 6.5, -100], [10, -3, -100]])
 
-sym_x = 25 * np.ones((1, n_x))
-sym_x[0, 2] = 20
+sym_x = 20 * np.ones((1, n_x))
+sym_x[0, 2] = 30
 
 sym_u = 5 * np.ones((1, n_u))
 
@@ -73,7 +75,7 @@ state_dimensions = np.zeros((1, n_x))
 # Shrink state space / safety
 X_up = X_up + 3  # - error_6D(1:n_x);
 X_low = X_low - 3  # + error_6D(1:n_x);
-X_low[2] = 0
+X_low[2] = 0  # -math.pi
 X_up[2] = 2 * math.pi
 
 # Shrink target set
@@ -166,10 +168,10 @@ for s_ind in range(Symbolic_reduced.shape[0]):
                                    abstract_rect_up[1] - abstract_rect_low[1], linewidth=1,
                                    edgecolor=edge_color, facecolor=color)
             currentAxis_1.add_patch(rect_patch)
-plt.ylim([-0.5, 0.5])
-plt.xlim([-1, 1])
+plt.ylim([-0.35, 0.35])
+plt.xlim([-0.75, 0.75])
 plt.savefig("Abstract reachable sets")
-plt.show()
+# plt.show()
 # plot(Symbolic_reduced_list);
 # print(np.array(mat_out).shape)
 # print("Symbolic_reduced,U_discrete,unsafe_trans")
@@ -187,8 +189,10 @@ U_discrete = np.array(U_discrete)
 
 N = 30
 M = 5
-abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Target_up,
-                   Obstacle_low, Obstacle_up, X_low, X_up)
+abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low,
+                   Target_up, Obstacle_low, Obstacle_up, X_low, X_up)
+# abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Target_up,
+#                   Obstacle_low, Obstacle_up, X_low, X_up)
 # synthesize(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Target_up,
 #               Obstacle_low, Obstacle_up, X_low, X_up, U_low, U_up, N, M)
 # initial_set = np.array([[4.5, 0.5, 0.5], [5, 1, 1]]) Controller = reach_avoid_synthesis_sets_forward_pass(
