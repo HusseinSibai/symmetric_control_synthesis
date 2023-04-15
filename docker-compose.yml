@@ -1,0 +1,9 @@
+version: '3.8'
+
+services:
+  my_ml_project:
+    build: .
+    image: symmetric_control_synthesis:latest
+    container_name: symmetric_control_synthesis_container
+    command: python symControlSynthesis/main.py
+
