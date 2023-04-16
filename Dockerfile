@@ -4,7 +4,7 @@ FROM mathworks/matlab:r2023a
 # Update system packages and install Python
 USER root
 
-RUN export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/matlab/R2023a/bin/glnxa64
+ENV LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/opt/matlab/R2023a/bin/glnxa64
 
 RUN apt-get update && \
     apt-get install -y python3 python3-pip && \
