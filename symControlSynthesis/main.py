@@ -1,4 +1,5 @@
-import matlab.engine
+from oct2py import octave
+import oct2py
 import numpy as np
 import time
 import math
@@ -88,7 +89,6 @@ symbol_step = (X_up - X_low) / sym_x
 
 # Abstraction creation
 t_abstraction = time.time()
-eng = matlab.engine.start_matlab()
 #matlab_path = r'/Users/loaner/Downloads/IFAC20_ship_matlab'
 #TIRA_path = r'/Users/loaner/Downloads/IFAC20_ship_matlab/TIRA'
 #input_path = r'/Users/loaner/Downloads/IFAC20_ship_matlab/TIRA/Input_files'
@@ -106,29 +106,31 @@ sdmm_path = r'../IFAC20_ship_matlab/TIRA/SDMM_hybrid'
 #    r':/Users/loaner/Downloads/IFAC20_ship_matlab/TIRA/OA_methods:/Users/loaner/Downloads/IFAC20_ship_matlab/TIRA'
 #    r'/SDMM_hybrid:/Users/loaner/Downloads/IFAC20_ship_matlab/TIRA/Utilities:')
 
-eng.addpath(matlab_path)
-eng.addpath(TIRA_path)
-eng.addpath(input_path)
-eng.addpath(oa_methods_path)
-eng.addpath(utilities_path)
-eng.addpath(sdmm_path)
+octave.addpath(matlab_path)
+octave.addpath(TIRA_path)
+octave.addpath(input_path)
+octave.addpath(oa_methods_path)
+octave.addpath(utilities_path)
+octave.addpath(sdmm_path)
 
-X_low_matlab = matlab.double(X_low.tolist())
-X_up_matlab = matlab.double(X_up.tolist())
-sym_x_matlab = matlab.double(sym_x.tolist())
-U_low_matlab = matlab.double(U_low.tolist())
-U_up_matlab = matlab.double(U_up.tolist())
-sym_u_matlab = matlab.double(sym_u.tolist())
-W_low_matlab = matlab.double(W_low.tolist())
-W_up_matlab = matlab.double(W_up.tolist())
-state_dimensions_matlab = matlab.double(state_dimensions.tolist())
-time_step_matlab = matlab.double(time_step.tolist())  # matlab.double(time_step);
+oc = oct2py.Oct2Py()
+
+X_low_matlab = oc.double(X_low.tolist())
+X_up_matlab = oc.double(X_up.tolist())
+sym_x_matlab = oc.double(sym_x.tolist())
+U_low_matlab = oc.double(U_low.tolist())
+U_up_matlab = oc.double(U_up.tolist())
+sym_u_matlab = oc.double(sym_u.tolist())
+W_low_matlab = oc.double(W_low.tolist())
+W_up_matlab = oc.double(W_up.tolist())
+state_dimensions_matlab = oc.double(state_dimensions.tolist())
+time_step_matlab = oc.double(time_step.tolist())  # matlab.double(time_step);
 OA_method_matlab = OA_method
-Symbolic_reduced, U_discrete, unsafe_trans = eng.Centralized_abstraction(X_low_matlab, X_up_matlab, sym_x_matlab,
+Symbolic_reduced, U_discrete, unsafe_trans = octave.Centralized_abstraction(X_low_matlab, X_up_matlab, sym_x_matlab,
                                                                          U_low_matlab, U_up_matlab,
                                                                          sym_u_matlab, W_low_matlab, W_up_matlab,
                                                                          time_step_matlab, state_dimensions_matlab,
-                                                                         OA_method, nargout=3)
+                                                                         OA_method, nout=3)
 
 Symbolic_reduced = np.array(Symbolic_reduced)
 U_discrete = np.array(U_discrete)

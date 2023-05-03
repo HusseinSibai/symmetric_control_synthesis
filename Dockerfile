@@ -1,5 +1,5 @@
 # Use the specified MATLAB base image
-FROM gcr.io/ris-registry-shared/matlab 
+FROM mathworks/matlab-deep-learning:r2022a
 
 # Update system packages and install Python
 USER root
@@ -7,14 +7,15 @@ USER root
 ENV LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/scratch1/fs1/ris/application/matlab/2022b/bin/glnxa64
 
 RUN apt-get update && \
-    apt-get install -y python3 python3-pip python3.8-venv && \
+    apt-get install -y python3.9 python3-pip python3.9-venv && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
  # Install necessary Python packages
-RUN python3 -m venv venv && \
+RUN python3.9 -m venv venv && \
     . venv/bin/activate
 COPY symControlSynthesis/requirements.txt /tmp/
-RUN venv/bin/activate && pip3 install --no-cache-dir -r /tmp/requirements.txt
+RUN . venv/bin/activate && python3.9 -m pip install --no-cache-dir -r /tmp/requirements.txt
+RUN chown -R 1989969:1000070 /venv
 
 # Copy Python and Matlab code to the container
 COPY IFAC20_ship_matlab/ /symmetric_control_synthesis/IFAC20_ship_matlab/
