@@ -7,7 +7,7 @@ import math
 
 import matplotlib
 
-matplotlib.use("macOSX")
+matplotlib.use("agg")
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle, Polygon
 
