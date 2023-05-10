@@ -121,6 +121,8 @@ def fix_angle(angle):
 
 
 def fix_angle_interval(left_angle, right_angle):
+    if abs(right_angle - left_angle) < 0.001:
+        left_angle = right_angle - 0.01
     while right_angle < left_angle:
         right_angle += 2 * math.pi
     if right_angle - left_angle >= 2 * math.pi - 0.01:
@@ -1022,6 +1024,36 @@ def get_intersection(list_array: List[np.array]) -> np.array:
         else:
             return None
     return result
+
+
+def subtract_rectangles(rect1, rect2):
+    """
+    Partially Generated using ChatGPT
+    Subtract rect2 from rect1 and return the resulting rectangles
+    """
+
+    # Find the overlapping region between rect1 and rect2
+    min_overlap = np.maximum(rect1[0, :], rect2[0, :])
+    max_overlap = np.minimum(rect1[1, :], rect2[1, :])
+
+    # If there is no overlapping region, return rect2
+    if np.any(max_overlap <= min_overlap):
+        return [rect1]
+
+    # Split rect2 into multiple rectangles based on the overlapping region
+    rects = []
+    for dim in range(rect1.shape[1]):
+        if min_overlap[dim] > rect1[0, dim]:
+            rect_left = copy.deepcopy(rect1)
+            rect_left[1, dim] = min_overlap[dim]
+            rects.append(rect_left)
+
+        if max_overlap[dim] < rect1[1, dim]:
+            rect_right = copy.deepcopy(rect1)
+            rect_right[0, dim] = max_overlap[dim]
+            rects.append(rect_right)
+
+    return rects
 
 
 def next_quantized_key(curr_key: np.array, quantized_key_range: np.array) -> np.array:
@@ -2170,7 +2202,7 @@ def symmetry_abstract_synthesis_helper_old(local_abstract_states_to_explore,
                         reachable_target_region = get_poly_union(reachable_target_region, reg)
                         if abstract_state_ind in inverse_abstract_transitions:
                             for parent_abstract_state_ind, parent_u_ind in inverse_abstract_transitions[
-                                abstract_state_ind]:
+                                    abstract_state_ind]:
                                 if parent_abstract_state_ind != abstract_state_ind \
                                         and parent_abstract_state_ind in abstract_states_to_explore:
                                     if parent_abstract_state_ind in target_parents:
@@ -2502,7 +2534,8 @@ def symmetry_abstract_synthesis_helper(local_abstract_states_to_explore,
             #    if abstract_state_ind in target_parents:
             #        del target_parents[abstract_state_ind]
             temp_controllable_abstract_states = list(temp_controllable_abstract_states)
-            candidate_initial_set_rect = None
+            # candidate_initial_set_rect = None
+            rects = []
             for abstract_state_ind in temp_controllable_abstract_states:
                 print("The abstract symbol ", abstract_state_ind,
                       " is controllable using path_ind ", controller[abstract_state_ind])
@@ -2515,13 +2548,24 @@ def symmetry_abstract_synthesis_helper(local_abstract_states_to_explore,
                                                         X_low),
                                              np.minimum(np.add(s_rect[1, :], per_dim_max_travelled_distance),
                                                         X_up)])
-                    if candidate_initial_set_rect is None:
-                        candidate_initial_set_rect = bloated_rect
-                    else:
-                        candidate_initial_set_rect = get_convex_union([bloated_rect, candidate_initial_set_rect])
+                    temp_rects = [bloated_rect]
+                    for obstacle_rect in obstacles_rects:
+                        per_obstacle_temp_rects = []
+                        for temp_rect in temp_rects:
+                            per_obstacle_temp_rects.extend(subtract_rectangles(temp_rect, obstacle_rect))
+                        temp_rects = copy.deepcopy(per_obstacle_temp_rects)
+                    rects.extend(temp_rects)
+                    # if candidate_initial_set_rect is None:
+                    #    candidate_initial_set_rect = bloated_rect
+                    # else:
+                    # candidate_initial_set_rect = get_convex_union([bloated_rect, candidate_initial_set_rect])
                     controllable_concrete_states.add(concrete_initial_set_index)
-            concrete_states_to_explore = rect_to_indices(candidate_initial_set_rect, symbol_step, X_low,
-                                                         sym_x[0, :], over_approximate=True)
+
+            concrete_states_to_explore = set()
+            for neighborhood_rect in rects:
+                concrete_states_to_explore = concrete_states_to_explore.union(
+                    rect_to_indices(neighborhood_rect, symbol_step, X_low,
+                                    sym_x[0, :], over_approximate=True))
             # concrete_states_to_explore = np.setdiff1d(np.array(concrete_states_to_explore),
             #                                          list(controllable_concrete_states))
             # concrete_states_to_explore = np.setdiff1d(np.array(concrete_states_to_explore),
@@ -3061,24 +3105,24 @@ def abstract_synthesis(reachability_abstraction_level, Symbolic_reduced, sym_x, 
         controller, controllable_abstract_states_temp, unsafe_abstract_states, local_abstract_states_to_explore, \
             abstract_states_to_explore, reachable_rect_global_cntr, \
             target_parents, refinement_candidates, target_rtree_idx = symmetry_abstract_synthesis_helper(
-            local_abstract_states_to_explore,
-            concrete_states_to_explore,  # abstract_states_to_explore,
-            abstract_to_concrete,
-            concrete_to_abstract,
-            Symbolic_reduced,
-            abstract_paths,
-            symmetry_abstract_states, target_parents,
-            refinement_candidates,
-            controllable_abstract_states,
-            reachable_target_region,
-            abstract_transitions,
-            inverse_abstract_transitions,
-            concrete_transitions,
-            controller, reachability_rtree_idx3d,
-            reachable_rect_global_cntr,
-            sym_x, symbol_step,
-            obstacles_rects, obstacle_indices, targets_rects, target_indices, extended_target_rtree_idx3d,
-            target_rtree_idx, cur_solver, var_dict, state_to_paths_ind, per_dim_max_travelled_distance, X_low, X_up)
+                local_abstract_states_to_explore,
+                concrete_states_to_explore,  # abstract_states_to_explore,
+                abstract_to_concrete,
+                concrete_to_abstract,
+                Symbolic_reduced,
+                abstract_paths,
+                symmetry_abstract_states, target_parents,
+                refinement_candidates,
+                controllable_abstract_states,
+                reachable_target_region,
+                abstract_transitions,
+                inverse_abstract_transitions,
+                concrete_transitions,
+                controller, reachability_rtree_idx3d,
+                reachable_rect_global_cntr,
+                sym_x, symbol_step,
+                obstacles_rects, obstacle_indices, targets_rects, target_indices, extended_target_rtree_idx3d,
+                target_rtree_idx, cur_solver, var_dict, state_to_paths_ind, per_dim_max_travelled_distance, X_low, X_up)
         '''
             symmetry_abstract_synthesis_helper(local_abstract_states_to_explore,
                                                abstract_states_to_explore,
