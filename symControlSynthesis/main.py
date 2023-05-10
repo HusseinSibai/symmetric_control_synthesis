@@ -61,14 +61,23 @@ Obstacle_up = np.array([[2.5, 3, 100], [5.5, 9.5, 100], [0, 9.5, 100], [13, 0, 1
 Obstacle_low = np.array([[2, -3, -100], [5, 3.5, -100], [-3, -3, -100], [-3, -3, -100],
                          [-3, 6.5, -100], [10, -3, -100]])
 
-sym_x = 20 * np.ones((1, n_x))
-sym_x[0, 2] = 30
+sym_x = 25 * np.ones((1, n_x))
+sym_x[0, 2] = 25
 
 sym_u = 9 * np.ones((1, n_u))
 
 time_step = np.linspace(0, 3, 3).reshape((1, 3))  # np.array([0,0.5,1,2,3]) #
 
-state_dimensions = np.zeros((1, n_x))
+reachability_abstraction_level = 2
+# 0 compute all reachable sets,
+# 1 compute all reachable sets for different angles (use only translation symmetry)
+# 2 compute a single reachable set by using translation and rotation symmetry.
+
+if reachability_abstraction_level == 2:
+    state_dimensions = np.zeros((1, n_x))
+#   elif reachability_abstraction_level == 1:
+#    state_dimensions = np.zeros((1, n_x))
+#    state_dimensions[2] = 1
 
 # Update specifications with error bounds
 
@@ -120,6 +129,13 @@ Symbolic_reduced, U_discrete, unsafe_trans = eng.Centralized_abstraction(X_low_m
                                                                          OA_method, nargout=3)
 
 Symbolic_reduced = np.array(Symbolic_reduced)
+# Symbolic_reduced_, U_discrete_, unsafe_trans_ = eng.Centralized_abstraction(X_low_matlab, X_up_matlab, sym_x_matlab,
+#                                                                         U_low_matlab, U_up_matlab,
+#                                                                         sym_u_matlab, W_low_matlab, W_up_matlab,
+#                                                                         time_step_matlab, state_dimensions_matlab,
+#                                                                         OA_method, nargout=3)
+
+# Symbolic_reduced = np.array(Symbolic_reduced)
 U_discrete = np.array(U_discrete)
 print("Symbolic_reduced: ", Symbolic_reduced)
 print("U_discrete: ", U_discrete)
@@ -178,7 +194,7 @@ U_discrete = np.array(U_discrete)
 
 N = 30
 M = 5
-abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low,
+abstract_synthesis(reachability_abstraction_level, Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low,
                    Target_up, Obstacle_low, Obstacle_up, X_low, X_up)
 # abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Target_up,
 #                   Obstacle_low, Obstacle_up, X_low, X_up)
