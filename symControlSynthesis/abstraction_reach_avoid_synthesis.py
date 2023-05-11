@@ -2429,11 +2429,11 @@ def symmetry_abstract_synthesis_helper(local_abstract_states_to_explore,
                         # else:
                         reach_res, new_path_ind, abstract_transitions, \
                             inverse_abstract_transitions = successor_in_or_intersects_target_smt(
-                            rect, 0, path_ind, abstract_paths,
-                            state_to_paths_ind, cur_solver, var_dict,
-                            abstract_transitions, inverse_abstract_transitions,
-                            reachability_rtree_idx3d,
-                            extended_target_rtree_idx3d, n)
+                                rect, 0, path_ind, abstract_paths,
+                                state_to_paths_ind, cur_solver, var_dict,
+                                abstract_transitions, inverse_abstract_transitions,
+                                reachability_rtree_idx3d,
+                                extended_target_rtree_idx3d, n)
                         '''
                             successor_in_or_intersects_target_smt(
                             rect, 0, u_ind, abstract_paths,
