@@ -2039,6 +2039,7 @@ def successor_in_or_intersects_target_smt(concrete_initial_set, s_ind, path_ind,
         cur_solver = add_rects_to_solver(hits_rects, var_dict, cur_solver)
         uncovered_state = do_rects_list_contain_smt(reachable_set[-1], var_dict, cur_solver)
         if uncovered_state is None:
+            '''
             new_abstract_path = copy.deepcopy(abstract_paths[path_ind])
             t_ind = 1  # the zero index is the origin and when transformed to the concrete coordinates
             # would lead to the last poly in abstract_paths[path_ind]
@@ -2054,15 +2055,15 @@ def successor_in_or_intersects_target_smt(concrete_initial_set, s_ind, path_ind,
                         concrete_reachable_poly_t_ind = transform_poly_to_frames(abstract_paths[path_ind][-1],
                                                                                  hits_rects[hit_ind][0, :],
                                                                                  hits_rects[hit_ind][1, :])
-                        '''
-                        abstract_reachable_rect = np.column_stack(
-                            pc.bounding_box(abstract_paths[hit_path_ind][t_ind])).T
+
+                        # abstract_reachable_rect = np.column_stack(
+                        #    pc.bounding_box(abstract_paths[hit_path_ind][t_ind])).T
                         
-                        hit_concrete_reachable_rect = transform_to_frames(abstract_reachable_rect[0, :],
-                                                                          abstract_reachable_rect[1, :],
-                                                                          hits_rects[hit_ind][0, :],
-                                                                          hits_rects[hit_ind][1, :])
-                        '''
+                        # hit_concrete_reachable_rect = transform_to_frames(abstract_reachable_rect[0, :],
+                        #                                                  abstract_reachable_rect[1, :],
+                        #                                                  hits_rects[hit_ind][0, :],
+                        #                                                  hits_rects[hit_ind][1, :])
+                        
                         if concrete_reachable_poly_t_ind_total is None:
                             concrete_reachable_poly_t_ind_total = concrete_reachable_poly_t_ind
                         else:
@@ -2088,7 +2089,8 @@ def successor_in_or_intersects_target_smt(concrete_initial_set, s_ind, path_ind,
                                                 obj=new_path_ind)  # obj should be the control associated with
                 # path_ind instead
             else:
-                new_path_ind = path_ind
+            '''
+            new_path_ind = path_ind
             return 2, new_path_ind, abstract_transitions, inverse_abstract_transitions
         return 1, new_path_ind, abstract_transitions, inverse_abstract_transitions
     return 0, new_path_ind, abstract_transitions, inverse_abstract_transitions
