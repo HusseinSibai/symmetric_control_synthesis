@@ -1787,6 +1787,26 @@ def plot_abstract_states(symmetry_abstract_states, deleted_abstract_states,
         plt.cla()
         plt.close()
 
+    plt.figure("Abstract reachable sets after synthesis")
+    color = 'orange'
+    currentAxis_2 = plt.gca()
+    for path_ind in range(len(abstract_paths)):
+        for ind, region in enumerate(abstract_paths[path_ind]):
+            if ind > 0:
+                if isinstance(region, pc.Region):
+                    poly_list = region.list_poly
+                else:
+                    poly_list = [region]
+                for poly in poly_list:
+                    points = pc.extreme(poly)
+                    points = points[:, :2]
+                    hull = ConvexHull(points)
+                    poly_patch = Polygon(points[hull.vertices, :], alpha=.5, color=color, fill=True)
+                    currentAxis_2.add_patch(poly_patch)
+    plt.ylim([-3, 3])
+    plt.xlim([-3, 3])
+    plt.savefig("Abstract reachable sets after synthesis")
+
 
 def plot_concrete_states(controllable_concrete_states, targets_rects, obstacles_rects,
                          state_to_paths_ind, sym_x, symbol_step, X_low, X_up):
@@ -1795,23 +1815,21 @@ def plot_concrete_states(controllable_concrete_states, targets_rects, obstacles_
     reach_color = 'b'
     plt.figure("Controllable states")
     currentAxis = plt.gca()
-    for idx in controllable_concrete_states:  # enumerate(symmetry_abstract_states)
-        # print("Plotting abstract state: ", idx)
-        for rect in obstacles_rects:
-            rect_patch = Rectangle((rect[0, 0], rect[0, 1]), rect[1, 0] - rect[0, 0], rect[1, 1] - rect[0, 1],
-                                   alpha=.5, color=obstacle_color, fill=True)
-            currentAxis.add_patch(rect_patch)
+    for rect in obstacles_rects:
+        rect_patch = Rectangle((rect[0, 0], rect[0, 1]), rect[1, 0] - rect[0, 0], rect[1, 1] - rect[0, 1],
+                               alpha=.5, color=obstacle_color, fill=True)
+        currentAxis.add_patch(rect_patch)
 
-        for rect in targets_rects:
-            rect_patch = Rectangle((rect[0, 0], rect[0, 1]), rect[1, 0] - rect[0, 0], rect[1, 1] - rect[0, 1],
-                                   alpha=.5, color=target_color, fill=True)
-            currentAxis.add_patch(rect_patch)
+    for rect in targets_rects:
+        rect_patch = Rectangle((rect[0, 0], rect[0, 1]), rect[1, 0] - rect[0, 0], rect[1, 1] - rect[0, 1],
+                               alpha=.5, color=target_color, fill=True)
+        currentAxis.add_patch(rect_patch)
 
-        for concrete_state_ind in controllable_concrete_states:  # equivalent to it being controllable
-            rect = concrete_index_to_rect(concrete_state_ind, sym_x, symbol_step, X_low, X_up)
-            rect_patch = Rectangle((rect[0, 0], rect[0, 1]), rect[1, 0] - rect[0, 0], rect[1, 1] - rect[0, 1],
-                                   alpha=.5, color=reach_color, fill=True)
-            currentAxis.add_patch(rect_patch)
+    for concrete_state_ind in controllable_concrete_states:  # equivalent to it being controllable
+        rect = concrete_index_to_rect(concrete_state_ind, sym_x, symbol_step, X_low, X_up)
+        rect_patch = Rectangle((rect[0, 0], rect[0, 1]), rect[1, 0] - rect[0, 0], rect[1, 1] - rect[0, 1],
+                               alpha=.5, color=reach_color, fill=True)
+        currentAxis.add_patch(rect_patch)
     plt.ylim([X_low[1] - 1, X_up[1] + 1])
     plt.xlim([X_low[0] - 1, X_up[0] + 1])
     plt.savefig("Controllable concrete space")
@@ -2034,6 +2052,10 @@ def successor_in_or_intersects_target_smt(concrete_initial_set, s_ind, path_ind,
     inter_num = len(hits)
     new_path_ind = path_ind
     if inter_num > 0:
+        # hits_rects = []
+        # for hit in hits:
+        #    rect_tuple = hit.object
+        #    hits_rects.append(np.array([np.asarray(rect_tuple)[0][:], np.asarray(rect_tuple)[1][:]]))
         hits_rects = np.array([np.array([hit.bbox[:n], hit.bbox[n:]]) for hit in hits])
         cur_solver.reset()
         cur_solver = add_rects_to_solver(hits_rects, var_dict, cur_solver)
@@ -2058,12 +2080,12 @@ def successor_in_or_intersects_target_smt(concrete_initial_set, s_ind, path_ind,
 
                         # abstract_reachable_rect = np.column_stack(
                         #    pc.bounding_box(abstract_paths[hit_path_ind][t_ind])).T
-                        
+
                         # hit_concrete_reachable_rect = transform_to_frames(abstract_reachable_rect[0, :],
                         #                                                  abstract_reachable_rect[1, :],
                         #                                                  hits_rects[hit_ind][0, :],
                         #                                                  hits_rects[hit_ind][1, :])
-                        
+
                         if concrete_reachable_poly_t_ind_total is None:
                             concrete_reachable_poly_t_ind_total = concrete_reachable_poly_t_ind
                         else:
@@ -2204,7 +2226,7 @@ def symmetry_abstract_synthesis_helper_old(local_abstract_states_to_explore,
                         reachable_target_region = get_poly_union(reachable_target_region, reg)
                         if abstract_state_ind in inverse_abstract_transitions:
                             for parent_abstract_state_ind, parent_u_ind in inverse_abstract_transitions[
-                                    abstract_state_ind]:
+                                abstract_state_ind]:
                                 if parent_abstract_state_ind != abstract_state_ind \
                                         and parent_abstract_state_ind in abstract_states_to_explore:
                                     if parent_abstract_state_ind in target_parents:
@@ -2339,14 +2361,25 @@ def symmetry_abstract_synthesis_helper(local_abstract_states_to_explore,
             rect: np.array = concrete_index_to_rect(concrete_state_ind,
                                                     sym_x, symbol_step,
                                                     X_low, X_up)
-            # the nearest is in euclidean distance which might be the problem
-            hits = list(extended_target_rtree_idx3d.nearest(
-                (rect[0, 0], rect[0, 1], rect[0, 2], rect[1, 0], rect[1, 1], rect[1, 2]),
-                num_results=num_nearest_targets_to_consider, objects=True))
+            rect_center = np.average(rect, axis=0)
+            original_angle_interval = [rect[0, 2], rect[1, 2]]
+            decomposed_angle_intervals = get_decomposed_angle_intervals(original_angle_interval)
+            hits = []
+            for interval in decomposed_angle_intervals:
+                # change this to nearest to the under approximation of the target, much faster
+                # num_results=3,
+                interval_center = (interval[0] + interval[1]) / 2
+                # the nearest is in euclidean distance which might be the problem
+                hits.extend(list(extended_target_rtree_idx3d.nearest(
+                    (rect_center[0], rect_center[1], interval_center,
+                     rect_center[0] + 0.001, rect_center[1] + 0.001, interval_center + 0.001),
+                    num_results=num_nearest_targets_to_consider, objects=True)))
             # symmetry_abstract_states[abstract_state_ind].set_of_abstract_target_directions = []
             reach_hits = []
             for idx, hit in enumerate(hits):
+                # rect_tuple = hit.object
                 concrete_target_rect: np.array = np.array([hit.bbox[:n], hit.bbox[n:]])
+                # np.array([np.asarray(rect_tuple)[0][:], np.asarray(rect_tuple)[1][:]])
                 # concrete_index_to_rect(concrete_target_index, sym_x,
                 #                                                    symbol_step, X_low, X_up)
                 # abstract_target_direction_rect = \
@@ -2364,7 +2397,7 @@ def symmetry_abstract_synthesis_helper(local_abstract_states_to_explore,
                 # hits = []
                 # for target_rect in symmetry_abstract_states[abstract_state_ind].set_of_abstract_target_directions:
                 original_angle_interval = [target_rect[0, 2], target_rect[1, 2]]
-                target_rect_center = np.average(target_rect, axis=1)
+                target_rect_center = np.average(target_rect, axis=0)
                 decomposed_angle_intervals = get_decomposed_angle_intervals(original_angle_interval)
                 for interval in decomposed_angle_intervals:
                     # change this to nearest to the under approximation of the target, much faster
@@ -2450,9 +2483,10 @@ def symmetry_abstract_synthesis_helper(local_abstract_states_to_explore,
                             #    np.unravel_index(concrete_state_idx, tuple((sym_x[0, :]).astype(int))))
                             # s_rect: np.array = np.row_stack((s_subscript * symbol_step + X_low,
                             #                                 s_subscript * symbol_step + symbol_step + X_low))
-                            extended_target_rtree_idx3d.insert(concrete_state_ind, (
-                                rect[0, 0], rect[0, 1], rect[0, 2],
-                                rect[1, 0], rect[1, 1], rect[1, 2]))
+                            extended_target_rtree_idx3d.insert(concrete_state_ind,
+                                                               (rect[0, 0], rect[0, 1], rect[0, 2],
+                                                                rect[1, 0], rect[1, 1], rect[1, 2]))
+                            # ,                            obj=tuple(map(tuple, rect)))
                             state_to_paths_ind[concrete_state_ind] = new_path_ind
                             # cur_solver = add_rects_to_solver(np.array([s_rect]), var_dict, cur_solver)
                             target_rtree_idx += 1
@@ -3035,6 +3069,12 @@ def abstract_synthesis(reachability_abstraction_level, Symbolic_reduced, sym_x, 
             target[0, 0], target[0, 1],
             target[0, 2], target[1, 0],
             target[1, 1], target[1, 2]))
+        # rect_center = np.average(target, axis=0)
+        # extended_target_rtree_idx3d.insert(-1,
+        #                                   (rect_center[0], rect_center[1], rect_center[2],
+        #                                    rect_center[0] + 0.001, rect_center[1] + 0.001,
+        #                                    rect_center[2] + 0.001),
+        #                                   obj=tuple(map(tuple, target)))
     # cur_solver = add_rects_to_solver(np.array(targets_rects), var_dict, cur_solver)
 
     abstract_paths, reachable_rect_global_cntr, intersection_radius_threshold, per_dim_max_travelled_distance, \
@@ -3107,24 +3147,24 @@ def abstract_synthesis(reachability_abstraction_level, Symbolic_reduced, sym_x, 
         controller, controllable_abstract_states_temp, unsafe_abstract_states, local_abstract_states_to_explore, \
             abstract_states_to_explore, reachable_rect_global_cntr, \
             target_parents, refinement_candidates, target_rtree_idx = symmetry_abstract_synthesis_helper(
-                local_abstract_states_to_explore,
-                concrete_states_to_explore,  # abstract_states_to_explore,
-                abstract_to_concrete,
-                concrete_to_abstract,
-                Symbolic_reduced,
-                abstract_paths,
-                symmetry_abstract_states, target_parents,
-                refinement_candidates,
-                controllable_abstract_states,
-                reachable_target_region,
-                abstract_transitions,
-                inverse_abstract_transitions,
-                concrete_transitions,
-                controller, reachability_rtree_idx3d,
-                reachable_rect_global_cntr,
-                sym_x, symbol_step,
-                obstacles_rects, obstacle_indices, targets_rects, target_indices, extended_target_rtree_idx3d,
-                target_rtree_idx, cur_solver, var_dict, state_to_paths_ind, per_dim_max_travelled_distance, X_low, X_up)
+            local_abstract_states_to_explore,
+            concrete_states_to_explore,  # abstract_states_to_explore,
+            abstract_to_concrete,
+            concrete_to_abstract,
+            Symbolic_reduced,
+            abstract_paths,
+            symmetry_abstract_states, target_parents,
+            refinement_candidates,
+            controllable_abstract_states,
+            reachable_target_region,
+            abstract_transitions,
+            inverse_abstract_transitions,
+            concrete_transitions,
+            controller, reachability_rtree_idx3d,
+            reachable_rect_global_cntr,
+            sym_x, symbol_step,
+            obstacles_rects, obstacle_indices, targets_rects, target_indices, extended_target_rtree_idx3d,
+            target_rtree_idx, cur_solver, var_dict, state_to_paths_ind, per_dim_max_travelled_distance, X_low, X_up)
         '''
             symmetry_abstract_synthesis_helper(local_abstract_states_to_explore,
                                                abstract_states_to_explore,
