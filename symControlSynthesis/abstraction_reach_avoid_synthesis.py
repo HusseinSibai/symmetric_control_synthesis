@@ -14,6 +14,7 @@ import copy
 import os
 import itertools
 from scipy.spatial import ConvexHull
+import matlab.engine
 
 import matplotlib
 
@@ -2018,7 +2019,7 @@ def successor_in_or_intersects_target_smt(concrete_initial_set, s_ind, path_ind,
                                           state_to_paths_ind, cur_solver, var_dict,
                                           abstract_transitions, inverse_abstract_transitions,
                                           reachability_rtree_idx3d,
-                                          extended_target_rtree_idx3d, n):
+                                          extended_target_rtree_idx3d, n, eng, time_step, W_low, W_up, U_discrete):
     '''
     reachable_set = [transform_to_frames(Symbolic_reduced[s_ind, u_ind, np.arange(n), -1],
                                          Symbolic_reduced[
@@ -2042,7 +2043,14 @@ def successor_in_or_intersects_target_smt(concrete_initial_set, s_ind, path_ind,
                                          concrete_initial_set[0, :],
                                          concrete_initial_set[1, :])]
     '''
-    reachable_set = [np.column_stack(pc.bounding_box(concrete_reachable_poly)).T]
+    symmetry_based_reachable_set = [np.column_stack(pc.bounding_box(concrete_reachable_poly)).T]
+    rect_low = concrete_initial_set[0, :].reshape((1, 3)).T
+    rect_up = concrete_initial_set[1, :].reshape((1, 3)).T
+    u = U_discrete[:, path_ind].reshape((1, 3)).T
+    reachtube = compute_reachable_set_tira(eng, time_step, rect_low, rect_up, u, W_low, W_up)
+    reachable_set = [reachtube[-1]]
+    # print("Reachable set using symmetry is ", symmetry_based_reachable_set,
+    #      " while reachable set using TIRA is ", reachable_set, " starting from ", concrete_initial_set)
     hits = list(
         extended_target_rtree_idx3d.intersection(
             (reachable_set[-1][0, 0], reachable_set[-1][0, 1], reachable_set[-1][0, 2],
@@ -2325,14 +2333,14 @@ def symmetry_abstract_synthesis_helper(local_abstract_states_to_explore,
                                        targets_rects, target_indices, extended_target_rtree_idx3d, target_rtree_idx,
                                        cur_solver, var_dict,
                                        state_to_paths_ind, per_dim_max_travelled_distance,
-                                       X_low, X_up):
+                                       X_low, X_up, eng, time_step, W_low, W_up, U_discrete):
     t_start = time.time()
     num_controllable_states = len(global_controllable_abstract_states)
     controllable_abstract_states = set()
     controllable_concrete_states = set()
     unsafe_abstract_states = []
     num_nearest_targets_to_consider = 1
-    num_nearest_reachsets_to_consider = 5
+    num_nearest_reachsets_to_consider = 50
     # newly_added_rects_lower_bound = 0
     # temp_controller = {}
     abstraction_level = 1
@@ -2464,11 +2472,11 @@ def symmetry_abstract_synthesis_helper(local_abstract_states_to_explore,
                         # else:
                         reach_res, new_path_ind, abstract_transitions, \
                             inverse_abstract_transitions = successor_in_or_intersects_target_smt(
-                                rect, 0, path_ind, abstract_paths,
-                                state_to_paths_ind, cur_solver, var_dict,
-                                abstract_transitions, inverse_abstract_transitions,
-                                reachability_rtree_idx3d,
-                                extended_target_rtree_idx3d, n)
+                            rect, 0, path_ind, abstract_paths,
+                            state_to_paths_ind, cur_solver, var_dict,
+                            abstract_transitions, inverse_abstract_transitions,
+                            reachability_rtree_idx3d,
+                            extended_target_rtree_idx3d, n, eng, time_step, W_low, W_up, U_discrete)
                         '''
                             successor_in_or_intersects_target_smt(
                             rect, 0, u_ind, abstract_paths,
@@ -3027,9 +3035,53 @@ def abstract_synthesis_old(Symbolic_reduced, sym_x, sym_u, state_dimensions, Tar
     plot_abstract_states(symmetry_abstract_states, deleted_abstract_states)
 
 
-def abstract_synthesis(reachability_abstraction_level, Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low,
-                       Target_up,
-                       Obstacle_low, Obstacle_up, X_low, X_up):
+def compute_reachable_set_tira(eng, time_step, rect_low, rect_up, u, W_low, W_up):
+    rect_low_matlab = matlab.double(rect_low.tolist())
+    rect_up_matlab = matlab.double(rect_up.tolist())
+    input_low = np.concatenate((u, W_low), axis=0)
+    input_up = np.concatenate((u, W_up), axis=0)
+    J_x_low, J_x_up, J_p_low, J_p_up = eng.UP_Jacobian_Bounds(0.0, 3.0, rect_low_matlab, rect_up_matlab,
+                                                              input_low, input_up, nargout=4)
+    time_step_matlab = matlab.double(time_step.tolist())
+    succ_low, succ_up = eng.OA_3_CT_Mixed_Monotonicity2_full_reach(time_step_matlab, rect_low_matlab, rect_up_matlab,
+                                                                   input_low, input_up,
+                                                                   J_x_low, J_x_up, J_p_low, J_p_up,
+                                                                   nargout=2)
+    succ_low = np.array(succ_low).T
+    succ_up = np.array(succ_up).T
+    reachtube = []
+    for idx in range(succ_low.shape[0]):
+        reachtube.append(np.array([succ_low[idx, :], succ_up[idx, :]]))
+    return reachtube  # np.concatenate((succ_low, succ_up), axis=0)
+
+
+'''
+eng = matlab.engine.start_matlab()
+eng.addpath(r'/Users/husseinsibai/Downloads/IFAC20_ship_matlab')
+eng.addpath(
+    r'/Users/husseinsibai/Downloads/IFAC20_ship_matlab/TIRA:/Users/husseinsibai/Downloads/IFAC20_ship_matlab/TIRA/Input_files'
+    r':/Users/husseinsibai/Downloads/IFAC20_ship_matlab/TIRA/OA_methods:/Users/husseinsibai/Downloads'
+    r'/IFAC20_ship_matlab/TIRA'
+    r'/SDMM_hybrid:/Users/husseinsibai/Downloads/IFAC20_ship_matlab/TIRA/Utilities:')
+
+rect_up = np.array([0.5, 0.5, 0.1]).reshape((1, 3)).T
+rect_low = np.array([0, 0, 0]).reshape((1, 3)).T
+U_up = np.array([0.18, 0.05, 0.1]).reshape((1, 3)).T
+U_low = np.array([-0.18, -0.05, -0.1]).reshape((1, 3)).T
+u = np.array([0.1, 0.1, 0.1]).reshape((1, 3)).T
+W_up = np.array([0.01, 0.01, 0.01]).reshape((1, 3)).T
+W_low = -W_up
+time_step = np.linspace(0, 3, 3).reshape((1, 3))
+print("time_step[-1]: ", time_step[-1])
+result = compute_reachable_set_tira(eng, time_step, rect_low, rect_up, u, W_low, W_up)
+print("result:", result)
+print("result[0][0,:]:", result[0][0, :])
+'''
+
+
+def abstract_synthesis(reachability_abstraction_level, U_discrete, time_step, W_low, W_up,
+                       Symbolic_reduced, sym_x, sym_u, state_dimensions,
+                       Target_low, Target_up, Obstacle_low, Obstacle_up, X_low, X_up, eng):
     t_start = time.time()
     n = state_dimensions.shape[1]
     reachable_target_region = pc.Region(list_poly=[])
@@ -3142,6 +3194,9 @@ def abstract_synthesis(reachability_abstraction_level, Symbolic_reduced, sym_x, 
     continuous_failure_counter = 0
     potential_new_target_parents = False
     deleted_abstract_states = []
+    W_up = W_up.reshape((1, 3)).T
+    W_low = W_low.reshape((1, 3)).T
+    time_step = time_step.reshape((1, 3))
     while refinement_itr < max_num_refinement_steps:
         temp_t_synthesis = time.time()
         controller, controllable_abstract_states_temp, unsafe_abstract_states, local_abstract_states_to_explore, \
@@ -3164,7 +3219,8 @@ def abstract_synthesis(reachability_abstraction_level, Symbolic_reduced, sym_x, 
             reachable_rect_global_cntr,
             sym_x, symbol_step,
             obstacles_rects, obstacle_indices, targets_rects, target_indices, extended_target_rtree_idx3d,
-            target_rtree_idx, cur_solver, var_dict, state_to_paths_ind, per_dim_max_travelled_distance, X_low, X_up)
+            target_rtree_idx, cur_solver, var_dict, state_to_paths_ind, per_dim_max_travelled_distance, X_low, X_up,
+            eng, time_step, W_low, W_up, U_discrete)
         '''
             symmetry_abstract_synthesis_helper(local_abstract_states_to_explore,
                                                abstract_states_to_explore,

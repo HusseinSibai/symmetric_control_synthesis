@@ -139,6 +139,7 @@ Symbolic_reduced = np.array(Symbolic_reduced)
 U_discrete = np.array(U_discrete)
 print("Symbolic_reduced: ", Symbolic_reduced)
 print("U_discrete: ", U_discrete)
+print("U_discrete shape: ", U_discrete.shape)
 print("unsafe_trans: ", unsafe_trans)
 # X_low = np.transpose(X_low);
 # X_up = np.transpose(X_up);
@@ -194,8 +195,9 @@ U_discrete = np.array(U_discrete)
 
 N = 30
 M = 5
-abstract_synthesis(reachability_abstraction_level, Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low,
-                   Target_up, Obstacle_low, Obstacle_up, X_low, X_up)
+abstract_synthesis(reachability_abstraction_level, U_discrete, time_step, W_low, W_up,
+                   Symbolic_reduced, sym_x, sym_u, state_dimensions,
+                   Target_low, Target_up, Obstacle_low, Obstacle_up, X_low, X_up, eng)
 # abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Target_up,
 #                   Obstacle_low, Obstacle_up, X_low, X_up)
 # synthesize(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Target_up,
