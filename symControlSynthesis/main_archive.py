@@ -10,7 +10,7 @@ matplotlib.use("macOSX")
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle, Polygon
 
-from new_abstraction_based_synthesis import abstract_synthesis
+from abstraction_reach_avoid_synthesis import abstract_synthesis
 
 # , abstract_synthesis, synthesize,
 # from Reach_avoid_synthesis_sets import reach_avoid_synthesis_sets
@@ -195,7 +195,7 @@ U_discrete = np.array(U_discrete)
 
 N = 30
 M = 5
-abstract_synthesis(U_discrete, time_step, W_low, W_up,
+abstract_synthesis(reachability_abstraction_level, U_discrete, time_step, W_low, W_up,
                    Symbolic_reduced, sym_x, sym_u, state_dimensions,
                    Target_low, Target_up, Obstacle_low, Obstacle_up, X_low, X_up, eng)
 # abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Target_up,
