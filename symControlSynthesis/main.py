@@ -2,7 +2,8 @@ import matlab.engine
 import numpy as np
 import time
 import math
-# from plot import plot
+import os
+import pwd
 
 import matplotlib
 
@@ -11,6 +12,8 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle, Polygon
 
 from new_abstraction_based_synthesis import abstract_synthesis
+
+username = pwd.getpwuid(os.getuid())[0]
 
 # , abstract_synthesis, synthesize,
 # from Reach_avoid_synthesis_sets import reach_avoid_synthesis_sets
@@ -105,11 +108,14 @@ eng.addpath(
     r':/Users/husseinsibai/Downloads/IFAC20_ship_matlab/TIRA/OA_methods:/Users/husseinsibai/Downloads/IFAC20_ship_matlab/TIRA'
     r'/SDMM_hybrid:/Users/husseinsibai/Downloads/IFAC20_ship_matlab/TIRA/Utilities:')
 '''
-eng.addpath(r'/Users/sachahuriot/Downloads/IFAC20_ship_matlab')
+eng.addpath(r'/Users/' + username + r'/Downloads/IFAC20_ship_matlab')
 eng.addpath(
-    r'/Users/sachahuriot/Downloads/IFAC20_ship_matlab/TIRA:/Users/sachahuriot/Downloads/IFAC20_ship_matlab/TIRA/Input_files'
-    r':/Users/sachahuriot/Downloads/IFAC20_ship_matlab/TIRA/OA_methods:/Users/sachahuriot/Downloads/IFAC20_ship_matlab/TIRA'
-    r'/SDMM_hybrid:/Users/sachahuriot/Downloads/IFAC20_ship_matlab/TIRA/Utilities:')
+    r'/Users/' + username + r'/Downloads/IFAC20_ship_matlab/TIRA:/Users/' + username + r'/Downloads/IFAC20_ship_matlab/TIRA/Input_files'
+    r':/Users/' + username + r'/Downloads/IFAC20_ship_matlab/TIRA/OA_methods:/Users/' + username + r'/Downloads/IFAC20_ship_matlab/TIRA'
+    r'/SDMM_hybrid:/Users/' + username + r'/Downloads/IFAC20_ship_matlab/TIRA/Utilities:')
+
+print("Looking for IFAC20_ship_matlab in directory:")
+print(r'/Users/' + username + r'/Downloads')
 
 X_low_matlab = matlab.double(X_low.tolist())
 X_up_matlab = matlab.double(X_up.tolist())
