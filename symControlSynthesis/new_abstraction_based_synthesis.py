@@ -984,12 +984,17 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
     symmetry_abstract_states = []
     # abstract_states_to_rtree_ids = {}
     # rtree_ids_to_abstract_states = {}
-    target_parents = {}  # set()
+    
     u_idx_to_abstract_states_indices = {} # list of abstract states sharing same quantized target
 
+    obstacle_state = AbstractState(0, None, None, [], [], set())
+    symmetry_abstract_states.append(obstacle_state)
+    abstract_to_concrete[0] = []
 
-    next_abstract_state_id = 0
+    next_abstract_state_id = 1
     threshold_num_results = 200
+
+
 
     for s in symbols_to_explore:
         s_subscript = np.array(np.unravel_index(s, tuple((sym_x[0, :]).astype(int))))
@@ -1006,7 +1011,7 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
         abstract_targets_polys_over_approx = []
         abstract_targets_rects_over_approx = []
         abstract_pos_targets_polys = []
-        empty_abstract_target = False
+
         for target_idx, target_poly in enumerate(targets):
             abstract_target_poly = transform_poly_to_abstract_frames(target_poly, s_rect, over_approximate=False)
             abstract_pos_target_poly = transform_poly_to_abstract_frames(target_poly, s_rect, over_approximate=False,
@@ -1095,7 +1100,7 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
                                                        hit.object,
                                                        copy.deepcopy(symmetry_transformed_targets_and_obstacles[s].abstract_obstacles),
                                                        [s],
-                                                       set(is_obstructed_u_idx))
+                                                       set([k for k, v in is_obstructed_u_idx.items() if v == True]))
                             symmetry_abstract_states.append(new_abstract_state)
                             concrete_to_abstract[s] = next_abstract_state_id
                             u_idx_to_abstract_states_indices[hit.object] = [next_abstract_state_id]
@@ -1106,7 +1111,8 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
                         else:
                             if len(u_idx_to_abstract_states_indices[hit.object]):
                                 add_concrete_state_to_symmetry_abstract_state(s, u_idx_to_abstract_states_indices[hit.object][0],
-                                                                        symmetry_transformed_targets_and_obstacles[s], symmetry_abstract_states, concrete_to_abstract, abstract_to_concrete, is_obstructed_u_idx)
+                                    symmetry_transformed_targets_and_obstacles[s].abstract_obstacles, symmetry_abstract_states,
+                                    concrete_to_abstract, abstract_to_concrete, is_obstructed_u_idx)
                                 added_to_existing_state = True
                                 break
                             else:
@@ -1120,8 +1126,8 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
             else:
                 curr_num_results *= 5
         if not added_to_existing_state:
-            # s is an obstacle state
-            pass
+            add_concrete_state_to_symmetry_abstract_state(s, 0, pc.Region(list_poly=[]),
+                symmetry_abstract_states, concrete_to_abstract, abstract_to_concrete, {})
                 
     print(['Done creation of symmetry abstract states in: ', time.time() - t_start, ' seconds'])
     print("concrete_to_abstract: ", len(concrete_to_abstract))
@@ -1129,17 +1135,17 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
     return symmetry_transformed_targets_and_obstacles, concrete_to_abstract, abstract_to_concrete, symmetry_abstract_states
 
 
-def add_concrete_state_to_symmetry_abstract_state(curr_concrete_state_idx, abstract_state_id,
-                                                  symmetry_transformed_targets_and_obstacles_curr,
+def add_concrete_state_to_symmetry_abstract_state(curr_concrete_state_idx, abstract_state_id, symmetry_transformed_obstacles_curr,
                                                   symmetry_abstract_states, concrete_to_abstract, abstract_to_concrete, is_obstructed_u_idx):
 
-    union_poly_obstacles = get_poly_union(symmetry_transformed_targets_and_obstacles_curr.abstract_obstacles,
+    union_poly_obstacles = get_poly_union(symmetry_transformed_obstacles_curr,
                                           symmetry_abstract_states[abstract_state_id].abstract_obstacles, check_convex=False)  # pc.union
     symmetry_abstract_states[abstract_state_id].abstract_obstacles = union_poly_obstacles
     symmetry_abstract_states[abstract_state_id].concrete_state_indices.append(curr_concrete_state_idx)
 
     # set union of symmetry_abstract_states[abstract_state_id].obstructed_idx and is_obstructed_u_idx
-    
+    symmetry_abstract_states[abstract_state_id].obstructed_u_idx = \
+        (symmetry_abstract_states[abstract_state_id].obstructed_u_idx).union(set([k for k, v in is_obstructed_u_idx.items() if v == True]))
 
     concrete_to_abstract[curr_concrete_state_idx] = abstract_state_id
     abstract_to_concrete[abstract_state_id].append(curr_concrete_state_idx)
@@ -1211,46 +1217,37 @@ def plot_abstract_states(symmetry_abstract_states, deleted_abstract_states,
     indices_to_plot = np.array(range(len(symmetry_abstract_states)))
     indices_to_plot = np.setdiff1d(indices_to_plot, np.array(deleted_abstract_states)).tolist()
     # indices_to_plot = state_to_paths_ind.keys()
-    for idx in indices_to_plot:  # enumerate(symmetry_abstract_states)
-        # print("Plotting abstract state: ", idx)
+    for idx in indices_to_plot:  # enumerate(symmetry_abstract_states) 
         abstract_state = symmetry_abstract_states[idx]
-        plt.figure("Abstract state: " + str(idx))
-        currentAxis = plt.gca()
-        abstract_obstacles = abstract_state.abstract_obstacles
-        # abstract_targets = abstract_state.abstract_targets
+        if abstract_state.id != 0:
+            plt.figure("Abstract state: " + str(idx))
+            currentAxis = plt.gca()
+            obstructed_u_indices = abstract_state.obstructed_u_idx
+            # abstract_targets = abstract_state.abstract_targets
 
-        # plot obstructed u_idx
-        for region in abstract_obstacles:
-            if isinstance(region, pc.Region):
-                poly_list = region.list_poly
-            else:
-                poly_list = [region]
-            for poly in poly_list:
-                points = pc.extreme(poly)
-                points = points[:, :2]
-                hull = ConvexHull(points)
-                poly_patch = Polygon(points[hull.vertices, :], alpha=.5, color=obstacle_color, fill=True)
-                currentAxis.add_patch(poly_patch)
-        '''
-        for region in abstract_targets:
-            if isinstance(region, pc.Region):
-                poly_list = region.list_poly
-            else:
-                poly_list = [region]
-            for poly in poly_list:
-                points = pc.extreme(poly)
-                points = points[:, :2]
-                hull = ConvexHull(points)
-                poly_patch = Polygon(points[hull.vertices, :], alpha=.5, color=target_color, fill=True)
-                currentAxis.add_patch(poly_patch)
-        '''        
-        point = abstract_state.quantized_abstract_target
-        poly_patch = Rectangle((point[0]-.05, point[1]-.05), .1, .1, alpha=.3, color=quantized_target_color)
-        currentAxis.add_patch(poly_patch)
+            # plot obstructed u_idx
+            for obs_u_idx in obstructed_u_indices:
+                for ind, region in enumerate(abstract_reachable_sets[obs_u_idx]):
+                    if ind > 0:
+                        if isinstance(region, pc.Region):
+                            poly_list = region.list_poly
+                        else:
+                            poly_list = [region]
+                        for poly in poly_list:
+                            points = pc.extreme(poly)
+                            points = points[:, :2]
+                            hull = ConvexHull(points)
+                            poly_patch = Polygon(points[hull.vertices, :], alpha=.5, color=obstacle_color, fill=True)
+                            currentAxis.add_patch(poly_patch)
+            
+            
+            point = abstract_state.quantized_abstract_target
+            poly_patch = Rectangle((point[0]-.05, point[1]-.05), .1, .1, alpha=.3, color=quantized_target_color)
+            currentAxis.add_patch(poly_patch)
 
-        concrete_state_idx = random.choice(abstract_to_concrete[idx])
-        if concrete_state_idx in state_to_paths_idx:  # equivalent to it being controllable
-            for ind, region in enumerate(abstract_reachable_sets[state_to_paths_idx[concrete_state_idx]]):
+            
+            
+            for ind, region in enumerate(abstract_reachable_sets[abstract_state.u_idx]):
                 if ind > 0:
                     if isinstance(region, pc.Region):
                         poly_list = region.list_poly
@@ -1262,13 +1259,13 @@ def plot_abstract_states(symmetry_abstract_states, deleted_abstract_states,
                         hull = ConvexHull(points)
                         poly_patch = Polygon(points[hull.vertices, :], alpha=.5, color=reach_color, fill=True)
                         currentAxis.add_patch(poly_patch)
-        # -1,1 or -0.5,0.5
-        plt.ylim([-10, 10])
-        plt.xlim([-10, 10])
-        plt.savefig("Abstract state: " + str(idx))
-        # plt.show()
-        plt.cla()
-        plt.close()
+            # -1,1 or -0.5,0.5
+            plt.ylim([-1, 1])
+            plt.xlim([-1, 1])
+            plt.savefig("Abstract state: " + str(idx))
+            # plt.show()
+            plt.cla()
+            plt.close()
 
     plt.figure("Abstract reachable sets after synthesis")
     color = 'orange'
@@ -1691,7 +1688,7 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
             break
 
     return abstract_controller, controllable_abstract_states, unsafe_abstract_states, local_abstract_states_to_explore, \
-        abstract_states_to_explore, reachable_rect_global_cntr, target_parents, refinement_candidates, target_rtree_idx
+        abstract_states_to_explore, reachable_rect_global_cntr, refinement_candidates, target_rtree_idx
 
 
 def get_decomposed_angle_intervals(original_angle_interval):
