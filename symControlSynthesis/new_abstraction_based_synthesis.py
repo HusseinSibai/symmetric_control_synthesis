@@ -24,6 +24,20 @@ matplotlib.use("macOSX")
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle, Polygon
 
+#multiprocessing stuff
+
+#cpu-only
+from multiprocess import Process, Queue
+import multiprocess
+import concurrent.futures
+import warnings
+
+# Use 'multiprocessing.cpu_count()' to determine the number of available CPU cores.
+cpu_count = multiprocess.cpu_count()
+#cpu_count = 1
+
+#make a future pool
+future_pool = [None] * cpu_count
 
 class AbstractState:
 
@@ -969,15 +983,20 @@ def nearest_point_to_the_origin(poly):
         nearest_point (numpy.ndarray): Coordinates of the nearest point to the origin in the polytope.
         dist (float): Distance to the origin
     """
-    x = solve_qp(np.eye(3), np.array([0,0,0]), poly.A, poly.b, solver="gurobi")
+    x = solve_qp(np.eye(3), np.array([0,0,0]), poly.A, poly.b, solver="clarabel")
     dist = np.linalg.norm(x, ord=2)
     return x, dist
 
+def create_symmetry_abstract_states_threaded(Q, thread_index, symbols_to_explore, symbol_step, targets, obstacles, sym_x, X_low, X_up,
+                                    abstract_reachable_sets):
 
-def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, obstacles, sym_x, X_low, X_up,
-                                    reachability_rtree_idx3d, abstract_reachable_sets):
-    t_start = time.time()
-    print('\n%s\tStart of the symmetry abstraction \n', time.time() - t_start)
+    p = index.Property()
+    p.dimension = 3
+    p.dat_extension = 'data'
+    p.idx_extension = 'index'
+    reachability_rtree_idx3d = index.Index('3d_index_abstract',
+                                           properties=p)
+
     symmetry_transformed_targets_and_obstacles = {}  # [None] * int(matrix_dim_full[0])
     concrete_to_abstract = {}  # [None] * int(matrix_dim_full[0])
     abstract_to_concrete = {}
@@ -994,15 +1013,17 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
     next_abstract_state_id = 1
     threshold_num_results = 200
 
+    first_index = int(len(symbols_to_explore)/cpu_count) * thread_index
+    second_index = (int(len(symbols_to_explore)/cpu_count) * (thread_index+1)) - 1 if thread_index+1 != cpu_count else int(len(symbols_to_explore)/cpu_count) * (thread_index+1)
 
+    print((first_index, second_index))
 
-    for s in symbols_to_explore:
+    for s in symbols_to_explore[first_index : second_index+1]:
         s_subscript = np.array(np.unravel_index(s, tuple((sym_x[0, :]).astype(int))))
         s_rect: np.array = np.row_stack((s_subscript * symbol_step + X_low,
                                          s_subscript * symbol_step + symbol_step + X_low))
         s_rect[0, :] = np.maximum(X_low, s_rect[0, :])
         s_rect[1, :] = np.minimum(X_up, s_rect[1, :])
-        # print("s_rect: ", s_rect)
 
         # transforming the targets and obstacles to a new coordinate system relative to the states in s.
 
@@ -1014,8 +1035,7 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
 
         for target_idx, target_poly in enumerate(targets):
             abstract_target_poly = transform_poly_to_abstract_frames(target_poly, s_rect, over_approximate=False)
-            abstract_pos_target_poly = transform_poly_to_abstract_frames(target_poly, s_rect, over_approximate=False,
-                                                                         project_to_pos=True)
+            abstract_pos_target_poly = transform_poly_to_abstract_frames(target_poly, s_rect, over_approximate=False, project_to_pos=True)
             abstract_target_poly_over_approx = transform_poly_to_abstract_frames(
                 target_poly, s_rect, over_approximate=True)  # project_to_pos=True
             if not pc.is_empty(abstract_target_poly):
@@ -1075,8 +1095,6 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
                  nearest_point[0]+0.001, nearest_point[1]+0.001, nearest_point[2]+0.001),
                 num_results=curr_num_results, objects=True))
         
-            #if len(hits) >= 1:
-            #    hits = list(random.choices(hits, k=1))
             if len(hits):
                 for idx, hit in enumerate(hits):
                     if not hit.object in is_obstructed_u_idx:
@@ -1128,6 +1146,58 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
         if not added_to_existing_state:
             add_concrete_state_to_symmetry_abstract_state(s, 0, pc.Region(list_poly=[]),
                 symmetry_abstract_states, concrete_to_abstract, abstract_to_concrete, {})
+    print("Thread " + str(thread_index) + ": Done....")
+    Q.put((symmetry_abstract_states, concrete_to_abstract, abstract_to_concrete, symmetry_transformed_targets_and_obstacles))
+    print("Thread " + str(thread_index) + ": Data Submitted....")
+    exit(0)
+
+def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, obstacles, sym_x, X_low, X_up,
+                                    reachability_rtree_idx3d, abstract_reachable_sets):
+    t_start = time.time()
+    print('\n%s\tStart of the symmetry abstraction \n', time.time() - t_start)
+
+    symmetry_transformed_targets_and_obstacles = {}  # [None] * int(matrix_dim_full[0])
+    concrete_to_abstract = {}  # [None] * int(matrix_dim_full[0])
+    abstract_to_concrete = {}
+    symmetry_abstract_states = []
+    # abstract_states_to_rtree_ids = {}
+    # rtree_ids_to_abstract_states = {}
+    
+    u_idx_to_abstract_states_indices = {} # list of abstract states sharing same quantized target
+
+    obstacle_state = AbstractState(0, None, None, [], [], set())
+    symmetry_abstract_states.append(obstacle_state)
+    abstract_to_concrete[0] = []
+
+    next_abstract_state_id = 1
+    threshold_num_results = 200
+
+    #close file
+    reachability_rtree_idx3d.close()
+
+    #queue for communication
+    Q = Queue()
+
+    #spawn up threadpool and submit tasks
+    max_assignment = len(symbols_to_explore)
+    print("Only CPU detected..... Submitting workers for legacy multithreading")
+
+    #wait for all to finish
+    for i in range(cpu_count):
+        future_pool[i] = Process(target=create_symmetry_abstract_states_threaded, args=(Q, i, list(symbols_to_explore), symbol_step, targets, obstacles, sym_x, X_low, X_up,
+                                    abstract_reachable_sets))
+
+    for i in range(cpu_count):
+        future_pool[i].start()
+
+    print("Awaiting Threads.....")
+
+    for i in range(cpu_count):
+        result = Q.get()
+        symmetry_abstract_states += result[0]
+        concrete_to_abstract.update(result[1])
+        abstract_to_concrete.update(result[2])
+        symmetry_transformed_targets_and_obstacles.update(result[3])
                 
     print(['Done creation of symmetry abstract states in: ', time.time() - t_start, ' seconds'])
     print("concrete_to_abstract: ", len(concrete_to_abstract))
