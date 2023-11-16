@@ -1,5 +1,9 @@
 import pdb
 
+#ignore conversion warnings (uncomment for genuine errors)
+import warnings
+warnings.simplefilter("ignore", UserWarning)
+
 import numpy as np
 import time
 import math
@@ -30,7 +34,6 @@ from matplotlib.patches import Rectangle, Polygon
 from multiprocess import Process, Queue
 import multiprocess
 import concurrent.futures
-import warnings
 
 # Use 'multiprocessing.cpu_count()' to determine the number of available CPU cores.
 cpu_count = multiprocess.cpu_count()
@@ -1016,8 +1019,6 @@ def create_symmetry_abstract_states_threaded(Q, thread_index, symbols_to_explore
     first_index = int(len(symbols_to_explore)/cpu_count) * thread_index
     second_index = (int(len(symbols_to_explore)/cpu_count) * (thread_index+1)) - 1 if thread_index+1 != cpu_count else int(len(symbols_to_explore)/cpu_count) * (thread_index+1)
 
-    print((first_index, second_index))
-
     for s in symbols_to_explore[first_index : second_index+1]:
         s_subscript = np.array(np.unravel_index(s, tuple((sym_x[0, :]).astype(int))))
         s_rect: np.array = np.row_stack((s_subscript * symbol_step + X_low,
@@ -1146,9 +1147,9 @@ def create_symmetry_abstract_states_threaded(Q, thread_index, symbols_to_explore
         if not added_to_existing_state:
             add_concrete_state_to_symmetry_abstract_state(s, 0, pc.Region(list_poly=[]),
                 symmetry_abstract_states, concrete_to_abstract, abstract_to_concrete, {})
-    print("Thread " + str(thread_index) + ": Done....")
+    print("Process " + str(thread_index) + ": Done....")
     Q.put((symmetry_abstract_states, concrete_to_abstract, abstract_to_concrete, symmetry_transformed_targets_and_obstacles))
-    print("Thread " + str(thread_index) + ": Data Submitted....")
+    print("Process " + str(thread_index) + ": Data Submitted....")
     exit(0)
 
 def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, obstacles, sym_x, X_low, X_up,
