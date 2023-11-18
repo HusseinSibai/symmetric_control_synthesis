@@ -24,17 +24,18 @@ matplotlib.use("macOSX")
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle, Polygon
 
+import bisect
 
 class AbstractState:
 
     def __init__(self, state_id, quantized_abstract_target, u_idx,
-                 abstract_obstacles, concrete_state_indices, obstructed_u_idx):
+                 abstract_obstacles, concrete_state_indices, obstructed_u_idx_set):
         self.id = state_id # tuple of centers
         self.quantized_abstract_target = quantized_abstract_target
         self.u_idx = u_idx
         self.abstract_obstacles = abstract_obstacles
         self.concrete_state_indices = concrete_state_indices
-        self.obstructed_u_idx = obstructed_u_idx
+        self.obstructed_u_idx_set = obstructed_u_idx_set
 
 
 class RelCoordState:
@@ -985,7 +986,7 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
     # abstract_states_to_rtree_ids = {}
     # rtree_ids_to_abstract_states = {}
     
-    u_idx_to_abstract_states_indices = {} # list of abstract states sharing same quantized target
+    u_idx_to_abstract_states_indices = {} # list of abstract states sharing same quantized target, does it ever happen?
 
     obstacle_state = AbstractState(0, None, None, [], [], set())
     symmetry_abstract_states.append(obstacle_state)
@@ -994,6 +995,8 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
     next_abstract_state_id = 1
     threshold_num_results = 200
 
+    nearest_target_of_concrete = {}
+    valid_hit_idx_of_concrete = {}
 
 
     for s in symbols_to_explore:
@@ -1052,9 +1055,7 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
 
         symmetry_transformed_targets_and_obstacles[s] = RelCoordState(s, abstract_targets_polys,
                                                                       abstract_obstacles)
-
-        # Now adding the abstract state to a cluster --> combining abstract states with overlapping (abstract) targets
-        added_to_existing_state = False
+                
 
         min_dist = np.inf
         for curr_target_idx, curr_target_poly in enumerate(abstract_targets_polys):
@@ -1066,9 +1067,11 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
                 min_dist = curr_dist
 
         abstract_target_rect = np.array([nearest_point, nearest_point])
-        
+        nearest_target_of_concrete[s] = abstract_target_rect
+
         curr_num_results=1
         is_obstructed_u_idx = {}
+        added_to_existing_state = False
         while curr_num_results < threshold_num_results:
             hits = list(reachability_rtree_idx3d.nearest(
                 (nearest_point[0], nearest_point[1], nearest_point[2],
@@ -1107,6 +1110,7 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
                             abstract_to_concrete[next_abstract_state_id] = [s]
                             next_abstract_state_id += 1
                             added_to_existing_state = True
+                            valid_hit_idx_of_concrete[s] = idx
                             break
                         else:
                             if len(u_idx_to_abstract_states_indices[hit.object]):
@@ -1114,6 +1118,7 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
                                     symmetry_transformed_targets_and_obstacles[s].abstract_obstacles, symmetry_abstract_states,
                                     concrete_to_abstract, abstract_to_concrete, is_obstructed_u_idx)
                                 added_to_existing_state = True
+                                valid_hit_idx_of_concrete[s] = idx
                                 break
                             else:
                                 raise "No abstract states for u_idx when one was expected"
@@ -1132,7 +1137,8 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
     print(['Done creation of symmetry abstract states in: ', time.time() - t_start, ' seconds'])
     print("concrete_to_abstract: ", len(concrete_to_abstract))
     print("abstract_to_concrete: ", len(abstract_to_concrete))
-    return symmetry_transformed_targets_and_obstacles, concrete_to_abstract, abstract_to_concrete, symmetry_abstract_states
+    print("concrete states deemed 'obstacle': ", len(symmetry_abstract_states[0].concrete_state_indices))
+    return symmetry_transformed_targets_and_obstacles, concrete_to_abstract, abstract_to_concrete, symmetry_abstract_states, nearest_target_of_concrete, valid_hit_idx_of_concrete
 
 
 def add_concrete_state_to_symmetry_abstract_state(curr_concrete_state_idx, abstract_state_id, symmetry_transformed_obstacles_curr,
@@ -1144,8 +1150,8 @@ def add_concrete_state_to_symmetry_abstract_state(curr_concrete_state_idx, abstr
     symmetry_abstract_states[abstract_state_id].concrete_state_indices.append(curr_concrete_state_idx)
 
     # set union of symmetry_abstract_states[abstract_state_id].obstructed_idx and is_obstructed_u_idx
-    symmetry_abstract_states[abstract_state_id].obstructed_u_idx = \
-        (symmetry_abstract_states[abstract_state_id].obstructed_u_idx).union(set([k for k, v in is_obstructed_u_idx.items() if v == True]))
+    symmetry_abstract_states[abstract_state_id].obstructed_u_idx_set = \
+        (symmetry_abstract_states[abstract_state_id].obstructed_u_idx_set).union(set([k for k, v in is_obstructed_u_idx.items() if v == True]))
 
     concrete_to_abstract[curr_concrete_state_idx] = abstract_state_id
     abstract_to_concrete[abstract_state_id].append(curr_concrete_state_idx)
@@ -1154,7 +1160,7 @@ def add_concrete_state_to_symmetry_abstract_state(curr_concrete_state_idx, abstr
 
 
 
-def get_concrete_transition(s_idx, u_idx, concrete_edges,
+def get_concrete_transition(s_idx, u_idx, concrete_edges, concrete_to_abstract,
                             sym_x, symbol_step, abstract_reachable_sets,
                             obstacles_rects, obstacle_indices, targets_rects, target_indices, X_low, X_up):
     if (s_idx, u_idx) in concrete_edges:
@@ -1189,7 +1195,8 @@ def get_concrete_transition(s_idx, u_idx, concrete_edges,
                                 over_approximate=True).tolist()
     indices_to_delete = []
     for idx, succ_idx in enumerate(neighbors):
-        if succ_idx in obstacle_indices:
+        if (succ_idx in obstacle_indices 
+            or concrete_to_abstract[succ_idx] == 0): # state succ_idx is in the obstacle abstract state
             concrete_edges[(s_idx, u_idx)] = [-2]
             return [-2]
         if succ_idx in target_indices:
@@ -1222,7 +1229,7 @@ def plot_abstract_states(symmetry_abstract_states, deleted_abstract_states,
         if abstract_state.id != 0:
             plt.figure("Abstract state: " + str(idx))
             currentAxis = plt.gca()
-            obstructed_u_indices = abstract_state.obstructed_u_idx
+            obstructed_u_indices = abstract_state.obstructed_u_idx_set
             # abstract_targets = abstract_state.abstract_targets
 
             # plot obstructed u_idx
@@ -1260,8 +1267,8 @@ def plot_abstract_states(symmetry_abstract_states, deleted_abstract_states,
                         poly_patch = Polygon(points[hull.vertices, :], alpha=.5, color=reach_color, fill=True)
                         currentAxis.add_patch(poly_patch)
             # -1,1 or -0.5,0.5
-            plt.ylim([-1, 1])
-            plt.xlim([-1, 1])
+            plt.ylim([-.7, .7])
+            plt.xlim([-.35, .35])
             plt.savefig("Abstract state: " + str(idx))
             # plt.show()
             plt.cla()
@@ -1469,27 +1476,17 @@ def quantize(grid_rtree, point, cell_size_per_dim):
                 break
     return grid_point, point_in_cell
 
-def create_abstract_state():
-    for idx, hit in enumerate(target_hits):
-        concrete_target_rect: np.array = np.array([hit.bbox[:n], hit.bbox[n:]])
-        target_rect = \
-            transform_rect_to_abstract_frames(concrete_target_rect,
-                                              rect, over_approximate=False)
-        target_rect_center = np.average(target_rect, axis=0)
-        quantized_point, point_in_cell = quantize(quantization_grid_rtree_idx, target_rect_center, symbol_step)
-        if point_in_cell:
-            quantized_target_centers.append((quantized_point, hit.id, 1))
-        else:
-            quantized_target_centers.append((quantized_point, hit.id, 0))
-
 
 def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                                        abstract_states_to_explore,
                                        concrete_edges,
                                        abstract_to_concrete,
                                        concrete_to_abstract,
+                                       symmetry_transformed_targets_and_obstacles,
+                                       nearest_target_of_concrete,
+                                       valid_hit_idx_of_concrete,
                                        abstract_reachable_sets,
-                                       abstract_states,
+                                       symmetry_abstract_states, #rename later
                                        refinement_candidates,
                                        controllable_abstract_states,
                                        controllable_concrete_states,
@@ -1497,122 +1494,143 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                                        concrete_controller,
                                        reachability_rtree_idx2d,
                                        reachability_rtree_idx3d,
-                                       target_rtree_idx,
+                                       target_rtree_idx, #initial target only
                                        obstacle_rtree_idx,
                                        quantization_grid_rtree_idx,
                                        cur_solver, eng, var_dict,
                                        per_dim_max_travelled_distance,
                                        obstacles_rects, obstacle_indices,
                                        targets_rects, target_indices,
-                                       X_low, X_up, sym_x, symbol_step, time_step, W_low, W_up, U_discrete):
+                                       X_low, X_up, sym_x, symbol_step,
+                                       time_step, W_low, W_up, U_discrete):
     t_start = time.time()
     num_controllable_states = len(controllable_abstract_states)
     n = X_up.shape[0]
-    visited_concrete_states = {}
-    t_and_o_grid_size = copy.deepcopy(symbol_step)
+    #visited_concrete_states = {}
+    t_and_o_grid_size = copy.deepcopy(symbol_step) #see if can be replaced by symbol_step
+    abstract_state_to_u_idx_poll = {} #initialize on the spot
+
+    threshold_num_results = 200
+
+
     while True: # one iteration of this loop will
         num_new_symbols = 0
-        concrete_state_idx = concrete_states_to_explore.pop()
-        if concrete_state_idx in obstacle_indices \
-                or concrete_state_idx in target_indices \
-                or concrete_state_idx in controllable_concrete_states \
-                or concrete_state_idx in visited_concrete_states:
-            continue
-        if concrete_state_idx in concrete_to_abstract:
+        for concrete_state_idx in concrete_states_to_explore:
+        
+            if concrete_state_idx in obstacle_indices \
+                    or concrete_state_idx in target_indices \
+                    or concrete_state_idx in controllable_concrete_states:
+                    #or concrete_state_idx in visited_concrete_states
+                continue
+
             abstract_state_idx = concrete_to_abstract[concrete_state_idx]
-            abstract_state = abstract_states[abstract_state_idx]
-        else:
-            abstract_state = create_abstract_state(concrete_state_idx, abstract_states)
-        quantized_target = abstract_state.quantized_target
-        is_near_target = abstract_state.is_near_target
-        if is_near_target:
-            pass #indent?
-        rect: np.array = concrete_index_to_rect(concrete_state_idx,
-                                                sym_x, symbol_step,
-                                                X_low, X_up)
-        rect_center = np.average(rect, axis=0)
-        angle_interval = [rect[0, 2], rect[1, 2]]
-        angle_interval_center = (angle_interval[0] + angle_interval[1]) / 2
-        # decomposed_angle_intervals = get_decomposed_angle_intervals(original_angle_interval)
-        # target_hits = []
-        quantized_target_centers = []
-        '''
-        target_hits.extend(list(target_rtree_idx.nearest(
-            (rect_center[0], rect_center[1], angle_interval_center,
-             rect_center[0] + 0.001, rect_center[1] + 0.001, angle_interval_center + 0.001),
-            num_results=num_nearest_targets_to_consider, objects=True)))
-        '''
-        '''
-        original_angle_interval = [target_rect[0, 2], target_rect[1, 2]]
-        decomposed_angle_intervals = get_decomposed_angle_intervals(original_angle_interval)
-        for interval in decomposed_angle_intervals:
-            interval_center = (interval[0] + interval[1]) / 2
-            reach_hits.extend(list(reachability_rtree_idx3d.nearest(
-                (target_rect_center[0], target_rect_center[1], interval_center,
-                 target_rect_center[0] + 0.001, target_rect_center[1] + 0.001, interval_center + 0.001),
-                num_results=num_nearest_reachsets_to_consider,
-                objects=True)))
-        '''
-        obstacle_hits = []
-        quantized_obstacle_centers = []
-        obstacle_hits.extend(list(obstacle_rtree_idx.nearest(
-            (rect_center[0], rect_center[1], angle_interval_center,
-             rect_center[0] + 0.001, rect_center[1] + 0.001, angle_interval_center + 0.001),
-            num_results=num_nearest_obstacles_to_consider, objects=True)))
-        for idx, hit in enumerate(obstacle_hits):
-            concrete_obstacle_rect: np.array = np.array([hit.bbox[:n], hit.bbox[n:]])
-            obstacle_rect = \
-                transform_rect_to_abstract_frames(concrete_obstacle_rect,
-                                                  rect, over_approximate=False)
-            obstacle_rect_center = np.average(obstacle_rect, axis=0)
-            quantized_point, point_in_cell = quantize(quantization_grid_rtree_idx, obstacle_rect_center,
-                                                      t_and_o_grid_size)
-            if point_in_cell:
-                quantized_target_centers.append((quantized_point, hit.id, 1))
-                # hit.id is the id of the obstacle and should be the same for obstacles
-                # with the same shape and different otherwise
-            else:
-                quantized_obstacle_centers.append((quantized_point, hit.id, 0))
-        abstract_state_id = tuple([tuple([(q_t[0],q_t[1]) for q_t in quantized_target_centers]),
-                                   tuple([(q_o[0],q_o[1]) for q_o in quantized_obstacle_centers])])
-        need_to_create_new_abstract_state = False
-        if abstract_state_id in abstract_controller:
-            u_idx = abstract_controller[abstract_state_id]
-            intersecting_obstacle_idx = \
-                which_obstacle_successor_intersects(0, u_idx,
-                                                    abstract_reachable_sets,
-                                                    symmetry_transformed_targets_and_obstacles[
-                                                        concrete_state_idx].abstract_obstacles)
-            if intersecting_obstacle_idx == -1: # no intersection
-                next_concrete_state_indices = get_concrete_transition(concrete_state_idx, u_idx, concrete_edges,
-                                                                      sym_x, symbol_step, abstract_reachable_sets,
-                                                                      obstacles_rects, obstacle_indices, targets_rects,
-                                                                      target_indices, X_low, X_up)
-            else: # we should know which obstacle it collided with,
-                # an indicator such as -2 is not enough -- we can have multiple indicators for obstacles
-                # and multiple sets of obstacle indices,
-                # we should also make sure that the other concrete states
-                # in the same abstract one for which this controller was working to not change.
-                need_to_create_new_abstract_state = True
-                # np.average(abstract_reachable_sets[u_idx][-1], axis=0)
-                rc, x1 = pc.cheby_ball(symmetry_transformed_targets_and_obstacles[
-                                           concrete_state_idx].abstract_obstacles[intersecting_obstacle_idx])
-                if quantized_obstacle_centers:
-                    if quantized_obstacle_centers[0][0]:
-                        direction = np.subtract(rc, np.array(quantized_obstacle_centers[0][0]))
-                        direction = np.multiply(np.divide(direction, 2 * t_and_o_grid_size), t_and_o_grid_size)
-                        new_quantization_point = np.add(np.array(quantized_obstacle_centers[0][0]), direction)
-                    # add new quantization point to the quantization tree
-            for next_concrete_state_idx in next_concrete_state_indices:
-                if not (next_concrete_state_idx == -1 or
-                        (next_concrete_state_idx >= 0 and
-                         concrete_to_abstract[next_concrete_state_idx] in controllable_abstract_states)):
-                    concrete_indices.add(concrete_state_idx)
+            abstract_state = symmetry_abstract_states[abstract_state_idx]
+            #quantized_target = abstract_state.quantized_abstract_target
+
+            rect: np.array = concrete_index_to_rect(concrete_state_idx,
+                                                    sym_x, symbol_step, X_low, X_up)
+            rect_center = np.average(rect, axis=0)
+            angle_interval = [rect[0, 2], rect[1, 2]]
+            angle_interval_center = (angle_interval[0] + angle_interval[1]) / 2
+            # decomposed_angle_intervals = get_decomposed_angle_intervals(original_angle_interval)
+            # target_hits = []
+            #quantized_target_centers = []
+
+            #obstacle_hits = []
+            #quantized_obstacle_centers = []
+
+
+            if not abstract_state_idx in abstract_state_to_u_idx_poll:
+                abstract_state_to_u_idx_poll[abstract_state_idx] = [(1, abstract_state.u_idx)]
+
+            valid_vote = None
+            for v, u_idx in abstract_state_to_u_idx_poll[abstract_state_idx]: #enumerate
+                
+                next_concrete_state_indices = get_concrete_transition(concrete_state_idx, u_idx, concrete_edges, concrete_to_abstract,
+                                                                    sym_x, symbol_step, abstract_reachable_sets,
+                                                                    obstacles_rects, obstacle_indices, targets_rects,
+                                                                    target_indices, X_low, X_up)
+                
+                is_controlled = True
+                for next_concrete_state_idx in next_concrete_state_indices:
+                    if not (next_concrete_state_idx == -1 or
+                            (next_concrete_state_idx >= 0 and
+                            next_concrete_state_idx in controllable_concrete_states)):
+                        # one of the next concrete states is not known to be contrallable or in target
+                        is_controlled = False
+                        break
+                if is_controlled:
+                    abstract_state_to_u_idx_poll[abstract_state_idx].remove((v, u_idx)) #linked list later
+                    valid_vote = (v, u_idx)
                     break
-            # does following the controller at the current state result in cycles?
-            # unsafe states? or reach the target?
-            # apply breadth first search -- it is an autonomous system from here onward.
-            # avoids obstacles and reach target using the specified controller at current concrete state
+
+            if valid_vote != None:
+                bisect.insort(abstract_state_to_u_idx_poll[abstract_state_idx],
+                            (valid_vote[0]+1, valid_vote[1]), key=lambda x: -x[0])
+                concrete_controller[concrete_state_idx] = valid_vote[1]
+            else:
+                #iterate over other controls
+                #append (1, u_idx) to abstract_state_to_u_idx_poll[abstract_state_idx] if it works
+
+                s = concrete_state_idx
+                curr_num_results=5
+                while curr_num_results < valid_hit_idx_of_concrete[s]:
+                    curr_num_results*=5
+                start_idx = valid_hit_idx_of_concrete[s] + 1
+                nearest_point = nearest_target_of_concrete[s]
+                
+                is_obstructed_u_idx = {}
+                new_u_idx_found = False
+                while curr_num_results < threshold_num_results:
+                    hits = list(reachability_rtree_idx3d.nearest(
+                        (nearest_point[0], nearest_point[1], nearest_point[2],
+                        nearest_point[0]+0.001, nearest_point[1]+0.001, nearest_point[2]+0.001),
+                        num_results=curr_num_results, objects=True))
+                
+                    if len(hits):
+                        for idx in range(start_idx + 1, len(hits)):
+                            hit = hits[idx]
+
+                            if not hit.object in is_obstructed_u_idx:
+                                for p_idx in range(len(abstract_reachable_sets[hit.object]), 0, -1):
+                                    if type(symmetry_transformed_targets_and_obstacles[s].abstract_obstacles) == pc.Region:
+                                        list_obstacles = symmetry_transformed_targets_and_obstacles[s].abstract_obstacles.list_poly
+                                    else:
+                                        list_obstacles = [symmetry_transformed_targets_and_obstacles[s].abstract_obstacles]
+                                    for obstacle in list_obstacles:
+                                        if not pc.is_empty(pc.intersect(abstract_reachable_sets[hit.object][p_idx-1], obstacle)):
+                                            is_obstructed_u_idx[hit.object] = True
+                                            break
+                                    if hit.object in is_obstructed_u_idx:
+                                        break
+                                if not hit.object in is_obstructed_u_idx:
+                                    is_obstructed_u_idx[hit.object] = False
+                            if not is_obstructed_u_idx[hit.object]:
+                                new_u_idx_found = True
+                                # do  stuff
+                                pass
+                        if new_u_idx_found:
+                            break
+                    else:
+                        raise "No hits but rtree's nearest should always return a result"
+                    if new_u_idx_found:
+                        break
+                    else:
+                        curr_num_results *= 5
+                if not new_u_idx_found:
+                    add_concrete_state_to_symmetry_abstract_state(s, 0, pc.Region(list_poly=[]),
+                        symmetry_abstract_states, concrete_to_abstract, abstract_to_concrete, {})
+                
+                pass
+
+
+                
+                # does following the controller at the current state result in cycles?
+                # unsafe states? or reach the target?
+                # apply breadth first search -- it is an autonomous system from here onward.
+                # avoids obstacles and reach target using the specified controller at current concrete state
+
+
 
         abstract_state_idx = concrete_to_abstract[concrete_state_idx]
         reach_hits = []
@@ -1638,7 +1656,7 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                     temp_controllable_abstract_states.add(abstract_state_idx)
                     controllable_abstract_states.add(abstract_state_idx)
                     reg = get_poly_list_with_decomposed_angle_intervals(
-                        abstract_states[abstract_state_idx].abstract_targets[0])
+                        symmetry_abstract_states[abstract_state_idx].abstract_targets[0])
                     reachable_target_region = get_poly_union(reachable_target_region, reg)
                     if abstract_state_idx in refinement_candidates:
                         refinement_candidates.remove(abstract_state_idx)
@@ -1652,7 +1670,7 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                   " new controllable states have been found in this synthesis iteration\n")
             controllable_abstract_states = controllable_abstract_states.union(temp_controllable_abstract_states)
             num_controllable_states += num_new_symbols
-            refinement_candidates = refinement_candidates.difference(temp_controllable_abstract_states)
+            #refinement_candidates = refinement_candidates.difference(temp_controllable_abstract_states)
             temp_controllable_abstract_states = list(temp_controllable_abstract_states)
             # candidate_initial_set_rect = None
             rects = []
@@ -1989,11 +2007,12 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
 
     # intersection_radius_threshold = intersection_radius_threshold * 10
     symmetry_transformed_targets_and_obstacles, concrete_to_abstract, abstract_to_concrete, \
-        symmetry_abstract_states = create_symmetry_abstract_states(
-        symbols_to_explore,
-        symbol_step, targets,
-        obstacles, sym_x, X_low, X_up,
-        reachability_rtree_idx3d, abstract_reachable_sets)
+        symmetry_abstract_states, nearest_target_of_concrete, valid_hit_idx_of_concrete = \
+            create_symmetry_abstract_states(
+            symbols_to_explore,
+            symbol_step, targets,
+            obstacles, sym_x, X_low, X_up,
+            reachability_rtree_idx3d, abstract_reachable_sets)
 
     t_abstraction = time.time() - t_start
     print(['Construction of symmetry-based abstraction took: ', t_abstraction, ' seconds'])
@@ -2040,6 +2059,9 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
             concrete_states_to_explore,  # abstract_states_to_explore,
             abstract_to_concrete,
             concrete_to_abstract,
+            symmetry_transformed_targets_and_obstacles,
+            nearest_target_of_concrete,
+            valid_hit_idx_of_concrete,
             Symbolic_reduced,
             abstract_reachable_sets,
             symmetry_abstract_states, target_parents,
