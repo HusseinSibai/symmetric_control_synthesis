@@ -994,6 +994,7 @@ def nearest_point_to_the_origin(poly):
 def create_symmetry_abstract_states_threaded(lock_one, u_idx_to_abstract_states_indices, shared_state_id, Q, thread_index, symbols_to_explore, symbol_step, targets, obstacles, sym_x, X_low, X_up,
                                     abstract_reachable_sets):
 
+    #each new execution requires new opening of the rtree files
     p = index.Property()
     p.dimension = 3
     p.dat_extension = 'data'
@@ -1001,23 +1002,26 @@ def create_symmetry_abstract_states_threaded(lock_one, u_idx_to_abstract_states_
     reachability_rtree_idx3d = index.Index('3d_index_abstract',
                                            properties=p)
 
+    #we do not care about how quickly these get fulfilled
     symmetry_transformed_targets_and_obstacles = {}  # [None] * int(matrix_dim_full[0])
     concrete_to_abstract = {}  # [None] * int(matrix_dim_full[0])
     abstract_to_concrete = {}
+    nearest_target_of_concrete = {}
+    valid_hit_idx_of_concrete = {}
     symmetry_abstract_states = []
 
+    #pickled dictionaries
     abstract_to_concrete = SharedMemoryDict(name="abstract2concrete", size=1000000)
     symmetry_abstract_states = SharedMemoryDict(name="symabstractstatesDict", size=1000000)
 
     next_abstract_state_id = 1
     threshold_num_results = 200
 
+    #grab indices for work
     first_index = int(len(symbols_to_explore)/cpu_count) * thread_index
     second_index = (int(len(symbols_to_explore)/cpu_count) * (thread_index+1)) - 1 if thread_index+1 != cpu_count else int(len(symbols_to_explore))
 
-    print(first_index, ":", second_index+1)
-    print(len(symbols_to_explore))
-
+    #split task
     for s in symbols_to_explore[first_index : second_index+1]:
 
         s_subscript = np.array(np.unravel_index(s, tuple((sym_x[0, :]).astype(int))))
@@ -1087,6 +1091,7 @@ def create_symmetry_abstract_states_threaded(lock_one, u_idx_to_abstract_states_
                 min_dist = curr_dist
 
         abstract_target_rect = np.array([nearest_point, nearest_point])
+        nearest_target_of_concrete[s] = abstract_target_rect
         
         curr_num_results=1
         is_obstructed_u_idx = {}
@@ -1134,6 +1139,7 @@ def create_symmetry_abstract_states_threaded(lock_one, u_idx_to_abstract_states_
                                 abstract_to_concrete[next_abstract_state_id] = [s]
                                 shared_state_id.value = next_abstract_state_id + 1
                                 added_to_existing_state = True
+                                valid_hit_idx_of_concrete[s] = idx
                             break
                         else:
                             if (u_idx_to_abstract_states_indices[hit.object] > 0):
@@ -1144,6 +1150,7 @@ def create_symmetry_abstract_states_threaded(lock_one, u_idx_to_abstract_states_
                                     concrete_to_abstract, abstract_to_concrete, is_obstructed_u_idx)
 
                                 added_to_existing_state = True
+                                valid_hit_idx_of_concrete[s] = idx
                                 break
                             else:
                                 raise "No abstract states for u_idx when one was expected"
@@ -1164,7 +1171,7 @@ def create_symmetry_abstract_states_threaded(lock_one, u_idx_to_abstract_states_
 
 
     print("Process " + str(thread_index) + ": Done....")
-    Q.put((symmetry_transformed_targets_and_obstacles, concrete_to_abstract))
+    Q.put((symmetry_transformed_targets_and_obstacles, concrete_to_abstract, nearest_target_of_concrete, valid_hit_idx_of_concrete))
     print("Process " + str(thread_index) + ": Data Submitted....")
     exit(0)
 
@@ -1182,10 +1189,14 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
     u_idx_to_abstract_states_indices = multiprocess.Array(ctypes.c_int, [0] * 8000)
     shared_state_id = multiprocess.Value(ctypes.c_int, 1)
 
-    #dictionaries needed for now
+    #dictionaries needed for now (time spent pickling hurts)
     abstract_to_concrete = SharedMemoryDict(name="abstract2concrete", size=1000000)
     symmetry_abstract_states = SharedMemoryDict(name="symabstractstatesDict", size=1000000)
 
+    nearest_target_of_concrete = {}
+    valid_hit_idx_of_concrete = {}
+
+    #process locks (incase I need them)
     lock_one = multiprocess.Lock()
     lock_two = multiprocess.Lock()
 
@@ -1206,24 +1217,28 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
     max_assignment = len(symbols_to_explore)
     print("Only CPU detected..... Submitting workers for legacy multithreading")
 
-    #wait for all to finish
+    #create our pool
     for i in range(cpu_count):
         future_pool[i] = Process(target=create_symmetry_abstract_states_threaded, args=(lock_one, u_idx_to_abstract_states_indices, shared_state_id, Q, i, list(symbols_to_explore), symbol_step, targets, obstacles, sym_x, X_low, X_up,
                                     abstract_reachable_sets))
-
+    #start them
     for i in range(cpu_count):
         future_pool[i].start()
 
     print("Awaiting Threads.....")
 
+    #get results from each process
     for i in range(cpu_count):
         result = Q.get()
         symmetry_transformed_targets_and_obstacles.update(result[0])
         concrete_to_abstract.update(result[1])
+        nearest_target_of_concrete.update(result[2])
+        valid_hit_idx_of_concrete.update(result[3])
 
     print(['Done creation of symmetry abstract states in: ', time.time() - t_start, ' seconds'])
     print("concrete_to_abstract: ", len(concrete_to_abstract))
     print("abstract_to_concrete: ", len(abstract_to_concrete))
+    print("concrete states deemed 'obstacle': ", len(symmetry_abstract_states[0].concrete_state_indices))
     return symmetry_transformed_targets_and_obstacles, concrete_to_abstract, abstract_to_concrete, symmetry_abstract_states
 
 
