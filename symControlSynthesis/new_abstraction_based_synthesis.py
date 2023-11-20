@@ -31,7 +31,7 @@ from matplotlib.patches import Rectangle, Polygon
 #multiprocessing stuff
 
 #cpu-only
-from multiprocess import Process, Queue, shared_memory
+from multiprocess import Process, Queue, shared_memory, Manager
 import SharedArray as sa
 import multiprocess
 import concurrent.futures
@@ -44,14 +44,24 @@ cpu_count = multiprocess.cpu_count()
 future_pool = [None] * cpu_count
 
 class AbstractState:
-
     def __init__(self, state_id, quantized_abstract_target, u_idx,
-                 abstract_obstacles, concrete_state_indices, obstructed_u_idx):
+                 abstract_obstacles, concrete_state_indices_in, obstructed_u_idx):
         self.id = state_id # tuple of centers
         self.quantized_abstract_target = quantized_abstract_target
         self.u_idx = u_idx
         self.abstract_obstacles = abstract_obstacles
-        self.concrete_state_indices = concrete_state_indices
+        self.concrete_state_indices = concrete_state_indices_in
+        self.obstructed_u_idx = obstructed_u_idx
+
+class ThreadedAbstractState:
+
+    def __init__(self, state_id, quantized_abstract_target, u_idx,
+                 abstract_obstacles, concrete_state_indices_in, obstructed_u_idx, manager):
+        self.id = state_id # tuple of centers
+        self.quantized_abstract_target = manager.list()
+        self.u_idx = u_idx
+        self.abstract_obstacles = manager.list()
+        self.concrete_state_indices = manager.list()
         self.obstructed_u_idx = obstructed_u_idx
 
 
@@ -992,7 +1002,7 @@ def nearest_point_to_the_origin(poly):
     return x, dist
 
 def create_symmetry_abstract_states_threaded(lock_one, u_idx_to_abstract_states_indices, shared_state_id, Q, thread_index, symbols_to_explore, symbol_step, targets, obstacles, sym_x, X_low, X_up,
-                                    abstract_reachable_sets):
+                                    abstract_reachable_sets, manager, abstract_to_concrete, symmetry_abstract_states):
 
     #each new execution requires new opening of the rtree files
     p = index.Property()
@@ -1005,14 +1015,12 @@ def create_symmetry_abstract_states_threaded(lock_one, u_idx_to_abstract_states_
     #we do not care about how quickly these get fulfilled
     symmetry_transformed_targets_and_obstacles = {}  # [None] * int(matrix_dim_full[0])
     concrete_to_abstract = {}  # [None] * int(matrix_dim_full[0])
-    abstract_to_concrete = {}
     nearest_target_of_concrete = {}
     valid_hit_idx_of_concrete = {}
-    symmetry_abstract_states = []
 
     #pickled dictionaries
-    abstract_to_concrete = SharedMemoryDict(name="abstract2concrete", size=1000000)
-    symmetry_abstract_states = SharedMemoryDict(name="symabstractstatesDict", size=1000000)
+    #abstract_to_concrete = SharedMemoryDict(name="abstract2concrete", size=1000000)
+    #symmetry_abstract_states = SharedMemoryDict(name="symabstractstatesDict", size=1000000)
 
     next_abstract_state_id = 1
     threshold_num_results = 200
@@ -1070,9 +1078,6 @@ def create_symmetry_abstract_states_threaded(lock_one, u_idx_to_abstract_states_
             abstract_obstacle = transform_poly_to_abstract_frames(obstacle_poly, s_rect,
                                                                   over_approximate=True)  # project_to_pos=True
             abstract_obstacles = get_poly_union(abstract_obstacles, abstract_obstacle)
-            # abstract_obstacles.append(abstract_obstacle)
-            # pc.union(abstract_obstacles, abstract_obstacle)  # get_poly_union
-            # abstract_obstacles.append(abstract_obstacle)
 
         #with lock_one:
         symmetry_transformed_targets_and_obstacles[s] = RelCoordState(s, abstract_targets_polys,
@@ -1123,12 +1128,13 @@ def create_symmetry_abstract_states_threaded(lock_one, u_idx_to_abstract_states_
                             #with lock_one:
                             with u_idx_to_abstract_states_indices.get_lock():
                                 next_abstract_state_id = shared_state_id.value
-                                new_abstract_state = AbstractState(next_abstract_state_id,
+                                new_abstract_state = ThreadedAbstractState(next_abstract_state_id,
                                                         np.average(np.array([hit.bbox[:3], hit.bbox[3:]]), axis=0),
                                                         hit.object,
                                                         copy.deepcopy(symmetry_transformed_targets_and_obstacles[s].abstract_obstacles),
                                                         [s],
-                                                        set([k for k, v in is_obstructed_u_idx.items() if v == True]))
+                                                        set([k for k, v in is_obstructed_u_idx.items() if v == True]), 
+                                                        manager)
 
                                 symmetry_abstract_states[next_abstract_state_id] = new_abstract_state
                                 concrete_to_abstract[s] = next_abstract_state_id
@@ -1168,10 +1174,12 @@ def create_symmetry_abstract_states_threaded(lock_one, u_idx_to_abstract_states_
             #with lock_one:
             add_concrete_state_to_symmetry_abstract_state(s, 0, pc.Region(list_poly=[]),
                 symmetry_abstract_states, concrete_to_abstract, abstract_to_concrete, {})
-
+    
+    #print(symmetry_abstract_states[0].concrete_state_indices)
+    val = symmetry_abstract_states[0].concrete_state_indices
 
     print("Process " + str(thread_index) + ": Done....")
-    Q.put((symmetry_transformed_targets_and_obstacles, concrete_to_abstract, nearest_target_of_concrete, valid_hit_idx_of_concrete))
+    Q.put((symmetry_transformed_targets_and_obstacles, concrete_to_abstract, nearest_target_of_concrete, valid_hit_idx_of_concrete, val))
     print("Process " + str(thread_index) + ": Data Submitted....")
     exit(0)
 
@@ -1183,15 +1191,19 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
     symmetry_transformed_targets_and_obstacles = {}  # [None] * int(matrix_dim_full[0])
     concrete_to_abstract = {}  # [None] * int(matrix_dim_full[0])
     abstract_to_concrete = {}
-    symmetry_abstract_states = []
 
     #we need these c types to be stored in shared memory between the processses    
     u_idx_to_abstract_states_indices = multiprocess.Array(ctypes.c_int, [0] * 8000)
     shared_state_id = multiprocess.Value(ctypes.c_int, 1)
 
+    #band-aid to deal with mutable updating
+    manager = Manager()
+    abstract_to_concrete = manager.dict()
+    symmetry_abstract_states = manager.dict()
+
     #dictionaries needed for now (time spent pickling hurts)
-    abstract_to_concrete = SharedMemoryDict(name="abstract2concrete", size=1000000)
-    symmetry_abstract_states = SharedMemoryDict(name="symabstractstatesDict", size=1000000)
+    #abstract_to_concrete = SharedMemoryDict(name="abstract2concrete", size=1000000)
+    #symmetry_abstract_states = SharedMemoryDict(name="symabstractstatesDict", size=1000000)
 
     nearest_target_of_concrete = {}
     valid_hit_idx_of_concrete = {}
@@ -1200,7 +1212,9 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
     lock_one = multiprocess.Lock()
     lock_two = multiprocess.Lock()
 
-    obstacle_state = AbstractState(0, None, None, [], [], set())
+    obstacle_state = ThreadedAbstractState(0, None, None, [], [], set(), manager)
+    #obstacle_state = ["state_id": 0, "quantized_abstract_target" : None, "u_idx" : None, "abstract_obstacles" : [], "concrete_state_indices_in" : [], "obstructed_u_idx" : set()]
+
     symmetry_abstract_states[0] = obstacle_state
     abstract_to_concrete[0] = []
 
@@ -1220,13 +1234,14 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
     #create our pool
     for i in range(cpu_count):
         future_pool[i] = Process(target=create_symmetry_abstract_states_threaded, args=(lock_one, u_idx_to_abstract_states_indices, shared_state_id, Q, i, list(symbols_to_explore), symbol_step, targets, obstacles, sym_x, X_low, X_up,
-                                    abstract_reachable_sets))
+                                    abstract_reachable_sets, manager, abstract_to_concrete, symmetry_abstract_states))
     #start them
     for i in range(cpu_count):
         future_pool[i].start()
 
     print("Awaiting Threads.....")
-
+    val = set()
+    
     #get results from each process
     for i in range(cpu_count):
         result = Q.get()
@@ -1235,10 +1250,39 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
         nearest_target_of_concrete.update(result[2])
         valid_hit_idx_of_concrete.update(result[3])
 
+    #print(len(symmetry_abstract_states))
     print(['Done creation of symmetry abstract states in: ', time.time() - t_start, ' seconds'])
     print("concrete_to_abstract: ", len(concrete_to_abstract))
     print("abstract_to_concrete: ", len(abstract_to_concrete))
     print("concrete states deemed 'obstacle': ", len(symmetry_abstract_states[0].concrete_state_indices))
+
+    #convert the ThreadedAbstractStates to AbstractStates
+    symmetry_abstract_states_single = dict()
+    for key, value in symmetry_abstract_states.items():
+
+        #make new key
+        symmetry_abstract_states_single[key] = AbstractState(0, None, None, [], [], set())
+
+        #duplicate manager data
+        symmetry_abstract_states_single[key].id = symmetry_abstract_states[key].id
+
+        if symmetry_abstract_states[key].quantized_abstract_target != None:
+            symmetry_abstract_states_single[key].quantized_abstract_target = symmetry_abstract_states[key].quantized_abstract_target[:]
+
+        symmetry_abstract_states_single[key].u_idx = symmetry_abstract_states[key].u_idx
+        symmetry_abstract_states_single[key].abstract_obstacles = symmetry_abstract_states[key].abstract_obstacles[:]
+        symmetry_abstract_states_single[key].obstructed_u_idx.update(list(symmetry_abstract_states[key].obstructed_u_idx)[:])
+
+        #overwrite
+        symmetry_abstract_states = symmetry_abstract_states_single
+
+    #grab all values from abstract_to_concrete
+    abstract_to_concrete_single = dict()
+    for key, value in abstract_to_concrete.items():
+        abstract_to_concrete_single[key] = abstract_to_concrete[key]
+
+    abstract_to_concrete = abstract_to_concrete_single
+
     return symmetry_transformed_targets_and_obstacles, concrete_to_abstract, abstract_to_concrete, symmetry_abstract_states
 
 
@@ -1247,7 +1291,10 @@ def add_concrete_state_to_symmetry_abstract_state(curr_concrete_state_idx, abstr
 
     union_poly_obstacles = get_poly_union(symmetry_transformed_obstacles_curr,
                                           symmetry_abstract_states[abstract_state_id].abstract_obstacles, check_convex=False)  # pc.union
+
     symmetry_abstract_states[abstract_state_id].abstract_obstacles = union_poly_obstacles
+
+    #FIXME: LIST IN DICT NOT APPENDING
     symmetry_abstract_states[abstract_state_id].concrete_state_indices.append(curr_concrete_state_idx)
 
     # set union of symmetry_abstract_states[abstract_state_id].obstructed_idx and is_obstructed_u_idx
