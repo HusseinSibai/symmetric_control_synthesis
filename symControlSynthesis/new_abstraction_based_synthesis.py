@@ -1262,14 +1262,13 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
     for idx in range(len(symmetry_abstract_states)):
 
         #make new key
-        symmetry_abstract_states_single[idx] = AbstractState(0, None, None, [], [], set())
-        symmetry_abstract_states_single[idx].id = symmetry_abstract_states[idx].id
-        symmetry_abstract_states_single[idx].quantized_abstract_target = symmetry_abstract_states[idx].quantized_abstract_target
-        symmetry_abstract_states_single[idx].concrete_state_indices = symmetry_abstract_states[idx].concrete_state_indices[:]
-        symmetry_abstract_states_single[idx].u_idx = symmetry_abstract_states[idx].u_idx
-        symmetry_abstract_states_single[idx].abstract_obstacles = symmetry_abstract_states[idx].abstract_obstacles[:]
-        symmetry_abstract_states_single[idx].obstructed_u_idx.update(list(symmetry_abstract_states[idx].obstructed_u_idx)[:])
-
+        symmetry_abstract_states_single[idx] =  AbstractState(symmetry_abstract_states[idx].id,
+                                                symmetry_abstract_states[idx].quantized_abstract_target,
+                                                symmetry_abstract_states[idx].u_idx,
+                                                symmetry_abstract_states[idx].abstract_obstacles[:],
+                                                symmetry_abstract_states[idx].concrete_state_indices[:],
+                                                set(list(symmetry_abstract_states[idx].obstructed_u_idx)[:])) # copy to list to force shallow copy
+                                                
     #overwrite
     symmetry_abstract_states = symmetry_abstract_states_single
 
