@@ -1013,7 +1013,10 @@ def create_symmetry_abstract_states_threaded(lock_one, u_idx_to_abstract_states_
     threshold_num_results = 200
 
     first_index = int(len(symbols_to_explore)/cpu_count) * thread_index
-    second_index = (int(len(symbols_to_explore)/cpu_count) * (thread_index+1)) - 1 if thread_index+1 != cpu_count else int(len(symbols_to_explore)/cpu_count) * (thread_index+1)
+    second_index = (int(len(symbols_to_explore)/cpu_count) * (thread_index+1)) - 1 if thread_index+1 != cpu_count else int(len(symbols_to_explore))
+
+    print(first_index, ":", second_index+1)
+    print(len(symbols_to_explore))
 
     for s in symbols_to_explore[first_index : second_index+1]:
 
