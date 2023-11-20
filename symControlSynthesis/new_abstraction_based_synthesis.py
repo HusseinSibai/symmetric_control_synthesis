@@ -58,7 +58,7 @@ class ThreadedAbstractState:
     def __init__(self, state_id, quantized_abstract_target, u_idx,
                  abstract_obstacles, concrete_state_indices_in, obstructed_u_idx, manager):
         self.id = state_id # tuple of centers
-        self.quantized_abstract_target = manager.list()
+        self.quantized_abstract_target = quantized_abstract_target
         self.u_idx = u_idx
         self.abstract_obstacles = manager.list()
         self.concrete_state_indices = manager.list()
@@ -1150,10 +1150,10 @@ def create_symmetry_abstract_states_threaded(lock_one, u_idx_to_abstract_states_
                         else:
                             if (u_idx_to_abstract_states_indices[hit.object] > 0):
 
-                                #with lock_one:
-                                add_concrete_state_to_symmetry_abstract_state(s, u_idx_to_abstract_states_indices[hit.object],
-                                    symmetry_transformed_targets_and_obstacles[s].abstract_obstacles, symmetry_abstract_states,
-                                    concrete_to_abstract, abstract_to_concrete, is_obstructed_u_idx)
+                                with lock_one:
+                                    add_concrete_state_to_symmetry_abstract_state(s, u_idx_to_abstract_states_indices[hit.object],
+                                        symmetry_transformed_targets_and_obstacles[s].abstract_obstacles, symmetry_abstract_states,
+                                        concrete_to_abstract, abstract_to_concrete, is_obstructed_u_idx)
 
                                 added_to_existing_state = True
                                 valid_hit_idx_of_concrete[s] = idx
@@ -1171,9 +1171,9 @@ def create_symmetry_abstract_states_threaded(lock_one, u_idx_to_abstract_states_
         
         
         if not added_to_existing_state:
-            #with lock_one:
-            add_concrete_state_to_symmetry_abstract_state(s, 0, pc.Region(list_poly=[]),
-                symmetry_abstract_states, concrete_to_abstract, abstract_to_concrete, {})
+            with lock_one:
+                add_concrete_state_to_symmetry_abstract_state(s, 0, pc.Region(list_poly=[]),
+                    symmetry_abstract_states, concrete_to_abstract, abstract_to_concrete, {})
     
     #print(symmetry_abstract_states[0].concrete_state_indices)
     val = symmetry_abstract_states[0].concrete_state_indices
@@ -1229,7 +1229,7 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
 
     #spawn up threadpool and submit tasks
     max_assignment = len(symbols_to_explore)
-    print("Only CPU detected..... Submitting workers for legacy multithreading")
+    print("Only CPU detected..... Submitting workers for legacy multiprocessing...")
 
     #create our pool
     for i in range(cpu_count):
@@ -1239,7 +1239,7 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
     for i in range(cpu_count):
         future_pool[i].start()
 
-    print("Awaiting Threads.....")
+    print("Awaiting Processes.....")
     val = set()
     
     #get results from each process
@@ -1255,32 +1255,30 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
     print("concrete_to_abstract: ", len(concrete_to_abstract))
     print("abstract_to_concrete: ", len(abstract_to_concrete))
     print("concrete states deemed 'obstacle': ", len(symmetry_abstract_states[0].concrete_state_indices))
+    print("symmetry abstract states found: ", len(symmetry_abstract_states))
 
     #convert the ThreadedAbstractStates to AbstractStates
     symmetry_abstract_states_single = dict()
-    for key, value in symmetry_abstract_states.items():
+    for idx in range(len(symmetry_abstract_states)):
 
         #make new key
-        symmetry_abstract_states_single[key] = AbstractState(0, None, None, [], [], set())
+        symmetry_abstract_states_single[idx] = AbstractState(0, None, None, [], [], set())
+        symmetry_abstract_states_single[idx].id = symmetry_abstract_states[idx].id
+        symmetry_abstract_states_single[idx].quantized_abstract_target = symmetry_abstract_states[idx].quantized_abstract_target
+        symmetry_abstract_states_single[idx].concrete_state_indices = symmetry_abstract_states[idx].concrete_state_indices[:]
+        symmetry_abstract_states_single[idx].u_idx = symmetry_abstract_states[idx].u_idx
+        symmetry_abstract_states_single[idx].abstract_obstacles = symmetry_abstract_states[idx].abstract_obstacles[:]
+        symmetry_abstract_states_single[idx].obstructed_u_idx.update(list(symmetry_abstract_states[idx].obstructed_u_idx)[:])
 
-        #duplicate manager data
-        symmetry_abstract_states_single[key].id = symmetry_abstract_states[key].id
-
-        if symmetry_abstract_states[key].quantized_abstract_target != None:
-            symmetry_abstract_states_single[key].quantized_abstract_target = symmetry_abstract_states[key].quantized_abstract_target[:]
-
-        symmetry_abstract_states_single[key].u_idx = symmetry_abstract_states[key].u_idx
-        symmetry_abstract_states_single[key].abstract_obstacles = symmetry_abstract_states[key].abstract_obstacles[:]
-        symmetry_abstract_states_single[key].obstructed_u_idx.update(list(symmetry_abstract_states[key].obstructed_u_idx)[:])
-
-        #overwrite
-        symmetry_abstract_states = symmetry_abstract_states_single
+    #overwrite
+    symmetry_abstract_states = symmetry_abstract_states_single
 
     #grab all values from abstract_to_concrete
     abstract_to_concrete_single = dict()
     for key, value in abstract_to_concrete.items():
         abstract_to_concrete_single[key] = abstract_to_concrete[key]
 
+    #overwrite
     abstract_to_concrete = abstract_to_concrete_single
 
     return symmetry_transformed_targets_and_obstacles, concrete_to_abstract, abstract_to_concrete, symmetry_abstract_states
@@ -1294,7 +1292,6 @@ def add_concrete_state_to_symmetry_abstract_state(curr_concrete_state_idx, abstr
 
     symmetry_abstract_states[abstract_state_id].abstract_obstacles = union_poly_obstacles
 
-    #FIXME: LIST IN DICT NOT APPENDING
     symmetry_abstract_states[abstract_state_id].concrete_state_indices.append(curr_concrete_state_idx)
 
     # set union of symmetry_abstract_states[abstract_state_id].obstructed_idx and is_obstructed_u_idx
@@ -1364,6 +1361,7 @@ def get_concrete_transition(s_idx, u_idx, concrete_edges,
 # add quantized target and reachable set of u_idx
 def plot_abstract_states(symmetry_abstract_states, deleted_abstract_states,
                          abstract_reachable_sets, state_to_paths_idx, abstract_to_concrete):
+    
     obstacle_color = 'r'
     # target_color = 'g'
     reach_color = 'b'
