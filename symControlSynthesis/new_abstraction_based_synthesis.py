@@ -62,13 +62,8 @@ class ThreadedAbstractState:
         self.id = state_id # tuple of centers
         self.quantized_abstract_target = quantized_abstract_target
         self.u_idx = u_idx
-
-
-        self.abstract_obstacles = manager.list()
-
-        self.concrete_state_indices = manager.list()
-        self.concrete_state_indices[:] = concrete_state_indices_in[:]
-
+        self.abstract_obstacles = abstract_obstacles
+        self.concrete_state_indices = manager.list(concrete_state_indices_in)
         self.obstructed_u_idx = obstructed_u_idx
 
 
@@ -1134,6 +1129,7 @@ def create_symmetry_abstract_states_threaded(lock_one, u_idx_to_abstract_states_
 
                             with lock_one:
                                 with u_idx_to_abstract_states_indices.get_lock():
+                                    print(type(copy.deepcopy(symmetry_transformed_targets_and_obstacles[s].abstract_obstacles)))
                                     next_abstract_state_id = shared_state_id.value
                                     new_abstract_state = ThreadedAbstractState(next_abstract_state_id,
                                                             np.average(np.array([hit.bbox[:3], hit.bbox[3:]]), axis=0),
