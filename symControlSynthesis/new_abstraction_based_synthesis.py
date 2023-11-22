@@ -1129,7 +1129,6 @@ def create_symmetry_abstract_states_threaded(lock_one, u_idx_to_abstract_states_
 
                             with lock_one:
                                 with u_idx_to_abstract_states_indices.get_lock():
-                                    print(type(copy.deepcopy(symmetry_transformed_targets_and_obstacles[s].abstract_obstacles)))
                                     next_abstract_state_id = shared_state_id.value
                                     new_abstract_state = ThreadedAbstractState(next_abstract_state_id,
                                                             np.average(np.array([hit.bbox[:3], hit.bbox[3:]]), axis=0),
@@ -1797,6 +1796,7 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                     curr_num_results *= 5
                 if not new_u_idx_found:
                     print(abstract_state.concrete_state_indices)
+                    print(concrete_state_idx)
                     abstract_state.concrete_state_indices.remove(concrete_state_idx)
                     abstract_to_concrete[abstract_state_idx].remove(concrete_state_idx)
 
