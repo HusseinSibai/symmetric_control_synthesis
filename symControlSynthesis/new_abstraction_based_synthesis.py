@@ -28,6 +28,8 @@ matplotlib.use("macOSX")
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle, Polygon
 
+import bisect
+
 #multiprocessing stuff
 
 #cpu-only
