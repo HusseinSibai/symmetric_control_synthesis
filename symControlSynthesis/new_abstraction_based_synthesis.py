@@ -62,8 +62,13 @@ class ThreadedAbstractState:
         self.id = state_id # tuple of centers
         self.quantized_abstract_target = quantized_abstract_target
         self.u_idx = u_idx
+
+
         self.abstract_obstacles = manager.list()
+
         self.concrete_state_indices = manager.list()
+        self.concrete_state_indices[:] = concrete_state_indices_in[:]
+
         self.obstructed_u_idx = obstructed_u_idx
 
 
@@ -1097,8 +1102,8 @@ def create_symmetry_abstract_states_threaded(lock_one, u_idx_to_abstract_states_
                 nearest_point = curr_nearest_point
                 min_dist = curr_dist
 
-        abstract_target_rect = np.array([nearest_point, nearest_point])
-        nearest_target_of_concrete[s] = abstract_target_rect
+        #abstract_target_rect = np.array([nearest_point, nearest_point])
+        nearest_target_of_concrete[s] = nearest_point
         
         curr_num_results=1
         is_obstructed_u_idx = {}
@@ -1127,27 +1132,27 @@ def create_symmetry_abstract_states_threaded(lock_one, u_idx_to_abstract_states_
                     if not is_obstructed_u_idx[hit.object]:
                         if u_idx_to_abstract_states_indices[hit.object] == 0:
 
-                            #with lock_one:
-                            with u_idx_to_abstract_states_indices.get_lock():
-                                next_abstract_state_id = shared_state_id.value
-                                new_abstract_state = ThreadedAbstractState(next_abstract_state_id,
-                                                        np.average(np.array([hit.bbox[:3], hit.bbox[3:]]), axis=0),
-                                                        hit.object,
-                                                        copy.deepcopy(symmetry_transformed_targets_and_obstacles[s].abstract_obstacles),
-                                                        [s],
-                                                        set([k for k, v in is_obstructed_u_idx.items() if v == True]), 
-                                                        manager)
+                            with lock_one:
+                                with u_idx_to_abstract_states_indices.get_lock():
+                                    next_abstract_state_id = shared_state_id.value
+                                    new_abstract_state = ThreadedAbstractState(next_abstract_state_id,
+                                                            np.average(np.array([hit.bbox[:3], hit.bbox[3:]]), axis=0),
+                                                            hit.object,
+                                                            copy.deepcopy(symmetry_transformed_targets_and_obstacles[s].abstract_obstacles),
+                                                            [s],
+                                                            set([k for k, v in is_obstructed_u_idx.items() if v == True]), 
+                                                            manager)
 
-                                symmetry_abstract_states[next_abstract_state_id] = new_abstract_state
-                                concrete_to_abstract[s] = next_abstract_state_id
+                                    symmetry_abstract_states[next_abstract_state_id] = new_abstract_state
+                                    concrete_to_abstract[s] = next_abstract_state_id
 
-                                
-                                u_idx_to_abstract_states_indices[hit.object] = next_abstract_state_id
+                                    
+                                    u_idx_to_abstract_states_indices[hit.object] = next_abstract_state_id
 
-                                abstract_to_concrete[next_abstract_state_id] = [s]
-                                shared_state_id.value = next_abstract_state_id + 1
-                                added_to_existing_state = True
-                                valid_hit_idx_of_concrete[s] = idx
+                                    abstract_to_concrete[next_abstract_state_id] = [s]
+                                    shared_state_id.value = next_abstract_state_id + 1
+                                    added_to_existing_state = True
+                                    valid_hit_idx_of_concrete[s] = idx
                             break
                         else:
                             if (u_idx_to_abstract_states_indices[hit.object] > 0):
@@ -1652,6 +1657,14 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
 
     temp_controllable_concrete_states = []
 
+    #reopen file
+    p = index.Property()
+    p.dimension = 3
+    p.dat_extension = 'data'
+    p.idx_extension = 'index'
+    reachability_rtree_idx3d = index.Index('3d_index_abstract',
+                                           properties=p)
+
 
     while True: # one iteration of this loop will
         num_new_symbols = 0
@@ -1689,11 +1702,6 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
 
             valid_vote = None
             for v, u_idx in abstract_state_to_u_idx_poll[abstract_state_idx]: #enumerate
-
-                if type(concrete_state_idx) != int or type(u_idx) != int:
-                    print(concrete_state_idx)
-                    print(u_idx)
-                    exit(0)
                 
                 next_concrete_state_indices = get_concrete_transition(concrete_state_idx, u_idx, concrete_edges, concrete_to_abstract,
                                                                     sym_x, symbol_step, abstract_reachable_sets,
@@ -1726,7 +1734,7 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                 visited_u_idx = set([u_idx for _, u_idx in abstract_state_to_u_idx_poll[abstract_state_idx]])
 
                 s = concrete_state_idx
-                curr_num_results = valid_hit_idx_of_concrete[s] * 2
+                curr_num_results = (valid_hit_idx_of_concrete[s]+1) * 2
                 nearest_point = nearest_abstract_target_of_concrete[s]
                 
                 is_obstructed_u_idx = {}
@@ -1788,10 +1796,12 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                         if new_u_idx_found:
                             break
                     else:
+                        print(curr_num_results)
                         raise "No hits but rtree's nearest should always return a result"
                     curr_num_results *= 5
                 if not new_u_idx_found:
-                    abstract_state.remove(concrete_state_idx)
+                    print(abstract_state.concrete_state_indices)
+                    abstract_state.concrete_state_indices.remove(concrete_state_idx)
                     abstract_to_concrete[abstract_state_idx].remove(concrete_state_idx)
 
                     add_concrete_state_to_symmetry_abstract_state(s, 0, pc.Region(list_poly=[]),
@@ -2189,7 +2199,7 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
     abstract_controller, controllable_abstract_states, \
         refinement_candidates = symmetry_abstract_synthesis_helper(
         concrete_states_to_explore,
-        [], # concrete_edges
+        {}, # concrete_edges
         abstract_to_concrete,
         concrete_to_abstract,
         symmetry_transformed_targets_and_obstacles,
