@@ -1617,8 +1617,7 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
 
     threshold_num_results = 400
 
-    temp_controllable_concrete_states = []
-
+    temp_controllable_abstract_states = set()
     #each new execution requires new opening of the rtree files
     p = index.Property()
     p.dimension = 3
@@ -1627,20 +1626,22 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
     reachability_rtree_idx3d = index.Index('3d_index_abstract',
                                            properties=p)
 
-
     while True: # one iteration of this loop will try current abstraction to find controllable states
         num_new_symbols = 0
         
         for concrete_state_idx in concrete_states_to_explore:
             
-            abstract_state_idx = concrete_to_abstract[concrete_state_idx]
+            
 
             if concrete_state_idx in obstacle_indices \
                     or concrete_state_idx in target_indices \
                     or concrete_state_idx in controllable_concrete_states \
-                    or abstract_state_idx == 0:
+                    or not concrete_state_idx in concrete_to_abstract \
+                    or concrete_to_abstract[concrete_state_idx] == 0:
                     #or concrete_state_idx in visited_concrete_states:
                 continue
+
+            abstract_state_idx = concrete_to_abstract[concrete_state_idx]
 
 
             abstract_state = symmetry_abstract_states[abstract_state_idx]
@@ -1681,7 +1682,7 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                     abstract_state_to_u_idx_poll[abstract_state_idx].remove((v, u_idx)) #linked list later
                     controllable_concrete_states.add(concrete_state_idx)
 
-                    temp_controllable_concrete_states.append(concrete_state_idx)
+                    temp_controllable_abstract_states.add(abstract_state_idx)
 
                     valid_vote = (v, u_idx)
                     bisect.insort(abstract_state_to_u_idx_poll[abstract_state_idx],
@@ -1744,7 +1745,7 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                                     if is_controlled:
                                         controllable_concrete_states.add(concrete_state_idx)
 
-                                        temp_controllable_concrete_states.append(concrete_state_idx)
+                                        temp_controllable_abstract_states.add(abstract_state_idx)
                                         
                                         valid_vote = (1, hit.object)
                                         bisect.insort(abstract_state_to_u_idx_poll[abstract_state_idx],
@@ -1779,7 +1780,7 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
             rects = []
             for abstract_state_idx in temp_controllable_abstract_states:
                 print("The abstract symbol ", abstract_state_idx,
-                      " is controllable using path_idx ", abstract_controller[abstract_state_idx])
+                      " is controllable using path indices ", abstract_state_to_u_idx_poll[abstract_state_idx])
                 for concrete_initial_set_index in abstract_to_concrete[abstract_state_idx]:
                     s_rect: np.array = concrete_index_to_rect(concrete_initial_set_index,
                                                               sym_x, symbol_step,
