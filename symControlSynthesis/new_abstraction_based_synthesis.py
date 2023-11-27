@@ -970,7 +970,7 @@ def nearest_point_to_the_origin(poly):
         nearest_point (numpy.ndarray): Coordinates of the nearest point to the origin in the polytope.
         dist (float): Distance to the origin
     """
-    x = solve_qp(np.eye(3), np.array([0,0,0]), poly.A, poly.b, solver="gurobi")
+    x = solve_qp(np.eye(3), np.array([0,0,0]), poly.A, poly.b, solver="clarabel")
     dist = np.linalg.norm(x, ord=2)
     return x, dist
 
@@ -1005,10 +1005,8 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
                                          s_subscript * symbol_step + symbol_step + X_low))
         s_rect[0, :] = np.maximum(X_low, s_rect[0, :])
         s_rect[1, :] = np.minimum(X_up, s_rect[1, :])
-        # print("s_rect: ", s_rect)
 
         # transforming the targets and obstacles to a new coordinate system relative to the states in s.
-
         abstract_targets_polys = []
         abstract_targets_rects = []
         abstract_targets_polys_over_approx = []
@@ -1017,8 +1015,7 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
 
         for target_idx, target_poly in enumerate(targets):
             abstract_target_poly = transform_poly_to_abstract_frames(target_poly, s_rect, over_approximate=False)
-            abstract_pos_target_poly = transform_poly_to_abstract_frames(target_poly, s_rect, over_approximate=False,
-                                                                         project_to_pos=True)
+            abstract_pos_target_poly = transform_poly_to_abstract_frames(target_poly, s_rect, over_approximate=False, project_to_pos=True)
             abstract_target_poly_over_approx = transform_poly_to_abstract_frames(
                 target_poly, s_rect, over_approximate=True)  # project_to_pos=True
             if not pc.is_empty(abstract_target_poly):
@@ -1049,9 +1046,6 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
             abstract_obstacle = transform_poly_to_abstract_frames(obstacle_poly, s_rect,
                                                                   over_approximate=True)  # project_to_pos=True
             abstract_obstacles = get_poly_union(abstract_obstacles, abstract_obstacle)
-            # abstract_obstacles.append(abstract_obstacle)
-            # pc.union(abstract_obstacles, abstract_obstacle)  # get_poly_union
-            # abstract_obstacles.append(abstract_obstacle)
 
         symmetry_transformed_targets_and_obstacles[s] = RelCoordState(s, abstract_targets_polys,
                                                                       abstract_obstacles)
@@ -1066,9 +1060,8 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
                 nearest_point = curr_nearest_point
                 min_dist = curr_dist
 
-        abstract_target_rect = np.array([nearest_point, nearest_point])
-        nearest_target_of_concrete[s] = abstract_target_rect
-
+        nearest_target_of_concrete[s] = nearest_point
+        
         curr_num_results=1
         is_obstructed_u_idx = {}
         added_to_existing_state = False
@@ -1156,7 +1149,6 @@ def add_concrete_state_to_symmetry_abstract_state(curr_concrete_state_idx, abstr
     return
 
 
-
 def get_concrete_transition(s_idx, u_idx, concrete_edges, concrete_to_abstract,
                             sym_x, symbol_step, abstract_reachable_sets,
                             obstacles_rects, obstacle_indices, targets_rects, target_indices, X_low, X_up):
@@ -1192,8 +1184,9 @@ def get_concrete_transition(s_idx, u_idx, concrete_edges, concrete_to_abstract,
                                 over_approximate=True).tolist()
     indices_to_delete = []
     for idx, succ_idx in enumerate(neighbors):
-        if (succ_idx in obstacle_indices 
-            or concrete_to_abstract[succ_idx] == 0): # state succ_idx is in the obstacle abstract state
+        if ((succ_idx in obstacle_indices) 
+            or not succ_idx in concrete_to_abstract
+            or (concrete_to_abstract[succ_idx] == 0)): # state succ_idx is in the obstacle abstract state
             concrete_edges[(s_idx, u_idx)] = [-2]
             return [-2]
         if succ_idx in target_indices:
@@ -1458,6 +1451,7 @@ def concrete_index_to_rect(concrete_state_idx, sym_x, symbol_step, X_low, X_up):
     concrete_rect[1, :] = np.minimum(X_up, concrete_rect[1, :])
     return concrete_rect
 
+
 def quantize(grid_rtree, point, cell_size_per_dim):
     hits = []
     hits.extend(list(grid_rtree.nearest(
@@ -1504,7 +1498,7 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
     temp_controllable_concrete_states = []
 
 
-    while True: # one iteration of this loop will
+    while True: # one iteration of this loop will try current abstraction to find controllable states
         num_new_symbols = 0
         
         for concrete_state_idx in concrete_states_to_explore:
@@ -1540,11 +1534,6 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
 
             valid_vote = None
             for v, u_idx in abstract_state_to_u_idx_poll[abstract_state_idx]: #enumerate
-
-                if type(concrete_state_idx) != int or type(u_idx) != int:
-                    print(concrete_state_idx)
-                    print(u_idx)
-                    exit(0)
                 
                 next_concrete_state_indices = get_concrete_transition(concrete_state_idx, u_idx, concrete_edges, concrete_to_abstract,
                                                                     sym_x, symbol_step, abstract_reachable_sets,
@@ -1560,7 +1549,7 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                         break
                 if is_controlled:
                     abstract_state_to_u_idx_poll[abstract_state_idx].remove((v, u_idx)) #linked list later
-                    controllable_concrete_states.append(concrete_state_idx)
+                    controllable_concrete_states.add(concrete_state_idx)
 
                     temp_controllable_concrete_states.append(concrete_state_idx)
 
@@ -1577,7 +1566,7 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                 visited_u_idx = set([u_idx for _, u_idx in abstract_state_to_u_idx_poll[abstract_state_idx]])
 
                 s = concrete_state_idx
-                curr_num_results = valid_hit_idx_of_concrete[s] * 2
+                curr_num_results = (valid_hit_idx_of_concrete[s] + 1) * 2
                 nearest_point = nearest_abstract_target_of_concrete[s]
                 
                 is_obstructed_u_idx = {}
@@ -1623,7 +1612,7 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                                             is_controlled = False
                                             break
                                     if is_controlled:
-                                        controllable_concrete_states.append(concrete_state_idx)
+                                        controllable_concrete_states.add(concrete_state_idx)
 
                                         temp_controllable_concrete_states.append(concrete_state_idx)
                                         
@@ -1642,7 +1631,7 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                         raise "No hits but rtree's nearest should always return a result"
                     curr_num_results *= 5
                 if not new_u_idx_found:
-                    abstract_state.remove(concrete_state_idx)
+                    abstract_state.concrete_state_indices.remove(concrete_state_idx)
                     abstract_to_concrete[abstract_state_idx].remove(concrete_state_idx)
 
                     add_concrete_state_to_symmetry_abstract_state(s, 0, pc.Region(list_poly=[]),
@@ -1858,8 +1847,6 @@ def refine(concrete_to_abstract, abstract_to_concrete, symmetry_abstract_states,
         controllable_abstract_states_temp
 
 
-
-
 def compute_reachable_set_tira(eng, time_step, rect_low, rect_up, u, W_low, W_up):
     rect_low_matlab = matlab.double(rect_low.tolist())
     rect_up_matlab = matlab.double(rect_up.tolist())
@@ -1878,8 +1865,6 @@ def compute_reachable_set_tira(eng, time_step, rect_low, rect_up, u, W_low, W_up
     for idx in range(succ_low.shape[0]):
         reachtube.append(np.array([succ_low[idx, :], succ_up[idx, :]]))
     return reachtube  # np.concatenate((succ_low, succ_up), axis=0)
-
-
 
 
 def abstract_synthesis(U_discrete, time_step, W_low, W_up,
@@ -2040,7 +2025,7 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
     abstract_controller, controllable_abstract_states, \
         refinement_candidates = symmetry_abstract_synthesis_helper(
         concrete_states_to_explore,
-        [], # concrete_edges
+        {}, # concrete_edges
         abstract_to_concrete,
         concrete_to_abstract,
         symmetry_transformed_targets_and_obstacles,
@@ -2051,12 +2036,15 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
         refinement_candidates,
         controllable_abstract_states,
         controllable_concrete_states,
-        [], # abstract_controller
-        [], # concrete_controller
+        {}, # abstract_controller
+        {}, # concrete_controller
         reachability_rtree_idx3d, per_dim_max_travelled_distance, obstacles_rects, obstacle_indices,
         targets_rects, target_indices, X_low, X_up, sym_x, symbol_step)
     
     t_synthesis += time.time() - temp_t_synthesis
+
+    plot_abstract_states(symmetry_abstract_states, [], abstract_reachable_sets, state_to_paths_idx, abstract_to_concrete)
+
 
     
     exit(0)
