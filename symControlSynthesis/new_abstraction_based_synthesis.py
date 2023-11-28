@@ -1184,13 +1184,13 @@ def get_concrete_transition(s_idx, u_idx, concrete_edges, concrete_to_abstract,
                                 over_approximate=True).tolist()
     indices_to_delete = []
     for idx, succ_idx in enumerate(neighbors):
-        if ((succ_idx in obstacle_indices) 
-            or not succ_idx in concrete_to_abstract
-            or (concrete_to_abstract[succ_idx] == 0)): # state succ_idx is in the obstacle abstract state
+        if (succ_idx in obstacle_indices or
+            (succ_idx in concrete_to_abstract and concrete_to_abstract[succ_idx] == 0)): # state succ_idx is in the obstacle abstract state
             concrete_edges[(s_idx, u_idx)] = [-2]
             return [-2]
         if succ_idx in target_indices:
             indices_to_delete.append(idx)
+        
 
     if len(indices_to_delete) == len(neighbors):
         concrete_edges[(s_idx, u_idx)] = [-1]
@@ -1500,6 +1500,8 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
 
     while True: # one iteration of this loop will try current abstraction to find controllable states
         num_new_symbols = 0
+
+        debug_status = [0,0,0]
         
         for concrete_state_idx in concrete_states_to_explore:
             
@@ -1508,9 +1510,10 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
             if concrete_state_idx in obstacle_indices \
                     or concrete_state_idx in target_indices \
                     or concrete_state_idx in controllable_concrete_states \
-                    or not concrete_state_idx in concrete_to_abstract \
-                    or concrete_to_abstract[concrete_state_idx] == 0:
+                    or (concrete_state_idx in concrete_to_abstract \
+                    and concrete_to_abstract[concrete_state_idx] == 0):
                     #or concrete_state_idx in visited_concrete_states:
+                debug_status[0] += 1
                 continue
 
             abstract_state_idx = concrete_to_abstract[concrete_state_idx]
@@ -1634,11 +1637,14 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                         raise "No hits but rtree's nearest should always return a result"
                     curr_num_results *= 5
                 if not new_u_idx_found:
-                    abstract_state.concrete_state_indices.remove(concrete_state_idx)
-                    abstract_to_concrete[abstract_state_idx].remove(concrete_state_idx)
+                    #abstract_state.concrete_state_indices.remove(concrete_state_idx)
+                    #abstract_to_concrete[abstract_state_idx].remove(concrete_state_idx)
 
-                    add_concrete_state_to_symmetry_abstract_state(s, 0, pc.Region(list_poly=[]),
-                        symmetry_abstract_states, concrete_to_abstract, abstract_to_concrete, {})
+                    #add_concrete_state_to_symmetry_abstract_state(s, 0, pc.Region(list_poly=[]), symmetry_abstract_states, concrete_to_abstract, abstract_to_concrete, {})
+                    debug_status[1] += 1
+                    pass
+
+        print(f"{debug_status[0]} states not analyzed for synthesis\n{debug_status[1]} states reached the control threshold")
 
 
         if num_new_symbols:
@@ -1658,9 +1664,9 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                                                               sym_x, symbol_step,
                                                               X_low, X_up)
                     bloated_rect = np.array([np.maximum(np.add(s_rect[0, :],
-                                                               -1 * per_dim_max_travelled_distance),
+                                                               -2 * per_dim_max_travelled_distance),
                                                         X_low),
-                                             np.minimum(np.add(s_rect[1, :], per_dim_max_travelled_distance),
+                                             np.minimum(np.add(s_rect[1, :], 2 * per_dim_max_travelled_distance),
                                                         X_up)])
                     temp_rects = [bloated_rect]
                     for obstacle_rect in obstacles_rects:
