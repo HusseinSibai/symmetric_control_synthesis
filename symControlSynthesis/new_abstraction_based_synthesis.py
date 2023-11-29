@@ -1314,6 +1314,8 @@ def plot_concrete_states(controllable_concrete_states, targets_rects, obstacles_
     plt.cla()
     plt.close()
 
+def plot_controller():
+    pass
 
 def create_symmetry_abstract_reachable_sets(Symbolic_reduced, n, reachability_rtree_idx2d, reachability_rtree_idx3d):
     reachable_rect_global_cntr = 0
@@ -1495,7 +1497,7 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
 
     threshold_num_results = 400
 
-    temp_controllable_abstract_states = set()
+    temp_controllable_concrete_states = set()
 
 
     while True: # one iteration of this loop will try current abstraction to find controllable states
@@ -1557,7 +1559,7 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                     abstract_state_to_u_idx_poll[abstract_state_idx].remove((v, u_idx)) #linked list later
                     controllable_concrete_states.add(concrete_state_idx)
 
-                    temp_controllable_abstract_states.add(abstract_state_idx)
+                    temp_controllable_concrete_states.add(concrete_state_idx)
 
                     valid_vote = (v, u_idx)
                     bisect.insort(abstract_state_to_u_idx_poll[abstract_state_idx],
@@ -1620,7 +1622,7 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                                     if is_controlled:
                                         controllable_concrete_states.add(concrete_state_idx)
 
-                                        temp_controllable_abstract_states.add(abstract_state_idx)
+                                        temp_controllable_concrete_states.add(concrete_state_idx)
                                         
                                         valid_vote = (1, hit.object)
                                         bisect.insort(abstract_state_to_u_idx_poll[abstract_state_idx],
@@ -1650,12 +1652,13 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
         if num_new_symbols:
             print(time.time() - t_start, " ", num_new_symbols,
                   " new controllable states have been found in this synthesis iteration\n")
-            controllable_abstract_states = controllable_abstract_states.union(temp_controllable_abstract_states)
+            #controllable_abstract_states = controllable_abstract_states.union(temp_controllable_abstract_states)
             num_controllable_states += num_new_symbols
             #refinement_candidates = refinement_candidates.difference(temp_controllable_abstract_states)
-            temp_controllable_abstract_states = list(temp_controllable_abstract_states)
+            #temp_controllable_abstract_states = list(temp_controllable_abstract_states)
             # candidate_initial_set_rect = None
             rects = []
+            '''
             for abstract_state_idx in temp_controllable_abstract_states:
                 print("The abstract symbol ", abstract_state_idx,
                       " is controllable using path indices ", abstract_state_to_u_idx_poll[abstract_state_idx])
@@ -1676,7 +1679,21 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                         temp_rects = copy.deepcopy(per_obstacle_temp_rects)
                     rects.extend(temp_rects)
                     controllable_concrete_states.add(concrete_initial_set_index)
-
+                '''
+            for concrete_state_idx in temp_controllable_concrete_states:
+                # print which abstract states got right controls this iteration
+                # print("The abstract symbol ", abstract_state_idx, " is controllable using path indices ", abstract_state_to_u_idx_poll[abstract_state_idx])
+                s_rect: np.array = concrete_index_to_rect(concrete_state_idx, sym_x, symbol_step, X_low, X_up)
+                bloated_rect = np.array([np.maximum(np.add(s_rect[0, :], -2 * per_dim_max_travelled_distance), X_low),
+                                         np.minimum(np.add(s_rect[1, :], 2 * per_dim_max_travelled_distance), X_up)])
+                temp_rects = [bloated_rect]
+                for obstacle_rect in obstacles_rects:
+                    per_obstacle_temp_rects = []
+                    for temp_rect in temp_rects:
+                        per_obstacle_temp_rects.extend(subtract_rectangles(temp_rect, obstacle_rect))
+                    temp_rects = copy.deepcopy(per_obstacle_temp_rects)
+                rects.extend(temp_rects)
+            
             concrete_states_to_explore = set()
             for neighborhood_rect in rects:
                 concrete_states_to_explore = concrete_states_to_explore.union(
