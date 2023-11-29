@@ -1503,7 +1503,7 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
     while True: # one iteration of this loop will try current abstraction to find controllable states
         num_new_symbols = 0
 
-        debug_status = [0,0,0]
+        #debug_status = [0,0,0]
         
         for concrete_state_idx in concrete_states_to_explore:
             
@@ -1515,7 +1515,7 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                     or (concrete_state_idx in concrete_to_abstract \
                     and concrete_to_abstract[concrete_state_idx] == 0):
                     #or concrete_state_idx in visited_concrete_states:
-                debug_status[0] += 1
+                #debug_status[0] += 1
                 continue
 
             abstract_state_idx = concrete_to_abstract[concrete_state_idx]
@@ -1561,9 +1561,8 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
 
                     temp_controllable_concrete_states.add(concrete_state_idx)
 
-                    valid_vote = (v, u_idx)
-                    bisect.insort(abstract_state_to_u_idx_poll[abstract_state_idx],
-                            (valid_vote[0]+1, valid_vote[1]), key=lambda x: -x[0])
+                    valid_vote = (v+1, u_idx)
+                    bisect.insort(abstract_state_to_u_idx_poll[abstract_state_idx], valid_vote, key=lambda x: -x[0])
                     concrete_controller[concrete_state_idx] = valid_vote[1]
                     num_new_symbols +=1
                     break
@@ -1625,28 +1624,27 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                                         temp_controllable_concrete_states.add(concrete_state_idx)
                                         
                                         valid_vote = (1, hit.object)
-                                        bisect.insort(abstract_state_to_u_idx_poll[abstract_state_idx],
-                                                (valid_vote[0]+1, valid_vote[1]), key=lambda x: -x[0])
+                                        bisect.insort(abstract_state_to_u_idx_poll[abstract_state_idx], valid_vote, key=lambda x: -x[0])
                                         concrete_controller[concrete_state_idx] = valid_vote[1]
                                         new_u_idx_found = True
                                         num_new_symbols +=1
                                         break
-                                    visited_u_idx.add(hit.object)
+                                visited_u_idx.add(hit.object)
 
                         if new_u_idx_found:
                             break
                     else:
                         raise "No hits but rtree's nearest should always return a result"
-                    curr_num_results *= 5
+                    curr_num_results += 100
                 if not new_u_idx_found:
                     #abstract_state.concrete_state_indices.remove(concrete_state_idx)
                     #abstract_to_concrete[abstract_state_idx].remove(concrete_state_idx)
 
                     #add_concrete_state_to_symmetry_abstract_state(s, 0, pc.Region(list_poly=[]), symmetry_abstract_states, concrete_to_abstract, abstract_to_concrete, {})
-                    debug_status[1] += 1
+                    #debug_status[1] += 1
                     pass
 
-        print(f"{debug_status[0]} states not analyzed for synthesis\n{debug_status[1]} states reached the control threshold")
+        #print(f"{debug_status[0]} states not analyzed for synthesis\n{debug_status[1]} states reached the control threshold")
 
 
         if num_new_symbols:
