@@ -1203,22 +1203,26 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
 
     #spawn up threadpool and submit tasks
     max_assignment = len(symbols_to_explore)
-    print("Only CPU detected..... Submitting workers for legacy multiprocessing...")
+    process_count = cpu_count
+
+    #only assign as many threads as we have work for
+    if max_assignment < cpu_count:
+        process_count = max_assignment
 
     #create our pool
-    for i in range(cpu_count):
+    for i in range(process_count):
         future_pool[i] = Process(target=create_symmetry_abstract_states_threaded, args=(lock_one, list(symbols_to_explore), symbol_step, targets, obstacles, sym_x, X_low, X_up,
                                     reachability_rtree_idx3d, abstract_reachable_sets, symmetry_transformed_targets_and_obstacles, concrete_to_abstract,
                                     abstract_to_concrete, symmetry_abstract_states, u_idx_to_abstract_states_indices, nearest_target_of_concrete, valid_hit_idx_of_concrete,
                                     next_abstract_state_id, threshold_num_results, Q, i, manager))
     #start them
-    for i in range(cpu_count):
+    for i in range(process_count):
         future_pool[i].start()
     
     #get results from each process
     counter_threads = 0
-    for i in range(cpu_count):
-        print("Awaiting Processes: " + str(int((counter_threads/cpu_count)*100)) + "%", end="\r")  
+    for i in range(process_count):
+        print("Awaiting Processes: " + str(int((counter_threads/process_count)*100)) + "%", end="\r")  
         result = Q.get()
         counter_threads += 1
         symmetry_transformed_targets_and_obstacles.update(result[0])
@@ -1796,12 +1800,8 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
     t_start = time.time()
     num_controllable_states = len(controllable_abstract_states)
     n = X_up.shape[0]
-    # visited_concrete_states = {}
-    abstract_state_to_u_idx_poll = {} #initialize on the spot
 
     threshold_num_results = 400
-
-    temp_controllable_concrete_states = set()
 
     #each new execution requires new opening of the rtree files
     p = index.Property()
@@ -1843,11 +1843,14 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
 
         num_new_symbols['num_new_symbols'] = 0
 
-        #spin up threads to check the states
-        print("Only CPU detected..... Submitting workers for legacy multiprocessing...")
+        process_count = cpu_count
+
+        #only assign as many threads as we have work for
+        if max_assignment < cpu_count:
+            process_count = max_assignment
 
         #create our pool
-        for i in range(cpu_count):
+        for i in range(process_count):
             future_pool[i] = Process(target=symmetry_abstract_synthesis_helper_threaded, args=(list(concrete_states_to_explore),
                                                                                             concrete_edges,
                                                                                             abstract_to_concrete,
@@ -1873,13 +1876,13 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                                                                                             i, lock_one, Q
                                                                                             ))
         #start them
-        for i in range(cpu_count):
+        for i in range(process_count):
             future_pool[i].start()
 
         #get results from each process
         counter_threads = 0
-        for i in range(cpu_count):
-            print("Awaiting Processes: " + str(int((counter_threads/cpu_count)*100)) + "%", end="\r")  
+        for i in range(process_count):
+            print("Awaiting Processes: " + str(int((counter_threads/process_count)*100)) + "%", end="\r")  
             result = Q.get()
             counter_threads += 1
 
