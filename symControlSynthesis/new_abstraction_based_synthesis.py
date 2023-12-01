@@ -1176,16 +1176,16 @@ def get_concrete_transition(s_idx, u_idx, concrete_edges, concrete_to_abstract,
     concrete_succ = transform_to_frames(reachable_rect[0, :],
                                         reachable_rect[1, :],
                                         s_rect[0, :], s_rect[1, :])
-    for rect in targets_rects:
+    '''for rect in targets_rects:
         if does_rect_contain(concrete_succ, rect):
             concrete_edges[(s_idx, u_idx)] = [-1]
-            return [-1]  # reached target
+            return [-1]  # reached target'''
     neighbors = rect_to_indices(concrete_succ, symbol_step, X_low, sym_x[0, :],
                                 over_approximate=True).tolist()
     indices_to_delete = []
     for idx, succ_idx in enumerate(neighbors):
-        if (succ_idx in obstacle_indices or
-            (succ_idx in concrete_to_abstract and concrete_to_abstract[succ_idx] == 0)): # state succ_idx is in the obstacle abstract state
+        if succ_idx in obstacle_indices:
+            #or (succ_idx in concrete_to_abstract and concrete_to_abstract[succ_idx] == 0): # state succ_idx is in the obstacle abstract state
             concrete_edges[(s_idx, u_idx)] = [-2]
             return [-2]
         if succ_idx in target_indices:
@@ -1488,12 +1488,13 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                                        per_dim_max_travelled_distance,
                                        obstacles_rects, obstacle_indices,
                                        targets_rects, target_indices,
-                                       X_low, X_up, sym_x, symbol_step):
+                                       X_low, X_up, sym_x, symbol_step, U_discrete):
     t_start = time.time()
     num_controllable_states = len(controllable_abstract_states)
     n = X_up.shape[0]
     # visited_concrete_states = {}
     abstract_state_to_u_idx_poll = {} #initialize on the spot
+    abstract_state_to_u_idx_set = {}
 
     threshold_num_results = 400
 
@@ -1509,14 +1510,14 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
             
             
 
-            if concrete_state_idx in obstacle_indices \
+            '''if concrete_state_idx in obstacle_indices \
                     or concrete_state_idx in target_indices \
                     or concrete_state_idx in controllable_concrete_states \
                     or (concrete_state_idx in concrete_to_abstract \
                     and concrete_to_abstract[concrete_state_idx] == 0):
                     #or concrete_state_idx in visited_concrete_states:
                 #debug_status[0] += 1
-                continue
+                continue'''
 
             abstract_state_idx = concrete_to_abstract[concrete_state_idx]
 
@@ -1539,6 +1540,7 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
 
             if not abstract_state_idx in abstract_state_to_u_idx_poll:
                 abstract_state_to_u_idx_poll[abstract_state_idx] = [(0, abstract_state.u_idx)]
+                abstract_state_to_u_idx_set[abstract_state_idx] = set([abstract_state.u_idx])
 
             valid_vote = None
             for v, u_idx in abstract_state_to_u_idx_poll[abstract_state_idx]: #enumerate
@@ -1546,15 +1548,15 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                 next_concrete_state_indices = get_concrete_transition(concrete_state_idx, u_idx, concrete_edges, concrete_to_abstract,
                                                                     sym_x, symbol_step, abstract_reachable_sets,
                                                                     obstacles_rects, obstacle_indices, targets_rects,
-                                                                    target_indices, X_low, X_up)
+                                                                    controllable_concrete_states, X_low, X_up)
                 
-                is_controlled = True
-                for next_concrete_state_idx in next_concrete_state_indices:
+                is_controlled = (next_concrete_state_indices == [-1])
+                '''for next_concrete_state_idx in next_concrete_state_indices:
                     if not (next_concrete_state_idx == -1 or
                             (next_concrete_state_idx >= 0 and
                             next_concrete_state_idx in controllable_concrete_states)):
                         is_controlled = False
-                        break
+                        break'''
                 if is_controlled:
                     abstract_state_to_u_idx_poll[abstract_state_idx].remove((v, u_idx)) #linked list later
                     controllable_concrete_states.add(concrete_state_idx)
@@ -1570,66 +1572,70 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
             
 
             if valid_vote is None:
-                visited_u_idx = set([u_idx for _, u_idx in abstract_state_to_u_idx_poll[abstract_state_idx]])
+                visited_u_idx = abstract_state_to_u_idx_set[abstract_state_idx].copy()
 
                 s = concrete_state_idx
-                curr_num_results = (valid_hit_idx_of_concrete[s] + 1) * 2
+                #curr_num_results = (valid_hit_idx_of_concrete[s] + 1) * 2
+                curr_num_results = 300
+
                 nearest_point = nearest_abstract_target_of_concrete[s]
                 
                 is_obstructed_u_idx = {}
                 
                 new_u_idx_found = False
                 while curr_num_results < threshold_num_results:
-                    hits = list(reachability_rtree_idx3d.nearest(
+                    hits = list(range(len(abstract_reachable_sets)))
+                    '''
+                    list(reachability_rtree_idx3d.nearest(
                         (nearest_point[0], nearest_point[1], nearest_point[2],
                         nearest_point[0]+0.001, nearest_point[1]+0.001, nearest_point[2]+0.001),
                         num_results=curr_num_results, objects=True))
-                
+                    '''
                     if len(hits):
-                        for idx in range(0, len(hits)):
-                            hit = hits[idx]
-                            if not (hit.object in visited_u_idx):
+                        for hit_object in hits:
+                            if not hit_object in visited_u_idx:
 
-                                if not hit.object in is_obstructed_u_idx:
-                                    for p_idx in range(len(abstract_reachable_sets[hit.object]), 0, -1):
+                                '''if not hit_object in is_obstructed_u_idx:
+                                    for p_idx in range(len(abstract_reachable_sets[hit_object]), 0, -1):
                                         if type(symmetry_transformed_targets_and_obstacles[s].abstract_obstacles) == pc.Region:
                                             list_obstacles = symmetry_transformed_targets_and_obstacles[s].abstract_obstacles.list_poly
                                         else:
                                             list_obstacles = [symmetry_transformed_targets_and_obstacles[s].abstract_obstacles]
                                         for obstacle in list_obstacles:
-                                            if not pc.is_empty(pc.intersect(abstract_reachable_sets[hit.object][p_idx-1], obstacle)):
-                                                is_obstructed_u_idx[hit.object] = True
+                                            if not pc.is_empty(pc.intersect(abstract_reachable_sets[hit_object][p_idx-1], obstacle)):
+                                                is_obstructed_u_idx[hit_object] = True
                                                 break
-                                        if hit.object in is_obstructed_u_idx:
+                                        if hit_object in is_obstructed_u_idx:
                                             break
-                                    if not hit.object in is_obstructed_u_idx:
-                                        is_obstructed_u_idx[hit.object] = False
-                                if not is_obstructed_u_idx[hit.object]:
+                                    if not hit_object in is_obstructed_u_idx:
+                                        is_obstructed_u_idx[hit_object] = False
+                                if not is_obstructed_u_idx[hit_object]:'''
                 
-                                    next_concrete_state_indices = get_concrete_transition(concrete_state_idx, u_idx, concrete_edges, concrete_to_abstract,
-                                                                    sym_x, symbol_step, abstract_reachable_sets,
-                                                                    obstacles_rects, obstacle_indices, targets_rects,
-                                                                    target_indices, X_low, X_up)
-                
-                                    is_controlled = True
-                                    for next_concrete_state_idx in next_concrete_state_indices:
-                                        if not (next_concrete_state_idx == -1 or
-                                                (next_concrete_state_idx >= 0 and
-                                                next_concrete_state_idx in controllable_concrete_states)):
-                                            is_controlled = False
-                                            break
-                                    if is_controlled:
-                                        controllable_concrete_states.add(concrete_state_idx)
+                                next_concrete_state_indices = get_concrete_transition(concrete_state_idx, u_idx, concrete_edges, concrete_to_abstract,
+                                                                sym_x, symbol_step, abstract_reachable_sets,
+                                                                obstacles_rects, obstacle_indices, targets_rects,
+                                                                controllable_concrete_states, X_low, X_up)
+            
+                                is_controlled = (next_concrete_state_indices == [-1])
+                                '''for next_concrete_state_idx in next_concrete_state_indices:
+                                    if not (next_concrete_state_idx == -1 or
+                                            (next_concrete_state_idx >= 0 and
+                                            next_concrete_state_idx in controllable_concrete_states)):
+                                        is_controlled = False
+                                        break'''
+                                if is_controlled:
+                                    controllable_concrete_states.add(concrete_state_idx)
 
-                                        temp_controllable_concrete_states.add(concrete_state_idx)
-                                        
-                                        valid_vote = (1, hit.object)
-                                        bisect.insort(abstract_state_to_u_idx_poll[abstract_state_idx], valid_vote, key=lambda x: -x[0])
-                                        concrete_controller[concrete_state_idx] = valid_vote[1]
-                                        new_u_idx_found = True
-                                        num_new_symbols +=1
-                                        break
-                                visited_u_idx.add(hit.object)
+                                    temp_controllable_concrete_states.add(concrete_state_idx)
+                                    
+                                    valid_vote = (1, hit_object)
+                                    bisect.insort(abstract_state_to_u_idx_poll[abstract_state_idx], valid_vote, key=lambda x: -x[0])
+                                    abstract_state_to_u_idx_set[abstract_state_idx].add(u_idx)
+                                    concrete_controller[concrete_state_idx] = valid_vote[1]
+                                    new_u_idx_found = True
+                                    num_new_symbols +=1
+                                    break
+                                visited_u_idx.add(hit_object)
 
                         if new_u_idx_found:
                             break
@@ -1678,12 +1684,13 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                     rects.extend(temp_rects)
                     controllable_concrete_states.add(concrete_initial_set_index)
                 '''
-            for concrete_state_idx in temp_controllable_concrete_states:
+            '''for concrete_state_idx in temp_controllable_concrete_states:
                 # print which abstract states got right controls this iteration
                 # print("The abstract symbol ", abstract_state_idx, " is controllable using path indices ", abstract_state_to_u_idx_poll[abstract_state_idx])
                 s_rect: np.array = concrete_index_to_rect(concrete_state_idx, sym_x, symbol_step, X_low, X_up)
-                bloated_rect = np.array([np.maximum(np.add(s_rect[0, :], -2 * per_dim_max_travelled_distance), X_low),
-                                         np.minimum(np.add(s_rect[1, :], 2 * per_dim_max_travelled_distance), X_up)])
+                max_distance = 2 * (per_dim_max_travelled_distance + symbol_step)
+                bloated_rect = np.array([np.maximum(np.add(s_rect[0, :], -max_distance), X_low),
+                                         np.minimum(np.add(s_rect[1, :], max_distance), X_up)])
                 temp_rects = [bloated_rect]
                 for obstacle_rect in obstacles_rects:
                     per_obstacle_temp_rects = []
@@ -1696,7 +1703,8 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
             for neighborhood_rect in rects:
                 concrete_states_to_explore = concrete_states_to_explore.union(
                     rect_to_indices(neighborhood_rect, symbol_step, X_low,
-                                    sym_x[0, :], over_approximate=True))
+                                    sym_x[0, :], over_approximate=True))'''
+            concrete_states_to_explore = concrete_states_to_explore.difference(temp_controllable_concrete_states)
             print(num_controllable_states, ' symbols are controllable to satisfy the reach-avoid specification\n')
         else:
             print('No new controllable state has been found in this synthesis iteration\n', time.time() - t_start)
@@ -2010,7 +2018,7 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
     abstract_states_to_explore = set(range(len(abstract_to_concrete)))
     local_abstract_states_to_explore = set(range(len(abstract_to_concrete)))
     controllable_abstract_states = set()
-    controllable_concrete_states = set()
+    controllable_concrete_states = target_indices.copy()
     refinement_candidates = set()
     abstract_transitions = {}  # [None] * len(abstract_to_concrete)
     inverse_abstract_transitions = {}
@@ -2063,7 +2071,7 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
         {}, # abstract_controller
         {}, # concrete_controller
         reachability_rtree_idx3d, per_dim_max_travelled_distance, obstacles_rects, obstacle_indices,
-        targets_rects, target_indices, X_low, X_up, sym_x, symbol_step)
+        targets_rects, target_indices, X_low, X_up, sym_x, symbol_step, U_discrete)
     
     t_synthesis += time.time() - temp_t_synthesis
 
