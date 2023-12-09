@@ -1541,12 +1541,19 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
     abstract_state_to_u_idx_poll = {} #initialize on the spot
     abstract_state_to_u_idx_set = {}
 
+    total_nb_explore = len(concrete_states_to_explore)
+
     threshold_num_results = 400
 
-    temp_controllable_concrete_states = set()
-
+    
+    nb_iterations = 0
+    sum_ratios_neighbor_to_total = 0
+    exploration_record = []
 
     while True: # one iteration of this loop will try current abstraction to find controllable states
+        
+        temp_controllable_concrete_states = set()
+
         num_new_symbols = 0
 
         #debug_status = [0,0,0]
@@ -1714,7 +1721,7 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                 s_rect: np.array = concrete_index_to_rect(concrete_state_idx, sym_x, symbol_step, X_low, X_up)
                 max_distance = 2 * (per_dim_max_travelled_distance + symbol_step)
                 bloated_rect = np.array([np.maximum(np.add(s_rect[0, :], -max_distance), X_low),
-                                         np.minimum(np.add(s_rect[1, :], max_distance), X_up)])
+                                        np.minimum(np.add(s_rect[1, :], max_distance), X_up)])
                 temp_rects = [bloated_rect]
                 for obstacle_rect in obstacles_rects:
                     per_obstacle_temp_rects = []
@@ -1729,6 +1736,12 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                     rect_to_indices(neighborhood_rect, symbol_step, X_low,
                                     sym_x[0, :], over_approximate=True))
             concrete_states_to_explore = concrete_states_to_explore.difference(temp_controllable_concrete_states)
+
+            exploration_record.append((len(concrete_states_to_explore), num_controllable_states))
+            ratio_neighbor_to_total = len(concrete_states_to_explore) / (total_nb_explore - num_controllable_states)
+            print("Ratio of neighbors over total explored", ratio_neighbor_to_total)
+            sum_ratios_neighbor_to_total += ratio_neighbor_to_total
+            nb_iterations += 1
             print(num_controllable_states, ' symbols are controllable to satisfy the reach-avoid specification\n')
         else:
             print('No new controllable state has been found in this synthesis iteration\n', time.time() - t_start)
@@ -1741,7 +1754,12 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
             poll = abstract_state_to_u_idx_poll[abstract_idx]
             table.writerow([str(abstract_idx)] + [str(u)+':'+str(v) for (v,u) in poll])
 
-    return concrete_controller, refinement_candidates
+    poll_lengths = [len(poll) for _, poll in abstract_state_to_u_idx_set.items()]
+    average_ratio_neighbor_to_total = sum_ratios_neighbor_to_total / nb_iterations
+
+    np.save('exploration_record.npy', exploration_record)
+
+    return concrete_controller, refinement_candidates, poll_lengths, average_ratio_neighbor_to_total
 
 def symmetry_synthesis_helper(concrete_states_to_explore,
                               concrete_edges,
@@ -1754,12 +1772,15 @@ def symmetry_synthesis_helper(concrete_states_to_explore,
     t_start = time.time()
     num_controllable_states = 0
 
-    temp_controllable_concrete_states = set()
+    
 
     while True:
+        temp_controllable_concrete_states = set()
         num_new_symbols = 0
         
         for concrete_state_idx in concrete_states_to_explore:
+
+            #if controlable or obstacle then continue
                     
             hits = list(range(len(abstract_reachable_sets)))
             
@@ -1794,7 +1815,7 @@ def symmetry_synthesis_helper(concrete_states_to_explore,
             num_controllable_states += num_new_symbols
 
             rects = []
-            
+
             for concrete_state_idx in temp_controllable_concrete_states:
 
                 s_rect: np.array = concrete_index_to_rect(concrete_state_idx, sym_x, symbol_step, X_low, X_up)
@@ -2093,6 +2114,7 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
     concrete_states_to_explore = rect_to_indices(candidate_initial_set_rect, symbol_step, X_low,
                                                  sym_x[0, :], over_approximate=True)
     concrete_states_to_explore = set(concrete_states_to_explore.flatten())
+    nb_concrete = len(concrete_states_to_explore)
     concrete_states_to_explore = concrete_states_to_explore.difference(target_indices)
     concrete_states_to_explore = concrete_states_to_explore.difference(obstacle_indices)
     symbols_to_explore = symbols_to_explore.difference(target_indices)
@@ -2107,8 +2129,12 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
                 symbol_step, targets,
                 obstacles, sym_x, X_low, X_up,
                 reachability_rtree_idx3d, abstract_reachable_sets)
+        nb_abstract_obstacle = len(abstract_to_concrete[0])
     else:
         abstract_to_concrete = []
+        nb_abstract_obstacle = 0
+
+    nb_abstract = len(abstract_to_concrete)
 
 
     t_abstraction = time.time() - t_start
@@ -2119,7 +2145,6 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
 
     
 
-    num_abstract_states_before_refinement = len(abstract_to_concrete)
 
     controller = {}  # [-1] * len(abstract_to_concrete)
     t_synthesis_start = time.time()
@@ -2149,6 +2174,8 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
     time_step = time_step.reshape((1, 3))
     temp_t_synthesis = time.time()
 
+    nb_explore = len(concrete_states_to_explore)
+
     if benchmark:
         concrete_controller = symmetry_synthesis_helper(
             concrete_states_to_explore,
@@ -2159,10 +2186,12 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
             per_dim_max_travelled_distance,
             obstacles_rects, obstacle_indices,
             targets_rects, X_low, X_up, sym_x, symbol_step)
+        
     else:
         obstacle_indices = obstacle_indices.union(set(abstract_to_concrete[0]))
 
-        concrete_controller, refinement_candidates = symmetry_abstract_synthesis_helper(
+        concrete_controller, refinement_candidates, poll_lengths, \
+            average_ratio_neighbor_to_total = symmetry_abstract_synthesis_helper(
             concrete_states_to_explore,
             {}, # concrete_edges
             abstract_to_concrete,
@@ -2181,9 +2210,33 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
         plot_abstract_states(symmetry_abstract_states, [], abstract_reachable_sets, state_to_paths_idx, abstract_to_concrete)
 
     t_synthesis += time.time() - temp_t_synthesis
-    
-    
-    
+
+    #save concrete controler to file
+    np.save('concrete_controller.npy', concrete_controller)
+
+    #stats
+    print('Total number of concrete states: ', nb_concrete)
+    print('Concrete states to explore: ', nb_explore)
+    print('Number of abstract states: ', nb_abstract)
+    print('States in the abstract obstacle: ', nb_abstract_obstacle)
+    if benchmark:
+        print('No poll stats')
+        print('No neighbor/total exploration ratio')
+    else:
+        poll_lengths.sort()
+        min_len = poll_lengths[0]
+        max_len = poll_lengths[-1]
+        if nb_abstract % 2 == 0:
+            median_len = poll_lengths[nb_abstract // 2 - 1]
+        else:
+            median_len = (poll_lengths[nb_abstract // 2 - 1] + poll_lengths[nb_abstract // 2]) / 2
+        average_len = sum(poll_lengths) / (nb_abstract - 1)
+        print('Poll stats (min/average/median/max): ', min_len, '/', average_len, '/', median_len, '/', max_len)
+        print('Average neighbor/total exploration ratio', average_ratio_neighbor_to_total)
+    print('Average difference in path length:', ) #To do
+    print('Abstraction time: ', t_abstraction)
+    print('Synthesis time: ', t_synthesis)
+    print('Total time: ', time.time() - t_start)
     
 
 
@@ -2354,7 +2407,7 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
     print(['Pure refinement took a total of: ', t_refine, ' seconds'])
     print(['Pure synthesis took a total of: ', t_synthesis, ' seconds'])
     print(['Number of splits of abstract states: ', refinement_itr])
-    print(['Number of abstract states before refinement is: ', num_abstract_states_before_refinement])
+    print(['Number of abstract states before refinement is: ', num_abstract_states_before_refinement]) #nb_abstract
     num_abstract_states = 0
     for abstract_s_idx in range(len(abstract_to_concrete)):
         if abstract_to_concrete[abstract_s_idx]:
