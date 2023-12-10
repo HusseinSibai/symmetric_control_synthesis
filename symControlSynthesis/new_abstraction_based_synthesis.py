@@ -1520,13 +1520,13 @@ def quantize(grid_rtree, point, cell_size_per_dim):
     return grid_point, point_in_cell
 
 
-benchmark = False #baseline
+benchmark = True #baseline
 strategy_1 = False #polls - all
 strategy_2 = False #polls - 400
 strategy_3 = False #polls + no closest
 strategy_4 = False #polls -full + neighbors
 strategy_5 = False #polls -400 + neighbors
-strategy_6 = True #polls + no closest + neighbors // was it "polls-full"?
+strategy_6 = False #polls + no closest + neighbors // was it "polls-full"?
 strategy_list = [strategy_1, strategy_2, strategy_3, strategy_4, strategy_5, strategy_6, benchmark]
 
 def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
@@ -1769,8 +1769,9 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                     concrete_states_to_explore = concrete_states_to_explore.union(
                         rect_to_indices(neighborhood_rect, symbol_step, X_low,
                                         sym_x[0, :], over_approximate=True))
-                    
-            concrete_states_to_explore = concrete_states_to_explore.difference(controllable_concrete_states)
+                concrete_states_to_explore = concrete_states_to_explore.difference(controllable_concrete_states)
+            else:
+                concrete_states_to_explore = concrete_states_to_explore.difference(temp_controllable_concrete_states)
 
             exploration_record.append((len(concrete_states_to_explore), total_nb_explore - num_controllable_states))
             ratio_neighbor_to_total = len(concrete_states_to_explore) / (total_nb_explore - num_controllable_states)
@@ -1850,27 +1851,6 @@ def symmetry_synthesis_helper(concrete_states_to_explore,
             
             num_controllable_states += num_new_symbols
 
-            rects = []
-
-            for concrete_state_idx in temp_controllable_concrete_states:
-
-                s_rect: np.array = concrete_index_to_rect(concrete_state_idx, sym_x, symbol_step, X_low, X_up)
-                max_distance = 2 * (per_dim_max_travelled_distance + symbol_step)
-                bloated_rect = np.array([np.maximum(np.add(s_rect[0, :], -max_distance), X_low),
-                                         np.minimum(np.add(s_rect[1, :], max_distance), X_up)])
-                temp_rects = [bloated_rect]
-                for obstacle_rect in obstacles_rects:
-                    per_obstacle_temp_rects = []
-                    for temp_rect in temp_rects:
-                        per_obstacle_temp_rects.extend(subtract_rectangles(temp_rect, obstacle_rect))
-                    temp_rects = copy.deepcopy(per_obstacle_temp_rects)
-                rects.extend(temp_rects)
-            
-            concrete_states_to_explore = set()
-            for neighborhood_rect in rects:
-                concrete_states_to_explore = concrete_states_to_explore.union(
-                    rect_to_indices(neighborhood_rect, symbol_step, X_low,
-                                    sym_x[0, :], over_approximate=True))
             concrete_states_to_explore = concrete_states_to_explore.difference(temp_controllable_concrete_states)
             print(num_controllable_states, ' symbols are controllable to satisfy the reach-avoid specification\n')
         else:
@@ -2258,13 +2238,13 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
         print("Strategy: polls - all")
     elif strategy_2:
         print("Strategy: polls - 400")
-    elif strategy_2:
+    elif strategy_3:
         print("Strategy: polls + no closest")
-    elif strategy_2:
+    elif strategy_4:
         print("Strategy: polls -full + neighbors")
-    elif strategy_2:
+    elif strategy_5:
         print("Strategy: polls -400 + neighbors")
-    elif strategy_2:
+    elif strategy_6:
         print("Strategy: polls + no closest + neighbors") # was it "polls-full"?
     else:
         print("Strategy: baseline")
