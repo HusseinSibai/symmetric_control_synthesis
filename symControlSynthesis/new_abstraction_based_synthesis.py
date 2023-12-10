@@ -1029,11 +1029,6 @@ def create_symmetry_abstract_states_threaded(lock_one, symbols_to_explore, symbo
 
     #split task
     for s in symbols_to_explore[first_index : second_index+1]:
-
-        #force abstract obstacle to be processed first
-        while next_abstract_state_id['next_abstract_state_id'] < 1:
-            if s == 0:
-                break
         
         ###S#######
         s_subscript = np.array(np.unravel_index(s, tuple((sym_x[0, :]).astype(int))))
@@ -1196,10 +1191,10 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
 
     obstacle_state = ThreadedAbstractState(0, None, None, [], [], set(), manager)
     symmetry_abstract_states.append(obstacle_state)
-    abstract_to_concrete[0] = []
+    abstract_to_concrete[0] = manager.list()
 
     next_abstract_state_id['next_abstract_state_id'] = 1
-    threshold_num_results = 200
+    threshold_num_results = 376
 
     #process locks (incase I need them)
     lock_one = multiprocess.Lock()
@@ -1284,6 +1279,7 @@ def add_concrete_state_to_symmetry_abstract_state(curr_concrete_state_idx, abstr
     
     symmetry_abstract_states[abstract_state_id].concrete_state_indices.append(curr_concrete_state_idx)
     concrete_to_abstract[curr_concrete_state_idx] = abstract_state_id
+
     abstract_to_concrete[abstract_state_id].append(curr_concrete_state_idx)
         
     return
