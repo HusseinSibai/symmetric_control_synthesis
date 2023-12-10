@@ -1521,12 +1521,12 @@ def quantize(grid_rtree, point, cell_size_per_dim):
 
 
 benchmark = False #baseline
-strategy_1 = True #polls - all
+strategy_1 = False #polls - all
 strategy_2 = False #polls - 400
 strategy_3 = False #polls + no closest
 strategy_4 = False #polls -full + neighbors
 strategy_5 = False #polls -400 + neighbors
-strategy_6 = False #polls + no closest + neighbors // was it "polls-full"?
+strategy_6 = True #polls + no closest + neighbors // was it "polls-full"?
 strategy_list = [strategy_1, strategy_2, strategy_3, strategy_4, strategy_5, strategy_6, benchmark]
 
 def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
@@ -1559,6 +1559,8 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
         threshold_num_results = 376
     elif strategy_1 or strategy_4:
         threshold_num_results = len(abstract_reachable_sets)
+    else:
+        threshold_num_results = 1
 
     
     nb_iterations = 0
@@ -1768,7 +1770,7 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                         rect_to_indices(neighborhood_rect, symbol_step, X_low,
                                         sym_x[0, :], over_approximate=True))
                     
-            concrete_states_to_explore = concrete_states_to_explore.difference(temp_controllable_concrete_states)
+            concrete_states_to_explore = concrete_states_to_explore.difference(controllable_concrete_states)
 
             exploration_record.append((len(concrete_states_to_explore), total_nb_explore - num_controllable_states))
             ratio_neighbor_to_total = len(concrete_states_to_explore) / (total_nb_explore - num_controllable_states)
@@ -2070,7 +2072,7 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
 
     xor_strategy = (sum([ int(strategy) for strategy in strategy_list]) == 1)
     if not xor_strategy:
-        raise("Multiple strategies were selected, please only select one")
+        raise("Zero or multiple strategies were selected, please only select one")
 
     t_start = time.time()
     n = state_dimensions.shape[1]
