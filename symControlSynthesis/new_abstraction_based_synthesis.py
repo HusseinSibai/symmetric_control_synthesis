@@ -1796,18 +1796,25 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                     
                     if strategy_3 or strategy_6:
                         hits = list(range(len(abstract_reachable_sets)))
-                    else:
-                        hits = list(reachability_rtree_idx3d.nearest(
+
+                    elif (strategy_2 or strategy_5) and curr_num_results == threshold_num_results - 1:
+                        nearest_hits = [hit.object for hit in list(reachability_rtree_idx3d.nearest(
                             (nearest_point[0], nearest_point[1], nearest_point[2],
                             nearest_point[0]+0.001, nearest_point[1]+0.001, nearest_point[2]+0.001),
-                            num_results=curr_num_results, objects=True))
+                            num_results=225, objects=True)) # (curr_num_results - prev_num_results) // 2 + prev_num_results
+                            ]
+
+                        remainding_hits = [i for i in list(range(len(abstract_reachable_sets))) if not i in nearest_hits and not i in visited_u_idx]
+                        hits = nearest_hits + random.sample(remainding_hits, 150) # (curr_num_results - prev_num_results) // 2
+
+                    else:
+                        hits = [hit.object for hit in list(reachability_rtree_idx3d.nearest(
+                            (nearest_point[0], nearest_point[1], nearest_point[2],
+                            nearest_point[0]+0.001, nearest_point[1]+0.001, nearest_point[2]+0.001),
+                            num_results=curr_num_results, objects=True))]
                     
                     if len(hits):
-                        for hit in hits:
-                            if strategy_3 or strategy_6:
-                                hit_object = hit
-                            else:
-                                hit_object = hit.object
+                        for hit_object in hits:
 
                             if not hit_object in visited_u_idx:
 
@@ -2402,6 +2409,7 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
     print('Concrete states to explore: ', nb_explore)
     print('Number of abstract states: ', nb_abstract)
     print('States in the abstract obstacle: ', nb_abstract_obstacle)
+    print('Number of controllable states: ', len(concrete_controller))
     if benchmark:
         print('No poll stats')
         print('No neighbor/total exploration ratio')
