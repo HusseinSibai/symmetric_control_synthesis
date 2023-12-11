@@ -16,6 +16,7 @@ from multiprocessing import shared_memory
 import subprocess
 from subprocess import Popen, PIPE
 from shared_memory_dict import SharedMemoryDict
+import time
 
 #name of folders to make and work from
 file_names = sys.argv[1]
@@ -29,8 +30,10 @@ targets = sys.argv[2:]
 
 for i in targets:
 
+    i = int(i) - 1
+
     #current folder to work with
-    current_folder = ("./" + file_names + "-" + str(i))
+    current_folder = ("./" + file_names + "-" + str(i + 1))
 
     #see if the dirs we want are present
     if not os.path.exists(current_folder):
@@ -50,10 +53,12 @@ for i in targets:
     #set flag and wait
     wait_cond[i] = -1
     while wait_cond[i] == -1:
+        time.sleep(100)
         pass
 
 #wait for last process to be finished with parallel execution
-while wait_cond[5] == -1:
+while wait_cond[sys.argv[-1] - 1] == -1:
+    time.sleep(100)
     pass
 
 #allow all processes to proceed
@@ -61,6 +66,7 @@ wait_cond[-1] = 1
 
 #wait for all processes to finish
 while(sum(wait_cond.values()) < len(targets) + 1):
+    time.sleep(1000)
     pass
 
 #exit
