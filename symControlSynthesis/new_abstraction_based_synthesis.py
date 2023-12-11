@@ -1097,7 +1097,7 @@ def create_symmetry_abstract_states_threaded(lock_one, symbols_to_explore, symbo
         with lock_one:
             nearest_target_of_concrete[s] = nearest_point
         
-        curr_num_results=1
+        curr_num_results=3
         is_obstructed_u_idx = {}
         added_to_existing_state = False
         while curr_num_results < threshold_num_results:
@@ -1653,11 +1653,11 @@ def quantize(grid_rtree, point, cell_size_per_dim):
 
 benchmark = False #baseline
 strategy_1 = False #polls - all
-strategy_2 = False #polls - 400
+strategy_2 = True #polls - 400
 strategy_3 = False #polls + no closest
 strategy_4 = False #polls -full + neighbors
 strategy_5 = False #polls -400 + neighbors
-strategy_6 = True #polls + no closest + neighbors // was it "polls-full"?
+strategy_6 = False #polls + no closest + neighbors // was it "polls-full"?
 strategy_list = [strategy_1, strategy_2, strategy_3, strategy_4, strategy_5, strategy_6, benchmark]
 
 def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
@@ -2289,7 +2289,6 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
                                             properties=p)
                                             
         nb_abstract_obstacle = len(abstract_to_concrete[0])
-        print("abstract obstacles: ", nb_abstract_obstacle)
     else:
         abstract_to_concrete = []
         nb_abstract_obstacle = 0
