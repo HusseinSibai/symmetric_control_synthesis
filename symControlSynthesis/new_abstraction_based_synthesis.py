@@ -2302,8 +2302,15 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
     #plot
     #plot_abstract_states(symmetry_abstract_states, [], abstract_reachable_sets, state_to_paths_idx, abstract_to_concrete)
 
-    
-
+    ##################################
+    ##
+    ## Clustered Exeuction
+    ## Wait Mechanic
+    ##
+    ##################################    
+    wait_cond = SharedMemoryDict(name='lock', size=128)
+    while(wait_cond[0] == 0):
+        1 == 1
 
     controller = {}  # [-1] * len(abstract_to_concrete)
     t_synthesis_start = time.time()
