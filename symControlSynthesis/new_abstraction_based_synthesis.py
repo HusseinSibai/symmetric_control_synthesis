@@ -980,6 +980,15 @@ def nearest_point_to_the_origin(poly):
     return x, dist
 
 
+benchmark = True #baseline
+strategy_1 = False #polls - all
+strategy_2 = False #polls - 400
+strategy_3 = False #polls + no closest
+strategy_4 = False #polls -full + neighbors
+strategy_5 = False #polls -400 + neighbors
+strategy_6 = False #polls + no closest + neighbors // was it "polls-full"?
+strategy_list = [strategy_1, strategy_2, strategy_3, strategy_4, strategy_5, strategy_6, benchmark]
+
 def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, obstacles, sym_x, X_low, X_up,
                                     reachability_rtree_idx3d, abstract_reachable_sets):
     t_start = time.time()
@@ -998,7 +1007,12 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
     abstract_to_concrete[0] = []
 
     next_abstract_state_id = 1
-    threshold_num_results = 376
+    if strategy_5 or strategy_2:
+        threshold_num_results = 376
+    elif strategy_1 or strategy_4:
+        threshold_num_results = len(abstract_reachable_sets)
+    else:
+        threshold_num_results = 4
 
     nearest_target_of_concrete = {}
     valid_hit_idx_of_concrete = {}
@@ -1071,10 +1085,25 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
         is_obstructed_u_idx = {}
         added_to_existing_state = False
         while curr_num_results < threshold_num_results:
-            hits = list(reachability_rtree_idx3d.nearest(
-                (nearest_point[0], nearest_point[1], nearest_point[2],
-                 nearest_point[0]+0.001, nearest_point[1]+0.001, nearest_point[2]+0.001),
-                num_results=curr_num_results, objects=True))
+            
+            if strategy_3 or strategy_6:
+                hits = list(range(len(abstract_reachable_sets)))
+            elif (strategy_2 or strategy_5) and curr_num_results == threshold_num_results - 1:
+                hit_count = 0
+                random_hits = []
+                while hit_count < 75:
+                    hit_candidate = np.random.randint(len(abstract_reachable_sets))
+                    if (hit_candidate in is_obstructed_u_idx and is_obstructed_u_idx[hit.object]) or hit_candidate in random_hits:
+                        continue
+                    random_hits.append(hit_candidate)
+                    hit_count += 1
+                hits = random_hits
+            else:
+                hits = [hit.object for hit in list(reachability_rtree_idx3d.nearest(
+                    (nearest_point[0], nearest_point[1], nearest_point[2],
+                    nearest_point[0]+0.001, nearest_point[1]+0.001, nearest_point[2]+0.001),
+                    num_results=curr_num_results, objects=True))
+                ]
         
             if len(hits):
                 for idx, hit in enumerate(hits):
@@ -1125,7 +1154,10 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
             if added_to_existing_state:
                 break
             else:
-                curr_num_results *= 5
+                if curr_num_results == threshold_num_results - 1:
+                    break
+                else:
+                    curr_num_results = min(5 * curr_num_results, threshold_num_results - 1)
         if not added_to_existing_state:
             add_concrete_state_to_symmetry_abstract_state(s, 0, pc.Region(list_poly=[]),
                 symmetry_abstract_states, concrete_to_abstract, abstract_to_concrete, {})
@@ -1156,7 +1188,7 @@ def add_concrete_state_to_symmetry_abstract_state(curr_concrete_state_idx, abstr
 
 def get_concrete_transition(s_idx, u_idx, concrete_edges, neighbor_map, #concrete_to_abstract,
                             sym_x, symbol_step, abstract_reachable_sets,
-                            obstacles_rects, obstacle_indices, targets_rects, target_indices, X_low, X_up):
+                            obstacles_rects, obstacle_indices, targets_rects, target_indices, X_low, X_up, first_exploration):
     if (s_idx, u_idx) in concrete_edges:
         neighbors = concrete_edges[(s_idx, u_idx)]
         indices_to_delete = []
@@ -1174,6 +1206,8 @@ def get_concrete_transition(s_idx, u_idx, concrete_edges, neighbor_map, #concret
 
         concrete_edges[(s_idx, u_idx)] = copy.deepcopy(neighbors)
         return set(neighbors)
+    
+    first_exploration += 1
 
     s_subscript = np.array(np.unravel_index(s_idx, tuple((sym_x[0, :]).astype(int))))
     s_rect: np.array = np.row_stack((s_subscript * symbol_step + X_low,
@@ -1520,15 +1554,6 @@ def quantize(grid_rtree, point, cell_size_per_dim):
     return grid_point, point_in_cell
 
 
-benchmark = False #baseline
-strategy_1 = False #polls - all
-strategy_2 = False #polls - 400
-strategy_3 = False #polls + no closest
-strategy_4 = False #polls -full + neighbors
-strategy_5 = True #polls -400 + neighbors
-strategy_6 = False #polls + no closest + neighbors // was it "polls-full"?
-strategy_list = [strategy_1, strategy_2, strategy_3, strategy_4, strategy_5, strategy_6, benchmark]
-
 def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                                        concrete_edges,
                                        abstract_to_concrete,
@@ -1564,10 +1589,14 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
 
     
     nb_iterations = 0
+    running_sum_path_lengths = 0
     sum_ratios_neighbor_to_total = 0
     exploration_record = []
 
     neighbor_map = {}
+
+    total_state_u_pairs_explored = 0
+    unique_state_u_pairs_explored = 0
 
     while True: # one iteration of this loop will try current abstraction to find controllable states
         
@@ -1618,11 +1647,12 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
 
             valid_vote = None
             for v, u_idx in abstract_state_to_u_idx_poll[abstract_state_idx]: #enumerate
-                
+
                 next_concrete_state_indices = get_concrete_transition(concrete_state_idx, u_idx, concrete_edges, neighbor_map,
                                                                     sym_x, symbol_step, abstract_reachable_sets,
                                                                     obstacles_rects, obstacle_indices, targets_rects,
-                                                                    controllable_concrete_states, X_low, X_up)
+                                                                    controllable_concrete_states, X_low, X_up, unique_state_u_pairs_explored)
+                total_state_u_pairs_explored += 1
                 
                 is_controlled = (next_concrete_state_indices == [-1])
                 '''for next_concrete_state_idx in next_concrete_state_indices:
@@ -1648,14 +1678,14 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
             if valid_vote is None:
                 visited_u_idx = abstract_state_to_u_idx_set[abstract_state_idx].copy()
 
-                s = concrete_state_idx
+                
                 if strategy_3 or strategy_6:
                     curr_num_results = threshold_num_results - 1
                 else:
-                    curr_num_results = min((valid_hit_idx_of_concrete[s] + 1) * 5, threshold_num_results - 1)
+                    curr_num_results = min((valid_hit_idx_of_concrete[concrete_state_idx] + 1) * 5, threshold_num_results - 1)
                 
 
-                nearest_point = nearest_abstract_target_of_concrete[s]
+                nearest_point = nearest_abstract_target_of_concrete[concrete_state_idx]
                 
                 #is_obstructed_u_idx = {}
                 
@@ -1666,13 +1696,15 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                     if strategy_3 or strategy_6:
                         hits = list(range(len(abstract_reachable_sets)))
                     elif (strategy_2 or strategy_5) and curr_num_results == threshold_num_results - 1:
-                        nearest_hits = [hit.object for hit in list(reachability_rtree_idx3d.nearest(
-                            (nearest_point[0], nearest_point[1], nearest_point[2],
-                            nearest_point[0]+0.001, nearest_point[1]+0.001, nearest_point[2]+0.001),
-                            num_results=225, objects=True)) # (curr_num_results - prev_num_results) // 2 + prev_num_results
-                            ]
-                        remainding_hits = [i for i in list(range(len(abstract_reachable_sets))) if not i in nearest_hits and not i in visited_u_idx]
-                        hits = nearest_hits + random.sample(remainding_hits, 150) # (curr_num_results - prev_num_results) // 2
+                        hit_count = 0
+                        random_hits = []
+                        while hit_count < 75:
+                            hit_candidate = np.random.randint(len(abstract_reachable_sets))
+                            if hit_candidate in visited_u_idx or hit_candidate in random_hits:
+                                continue
+                            random_hits.append(hit_candidate)
+                            hit_count += 1
+                        hits = random_hits
                     else:
                         hits = [hit.object for hit in list(reachability_rtree_idx3d.nearest(
                             (nearest_point[0], nearest_point[1], nearest_point[2],
@@ -1704,7 +1736,8 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                                 next_concrete_state_indices = get_concrete_transition(concrete_state_idx, hit_object, concrete_edges, neighbor_map,
                                                                 sym_x, symbol_step, abstract_reachable_sets,
                                                                 obstacles_rects, obstacle_indices, targets_rects,
-                                                                controllable_concrete_states, X_low, X_up)
+                                                                controllable_concrete_states, X_low, X_up, unique_state_u_pairs_explored)
+                                total_state_u_pairs_explored += 1
             
                                 is_controlled = (next_concrete_state_indices == [-1])
                                 '''for next_concrete_state_idx in next_concrete_state_indices:
@@ -1783,6 +1816,8 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
             print("Ratio of neighbors over total explored", ratio_neighbor_to_total)
             sum_ratios_neighbor_to_total += ratio_neighbor_to_total
             nb_iterations += 1
+            running_sum_path_lengths += num_new_symbols * nb_iterations
+
             print(num_controllable_states, ' symbols are controllable to satisfy the reach-avoid specification\n')
         else:
             print('No new controllable state has been found in this synthesis iteration\n', time.time() - t_start)
@@ -1800,7 +1835,9 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
 
     np.save('exploration_record.npy', exploration_record)
 
-    return concrete_controller, refinement_candidates, poll_lengths, average_ratio_neighbor_to_total, neighbor_map
+    average_path_length = running_sum_path_lengths / len(concrete_controller)
+
+    return concrete_controller, refinement_candidates, poll_lengths, average_ratio_neighbor_to_total, neighbor_map, unique_state_u_pairs_explored, total_state_u_pairs_explored, average_path_length, nb_iterations
 
 def symmetry_synthesis_helper(concrete_states_to_explore,
                               concrete_edges,
@@ -1813,9 +1850,13 @@ def symmetry_synthesis_helper(concrete_states_to_explore,
     t_start = time.time()
     num_controllable_states = 0
 
+    nb_iterations = 0
+    running_sum_path_lengths = 0
+
     neighbor_map = {}
 
-    
+    total_state_u_pairs_explored = 0
+    unique_state_u_pairs_explored = 0
 
     while True:
         temp_controllable_concrete_states = set()
@@ -1834,7 +1875,8 @@ def symmetry_synthesis_helper(concrete_states_to_explore,
                                                     concrete_edges, neighbor_map,
                                                     sym_x, symbol_step, abstract_reachable_sets,
                                                     obstacles_rects, obstacle_indices, targets_rects,
-                                                    controllable_concrete_states, X_low, X_up)
+                                                    controllable_concrete_states, X_low, X_up, unique_state_u_pairs_explored)
+                    total_state_u_pairs_explored += 1
 
                     is_controlled = (next_concrete_state_indices == [-1])
 
@@ -1857,12 +1899,18 @@ def symmetry_synthesis_helper(concrete_states_to_explore,
             num_controllable_states += num_new_symbols
 
             concrete_states_to_explore = concrete_states_to_explore.difference(temp_controllable_concrete_states)
+
+            nb_iterations += 1
+            running_sum_path_lengths += num_new_symbols * nb_iterations
+
             print(num_controllable_states, ' symbols are controllable to satisfy the reach-avoid specification\n')
         else:
             print('No new controllable state has been found in this synthesis iteration\n', time.time() - t_start)
             break
 
-    return concrete_controller, neighbor_map
+    average_path_length = running_sum_path_lengths / len(concrete_controller)
+
+    return concrete_controller, neighbor_map, unique_state_u_pairs_explored, total_state_u_pairs_explored, average_path_length, nb_iterations
 
 
 def get_decomposed_angle_intervals(original_angle_interval):
@@ -2200,7 +2248,8 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
     nb_explore = len(concrete_states_to_explore)
 
     if benchmark:
-        concrete_controller, neighbor_map = symmetry_synthesis_helper(
+        concrete_controller, neighbor_map, unique_state_u_pairs_explored, \
+            total_state_u_pairs_explored, average_path_length, nb_synthesis = symmetry_synthesis_helper(
             concrete_states_to_explore,
             {}, # concrete_edges
             abstract_reachable_sets,
@@ -2213,8 +2262,9 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
     else:
         obstacle_indices = obstacle_indices.union(set(abstract_to_concrete[0]))
 
-        concrete_controller, refinement_candidates, poll_lengths, \
-            average_ratio_neighbor_to_total, neighbor_map = symmetry_abstract_synthesis_helper(
+        concrete_controller, refinement_candidates, poll_lengths, average_ratio_neighbor_to_total, \
+            neighbor_map, unique_state_u_pairs_explored, total_state_u_pairs_explored, \
+                average_path_length, nb_synthesis = symmetry_abstract_synthesis_helper(
             concrete_states_to_explore,
             {}, # concrete_edges
             abstract_to_concrete,
@@ -2274,7 +2324,10 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
         average_len = sum(poll_lengths) / (nb_abstract - 1)
         print('Poll stats (min/average/median/max): ', min_len, '/', average_len, '/', median_len, '/', max_len)
         print('Average neighbor/total exploration ratio', average_ratio_neighbor_to_total)
-    print('Average difference in path length: To be computed after baseline experiment is done')
+    print('Unique (s,u) explored: ', unique_state_u_pairs_explored)
+    print('Total (s,u) explored: ', total_state_u_pairs_explored)
+    print('Average path length: ', average_path_length)
+    print('Number of synthesis iterations: ', nb_synthesis)
     print('Abstraction time: ', t_abstraction)
     print('Synthesis time: ', t_synthesis)
     print('Total time: ', time.time() - t_start)
