@@ -47,6 +47,9 @@ cpu_count = multiprocess.cpu_count()
 #make a future pool
 future_pool = [None] * cpu_count
 
+#time we spend spinning
+time_spinning = 0
+
 class ThreadedAbstractState:
 
     def __init__(self, state_id, quantized_abstract_target, u_idx,
@@ -2347,9 +2350,11 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
     wait_cond[int(test_to_run)] = 0
 
     #wait
+    time_start_wait = time.time()
     while(wait_cond[-1] == 0):
         time.sleep(100)
         pass
+    time_spinning = time.time() - time_start_wait
 
     controller = {}  # [-1] * len(abstract_to_concrete)
     t_synthesis_start = time.time()
@@ -2459,7 +2464,8 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
     print('Average difference in path length: To be computed after baseline experiment is done')
     print('Abstraction time: ', t_abstraction)
     print('Synthesis time: ', t_synthesis)
-    print('Total time: ', time.time() - t_start)
+    print('Time spent spinning: ', time_spinning)
+    print('Total time: ', (time.time() - t_start) - time_spinning)
     
 
     #signal
