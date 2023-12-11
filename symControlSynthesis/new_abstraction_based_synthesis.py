@@ -1653,7 +1653,7 @@ def quantize(grid_rtree, point, cell_size_per_dim):
 
 benchmark = False #baseline
 strategy_1 = False #polls - all
-strategy_2 = True #polls - 400
+strategy_2 = False #polls - 400
 strategy_3 = False #polls + no closest
 strategy_4 = False #polls -full + neighbors
 strategy_5 = False #polls -400 + neighbors
@@ -2186,7 +2186,33 @@ def compute_reachable_set_tira(eng, time_step, rect_low, rect_up, u, W_low, W_up
 
 def abstract_synthesis(U_discrete, time_step, W_low, W_up,
                        Symbolic_reduced, sym_x, sym_u, state_dimensions,
-                       Target_low, Target_up, Obstacle_low, Obstacle_up, X_low, X_up, eng):
+                       Target_low, Target_up, Obstacle_low, Obstacle_up, X_low, X_up, eng, test_to_run):
+
+    global strategy_1
+    global strategy_2
+    global strategy_3
+    global strategy_4
+    global strategy_5
+    global strategy_6
+    global benchmark
+    global strategy_list
+
+    #set desired test to true
+    match(int(test_to_run)):
+        case 0:
+            strategy_1 = True
+        case 1:
+            strategy_2 = True
+        case 2:
+            strategy_3 = True
+        case 3:
+            strategy_4 = True
+        case 4:
+            strategy_5 = True
+        case 5:
+            strategy_6 = True
+        
+    strategy_list = [strategy_1, strategy_2, strategy_3, strategy_4, strategy_5, strategy_6, benchmark]
 
     xor_strategy = (sum([ int(strategy) for strategy in strategy_list]) == 1)
     if not xor_strategy:
@@ -2316,8 +2342,14 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
     ##
     ##################################    
     wait_cond = SharedMemoryDict(name='lock', size=128)
-    while(wait_cond[0] == 0):
-        1 == 1
+
+    #signal
+    wait_cond[int(test_to_run)] = 0
+
+    #wait
+    while(wait_cond[-1] == 0):
+        time.sleep(100)
+        pass
 
     controller = {}  # [-1] * len(abstract_to_concrete)
     t_synthesis_start = time.time()
@@ -2430,7 +2462,8 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
     print('Total time: ', time.time() - t_start)
     
 
-
+    #signal
+    wait_cond[int(test_to_run)] = 1
     
     exit(0)
 

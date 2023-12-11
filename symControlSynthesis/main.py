@@ -3,6 +3,7 @@ import numpy as np
 import time
 import math
 import os
+import sys
 import pwd
 
 import matplotlib
@@ -12,6 +13,8 @@ import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle, Polygon
 
 from new_abstraction_based_synthesis import abstract_synthesis
+
+test_to_run = sys.argv[1]
 
 if __name__ == '__main__':
 
@@ -66,10 +69,13 @@ if __name__ == '__main__':
     Obstacle_low = np.array([[2, -3, -100], [5, 3.5, -100], [-3, -3, -100], [-3, -3, -100],
                             [-3, 6.5, -100], [10, -3, -100]])
 
-    sym_x = 30 * np.ones((1, n_x))
-    sym_x[0, 2] = 30
+    sym_x = 25 * np.ones((1, n_x))
+    sym_x[0, 2] = 25
+    #sym_x[0,0] = 80
+    #sym_x[0,1] = 100
+    #sym_x[0, 2] = 50
 
-    sym_u = 5 * np.ones((1, n_u))
+    sym_u = 9 * np.ones((1, n_u))
 
     time_step = np.linspace(0, 3, 3).reshape((1, 3))  # np.array([0,0.5,1,2,3]) #
 
@@ -205,7 +211,7 @@ if __name__ == '__main__':
     M = 5
     abstract_synthesis(U_discrete, time_step, W_low, W_up,
                     Symbolic_reduced, sym_x, sym_u, state_dimensions,
-                    Target_low, Target_up, Obstacle_low, Obstacle_up, X_low, X_up, eng)
+                    Target_low, Target_up, Obstacle_low, Obstacle_up, X_low, X_up, eng, test_to_run)
     # abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Target_up,
     #                   Obstacle_low, Obstacle_up, X_low, X_up)
     # synthesize(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Target_up,
