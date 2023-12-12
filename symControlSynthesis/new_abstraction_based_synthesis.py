@@ -981,8 +981,8 @@ def nearest_point_to_the_origin(poly):
 
 
 benchmark = False #baseline
-strategy_1 = False #polls - all
-strategy_2 = True #polls - 400
+strategy_1 = True #polls - all
+strategy_2 = False #polls - 400
 strategy_3 = False #polls + no closest
 strategy_4 = False #polls -full + neighbors
 strategy_5 = False #polls -400 + neighbors
@@ -1104,7 +1104,7 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
                     nearest_point[0]+0.001, nearest_point[1]+0.001, nearest_point[2]+0.001),
                     num_results=curr_num_results, objects=True))
                 hits = [hit.object for hit in rtree_hits]
-                bbox_hits = [hit.bbox for hit in rtree_hits]
+                #bbox_hits = [hit.bbox for hit in rtree_hits]
         
             if len(hits):
                 for idx, hit_object in enumerate(hits):
@@ -1842,7 +1842,10 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
 
     np.save('exploration_record.npy', exploration_record)
 
-    average_path_length = running_sum_path_lengths / len(concrete_controller)
+    if concrete_controller:
+        average_path_length = running_sum_path_lengths / len(concrete_controller)
+    else:
+        average_path_length = 'No controllable state found'
 
     return concrete_controller, refinement_candidates, poll_lengths, average_ratio_neighbor_to_total, neighbor_map, unique_state_u_pairs_explored, total_state_u_pairs_explored, average_path_length, nb_iterations
 
@@ -1915,7 +1918,10 @@ def symmetry_synthesis_helper(concrete_states_to_explore,
             print('No new controllable state has been found in this synthesis iteration\n', time.time() - t_start)
             break
 
-    average_path_length = running_sum_path_lengths / len(concrete_controller)
+    if concrete_controller:
+        average_path_length = running_sum_path_lengths / len(concrete_controller)
+    else:
+        average_path_length = 'No controllable state found'
 
     return concrete_controller, neighbor_map, unique_state_u_pairs_explored, total_state_u_pairs_explored, average_path_length, nb_iterations
 
