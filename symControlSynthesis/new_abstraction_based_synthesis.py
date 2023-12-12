@@ -980,9 +980,9 @@ def nearest_point_to_the_origin(poly):
     return x, dist
 
 
-benchmark = True #baseline
+benchmark = False #baseline
 strategy_1 = False #polls - all
-strategy_2 = False #polls - 400
+strategy_2 = True #polls - 400
 strategy_3 = False #polls + no closest
 strategy_4 = False #polls -full + neighbors
 strategy_5 = False #polls -400 + neighbors
@@ -1099,11 +1099,12 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
                         hit_count += 1
                     hits = random_hits'''
             else:
-                hits = [hit.object for hit in list(reachability_rtree_idx3d.nearest(
+                rtree_hits = list(reachability_rtree_idx3d.nearest(
                     (nearest_point[0], nearest_point[1], nearest_point[2],
                     nearest_point[0]+0.001, nearest_point[1]+0.001, nearest_point[2]+0.001),
                     num_results=curr_num_results, objects=True))
-                ]
+                hits = [hit.object for hit in rtree_hits]
+                bbox_hits = [hit.bbox for hit in rtree_hits]
         
             if len(hits):
                 for idx, hit_object in enumerate(hits):
@@ -1123,8 +1124,10 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
                             is_obstructed_u_idx[hit_object] = False
                     if not is_obstructed_u_idx[hit_object]:
                         if not hit_object in u_idx_to_abstract_states_indices:
+                            # print(abstract_reachable_sets[hit_object][-1])
+                            rect = get_bounding_box(abstract_reachable_sets[hit_object][-1])
                             new_abstract_state = AbstractState(next_abstract_state_id,
-                                                               np.average(abstract_reachable_sets[hit_object][-1], axis=0),
+                                                               np.average(rect , axis=0),
                                                                 hit_object,
                                                                 copy.deepcopy(symmetry_transformed_targets_and_obstacles[s].abstract_obstacles),
                                                                 [s],
@@ -1831,7 +1834,11 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
             table.writerow([str(abstract_idx)] + [str(u)+':'+str(v) for (v,u) in poll])
 
     poll_lengths = [len(poll) for _, poll in abstract_state_to_u_idx_set.items()]
-    average_ratio_neighbor_to_total = sum_ratios_neighbor_to_total / nb_iterations
+    if nb_iterations:
+        average_ratio_neighbor_to_total = sum_ratios_neighbor_to_total / nb_iterations
+    else:
+        average_ratio_neighbor_to_total = 'No controllable state found'
+
 
     np.save('exploration_record.npy', exploration_record)
 
