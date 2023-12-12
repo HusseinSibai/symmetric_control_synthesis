@@ -1088,16 +1088,16 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
             
             if strategy_3 or strategy_6:
                 hits = list(range(len(abstract_reachable_sets)))
-            elif (strategy_2 or strategy_5) and curr_num_results == threshold_num_results - 1:
-                hit_count = 0
-                random_hits = []
-                while hit_count < 75:
-                    hit_candidate = np.random.randint(len(abstract_reachable_sets))
-                    if (hit_candidate in is_obstructed_u_idx and is_obstructed_u_idx[hit.object]) or hit_candidate in random_hits:
-                        continue
-                    random_hits.append(hit_candidate)
-                    hit_count += 1
-                hits = random_hits
+                '''elif (strategy_2 or strategy_5) and curr_num_results == threshold_num_results - 1:
+                    hit_count = 0
+                    random_hits = []
+                    while hit_count < 75:
+                        hit_candidate = np.random.randint(len(abstract_reachable_sets))
+                        if (hit_candidate in is_obstructed_u_idx and is_obstructed_u_idx[hit_candidate]) or hit_candidate in random_hits:
+                            continue
+                        random_hits.append(hit_candidate)
+                        hit_count += 1
+                    hits = random_hits'''
             else:
                 hits = [hit.object for hit in list(reachability_rtree_idx3d.nearest(
                     (nearest_point[0], nearest_point[1], nearest_point[2],
@@ -1106,40 +1106,40 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
                 ]
         
             if len(hits):
-                for idx, hit in enumerate(hits):
-                    if not hit.object in is_obstructed_u_idx:
-                        for p_idx in range(len(abstract_reachable_sets[hit.object]), 0, -1):
+                for idx, hit_object in enumerate(hits):
+                    if not hit_object in is_obstructed_u_idx:
+                        for p_idx in range(len(abstract_reachable_sets[hit_object]), 0, -1):
                             if type(symmetry_transformed_targets_and_obstacles[s].abstract_obstacles) == pc.Region:
                                 list_obstacles = symmetry_transformed_targets_and_obstacles[s].abstract_obstacles.list_poly
                             else:
                                 list_obstacles = [symmetry_transformed_targets_and_obstacles[s].abstract_obstacles]
                             for obstacle in list_obstacles:
-                                if not pc.is_empty(pc.intersect(abstract_reachable_sets[hit.object][p_idx-1], obstacle)):
-                                    is_obstructed_u_idx[hit.object] = True
+                                if not pc.is_empty(pc.intersect(abstract_reachable_sets[hit_object][p_idx-1], obstacle)):
+                                    is_obstructed_u_idx[hit_object] = True
                                     break
-                            if hit.object in is_obstructed_u_idx:
+                            if hit_object in is_obstructed_u_idx:
                                 break
-                        if not hit.object in is_obstructed_u_idx:
-                            is_obstructed_u_idx[hit.object] = False
-                    if not is_obstructed_u_idx[hit.object]:
-                        if not hit.object in u_idx_to_abstract_states_indices:
+                        if not hit_object in is_obstructed_u_idx:
+                            is_obstructed_u_idx[hit_object] = False
+                    if not is_obstructed_u_idx[hit_object]:
+                        if not hit_object in u_idx_to_abstract_states_indices:
                             new_abstract_state = AbstractState(next_abstract_state_id,
-                                                       np.average(np.array([hit.bbox[:3], hit.bbox[3:]]), axis=0),
-                                                       hit.object,
-                                                       copy.deepcopy(symmetry_transformed_targets_and_obstacles[s].abstract_obstacles),
-                                                       [s],
-                                                       set([k for k, v in is_obstructed_u_idx.items() if v == True]))
+                                                               np.average(abstract_reachable_sets[hit_object][-1], axis=0),
+                                                                hit_object,
+                                                                copy.deepcopy(symmetry_transformed_targets_and_obstacles[s].abstract_obstacles),
+                                                                [s],
+                                                                set([k for k, v in is_obstructed_u_idx.items() if v == True]))
                             symmetry_abstract_states.append(new_abstract_state)
                             concrete_to_abstract[s] = next_abstract_state_id
-                            u_idx_to_abstract_states_indices[hit.object] = [next_abstract_state_id]
+                            u_idx_to_abstract_states_indices[hit_object] = [next_abstract_state_id]
                             abstract_to_concrete[next_abstract_state_id] = [s]
                             next_abstract_state_id += 1
                             added_to_existing_state = True
                             valid_hit_idx_of_concrete[s] = idx
                             break
                         else:
-                            if len(u_idx_to_abstract_states_indices[hit.object]):
-                                add_concrete_state_to_symmetry_abstract_state(s, u_idx_to_abstract_states_indices[hit.object][0],
+                            if len(u_idx_to_abstract_states_indices[hit_object]):
+                                add_concrete_state_to_symmetry_abstract_state(s, u_idx_to_abstract_states_indices[hit_object][0],
                                     symmetry_transformed_targets_and_obstacles[s].abstract_obstacles, symmetry_abstract_states,
                                     concrete_to_abstract, abstract_to_concrete, is_obstructed_u_idx)
                                 added_to_existing_state = True
@@ -1706,7 +1706,7 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                             hit_count += 1
                         hits = random_hits
                     else:
-                        hits = [hit.object for hit in list(reachability_rtree_idx3d.nearest(
+                        hits = [hit_object for hit in list(reachability_rtree_idx3d.nearest(
                             (nearest_point[0], nearest_point[1], nearest_point[2],
                             nearest_point[0]+0.001, nearest_point[1]+0.001, nearest_point[2]+0.001),
                             num_results=curr_num_results, objects=True))
