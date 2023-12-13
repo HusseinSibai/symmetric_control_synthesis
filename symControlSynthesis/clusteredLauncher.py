@@ -57,7 +57,7 @@ for i in targets:
         pass
 
 #wait for last process to be finished with parallel execution
-while wait_cond[sys.argv[-1] - 1] == -1:
+while wait_cond[int(sys.argv[-1]) - 1] == -1:
     time.sleep(100)
     pass
 
