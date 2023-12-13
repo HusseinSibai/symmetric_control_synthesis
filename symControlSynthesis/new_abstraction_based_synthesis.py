@@ -21,7 +21,6 @@ from scipy.spatial import ConvexHull
 from scipy.optimize import linprog
 from qpsolvers import solve_qp
 import matlab.engine
-
 import matplotlib
 
 matplotlib.use("macOSX")
@@ -39,6 +38,7 @@ from multiprocess import Process, Queue, shared_memory, Manager
 import SharedArray as sa
 import multiprocess
 import concurrent.futures
+import signal
 from shared_memory_dict import SharedMemoryDict
 
 # Use 'multiprocessing.cpu_count()' to determine the number of available CPU cores.
@@ -1039,16 +1039,26 @@ def create_symmetry_abstract_states_threaded(lock_one, symbols_to_explore, symbo
     first_index = int(len(symbols_to_explore)/cpu_count) * thread_index
     second_index = (int(len(symbols_to_explore)/cpu_count) * (thread_index+1)) - 1 if thread_index+1 != cpu_count else int(len(symbols_to_explore))
 
+    #keep track of how much work we should be processing
+    work_processed = 0
+    
     #check if we are stealing work or assigned work
     if (stolen_work):
 
         #grab work from other tasks
+        waiting_at_lock = time.time()
         with steal_send_lock:
+
+            #if we have waited 50 seconds at the lock, die
+            if time.time() - waiting_at_lock > 50:
+                exit(0)
+
             stealQueue.put(1)
 
             #if we spin for 50 seconds, give up
             start_spin_timer = time.time()
             while(sendQueue.empty()):
+                time.sleep(1) #trade off of cpu usage vs time jump
                 if (time.time() - start_spin_timer > 50):
                     exit(0)
                 pass
@@ -1061,10 +1071,14 @@ def create_symmetry_abstract_states_threaded(lock_one, symbols_to_explore, symbo
 
     #keep track of position
     current_index = first_index
-
+    
     #split task
-    for s in symbols_to_explore[first_index : second_index+1]:
+    for s in symbols_to_explore[first_index : ]:
 
+        if work_processed == (second_index + 1) - first_index:
+            break
+
+        current_index += 1
 
         #see if we should allow someone to steal work
         if second_index - current_index > 10:
@@ -1088,13 +1102,9 @@ def create_symmetry_abstract_states_threaded(lock_one, symbols_to_explore, symbo
                     if (remaining_work % 2) == 0:
                         stolen_first_index += 1
 
-                    sendQueue.send((stolen_first_index, stolen_second_index))
+                    #print("thread: ", thread_index, "giving work: ", stolen_first_index, "-",stolen_second_index, " | keeping ", current_index, "-", second_index)
 
-
-        #update current index and check 
-        current_index += 1
-        if current_index == second_index + 1:
-            break
+                    sendQueue.put((stolen_first_index, stolen_second_index))
 
         ###S#######
         s_subscript = np.array(np.unravel_index(s, tuple((sym_x[0, :]).astype(int))))
@@ -1138,8 +1148,6 @@ def create_symmetry_abstract_states_threaded(lock_one, symbols_to_explore, symbo
             # pdb.set_trace()
             raise "Abstract target is empty"
 
-        #################
-
         abstract_obstacles = pc.Region(list_poly=[])
         for obstacle_poly in obstacles:
             abstract_obstacle = transform_poly_to_abstract_frames(obstacle_poly, s_rect,
@@ -1163,7 +1171,7 @@ def create_symmetry_abstract_states_threaded(lock_one, symbols_to_explore, symbo
         with lock_one:
             nearest_target_of_concrete[s] = nearest_point
         
-        curr_num_results=3
+        curr_num_results = 3
         is_obstructed_u_idx = {}
         added_to_existing_state = False
         while curr_num_results < threshold_num_results:
@@ -1175,9 +1183,9 @@ def create_symmetry_abstract_states_threaded(lock_one, symbols_to_explore, symbo
                     (nearest_point[0], nearest_point[1], nearest_point[2],
                     nearest_point[0]+0.001, nearest_point[1]+0.001, nearest_point[2]+0.001),
                     num_results=curr_num_results, objects=True))
-                
                 hits = [hit.object for hit in rtree_hits]
-
+                #bbox_hits = [hit.bbox for hit in rtree_hits]
+        
             if len(hits):
                 for idx, hit_object in enumerate(hits):
                     if not hit_object in is_obstructed_u_idx:
@@ -1199,6 +1207,7 @@ def create_symmetry_abstract_states_threaded(lock_one, symbols_to_explore, symbo
 
                         with lock_one:
                             if not hit_object in u_idx_to_abstract_states_indices:
+                                # print(abstract_reachable_sets[hit_object][-1])
                                 rect = get_bounding_box(abstract_reachable_sets[hit_object][-1])
                                 new_abstract_state = ThreadedAbstractState(next_abstract_state_id['next_abstract_state_id'],
                                                         np.average(rect, axis=0),
@@ -1232,19 +1241,20 @@ def create_symmetry_abstract_states_threaded(lock_one, symbols_to_explore, symbo
             if added_to_existing_state:
                 break
             else:
-                
                 if curr_num_results == threshold_num_results - 1:
                     break
                 else:
                     curr_num_results = min(5 * curr_num_results, threshold_num_results - 1)
-
         if not added_to_existing_state:
 
             with lock_one:
                 add_concrete_state_to_symmetry_abstract_state(s, 0, pc.Region(list_poly=[]),
                     symmetry_abstract_states, concrete_to_abstract, abstract_to_concrete, {})
         
+        work_processed += 1
+        
     #print("Process " + str(thread_index) + ": Done....")
+    #print("Process Identifier: ", thread_index, " -> First thing processed: ", first_index, " | Last thing processed: ", current_index)
     Q.put([symmetry_transformed_targets_and_obstacles, (second_index + 1) - first_index])
     #print("Process " + str(thread_index) + ": Data Submitted....")
     exit(0)
@@ -1273,6 +1283,8 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
     abstract_to_concrete[0] = manager.list()
 
     next_abstract_state_id['next_abstract_state_id'] = 1
+
+    threshold_num_results = len(abstract_reachable_sets)
 
     if strategy_5 or strategy_2:
         threshold_num_results = 376
@@ -1325,16 +1337,25 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
         counter_threads += 1
         symmetry_transformed_targets_and_obstacles.update(result[0])
 
-        
         #spawn new thread again
         future_pool[current_thread_index_counter] = Process(target=create_symmetry_abstract_states_threaded, args=(lock_one, list(symbols_to_explore), symbol_step, targets, obstacles, sym_x, X_low, X_up,
                                     reachability_rtree_idx3d, abstract_reachable_sets, symmetry_transformed_targets_and_obstacles, concrete_to_abstract,
                                     abstract_to_concrete, symmetry_abstract_states, u_idx_to_abstract_states_indices, nearest_target_of_concrete, valid_hit_idx_of_concrete,
                                     next_abstract_state_id, threshold_num_results, Q, current_thread_index_counter, manager, True, steal_send_lock, steal_receive_lock, stealQueue, sendQueue))
 
+        future_pool[current_thread_index_counter].start()
+
         current_thread_index_counter += 1
+
         
-    
+    #kill any waiting theif processes
+    for i in future_pool:
+        if i != None:
+            try:
+                os.kill(i.pid, signal.SIGTERM)
+            except OSError:
+                pass
+
     print("I counted: ", current_returns, " states returned out of ", len(symbols_to_explore), " symbols to explore")
     
     print(['Done creation of symmetry abstract states in: ', time.time() - t_start, ' seconds'])
@@ -2041,7 +2062,10 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
 
     np.save('exploration_record.npy', exploration_record)
 
-    average_path_length = running_sum_path_lengths / len(concrete_controller)
+    if concrete_controller:
+        average_path_length = running_sum_path_lengths / len(concrete_controller)
+    else:
+        average_path_length = 'No controllable state found'
 
     return concrete_controller, refinement_candidates, poll_lengths, average_ratio_neighbor_to_total, neighbor_map, unique_state_u_pairs_explored, total_state_u_pairs_explored, average_path_length, nb_iterations
 
@@ -2118,7 +2142,10 @@ def symmetry_synthesis_helper(concrete_states_to_explore,
             print('No new controllable state has been found in this synthesis iteration\n', time.time() - t_start)
             break
 
-    average_path_length = running_sum_path_lengths / len(concrete_controller)
+    if concrete_controller:
+        average_path_length = running_sum_path_lengths / len(concrete_controller)
+    else:
+        average_path_length = 'No controllable state found'
 
     return concrete_controller, neighbor_map, unique_state_u_pairs_explored, total_state_u_pairs_explored, average_path_length, nb_iterations
 
