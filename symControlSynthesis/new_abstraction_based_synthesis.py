@@ -1255,7 +1255,7 @@ def create_symmetry_abstract_states_threaded(lock_one, symbols_to_explore, symbo
         
     #print("Process " + str(thread_index) + ": Done....")
     #print("Process Identifier: ", thread_index, " -> First thing processed: ", first_index, " | Last thing processed: ", current_index)
-    Q.put([symmetry_transformed_targets_and_obstacles, (second_index + 1) - first_index])
+    Q.put([symmetry_transformed_targets_and_obstacles, work_processed])
     #print("Process " + str(thread_index) + ": Data Submitted....")
     exit(0)
 
@@ -1330,7 +1330,7 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ob
     current_returns = 0
     current_thread_index_counter = process_count
 
-    while current_returns != len(symbols_to_explore) + 1:
+    while current_returns != len(symbols_to_explore):
         print("Awaiting Processes: " + str(int((current_returns/len(symbols_to_explore))*100)) + "%", end="\r")  
 
         if (int((current_returns/len(symbols_to_explore))*100) == 100):
