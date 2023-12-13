@@ -1709,7 +1709,7 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                             hit_count += 1
                         hits = random_hits
                     else:
-                        hits = [hit_object for hit in list(reachability_rtree_idx3d.nearest(
+                        hits = [hit.object for hit in list(reachability_rtree_idx3d.nearest(
                             (nearest_point[0], nearest_point[1], nearest_point[2],
                             nearest_point[0]+0.001, nearest_point[1]+0.001, nearest_point[2]+0.001),
                             num_results=curr_num_results, objects=True))
@@ -1815,7 +1815,11 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                 concrete_states_to_explore = concrete_states_to_explore.difference(temp_controllable_concrete_states)
 
             exploration_record.append((len(concrete_states_to_explore), total_nb_explore - num_controllable_states))
-            ratio_neighbor_to_total = len(concrete_states_to_explore) / (total_nb_explore - num_controllable_states)
+            remaining_to_explore = total_nb_explore - num_controllable_states
+            if remaining_to_explore:
+                ratio_neighbor_to_total = len(concrete_states_to_explore) / remaining_to_explore
+            else:
+                ratio_neighbor_to_total = 1
             print("Ratio of neighbors over total explored", ratio_neighbor_to_total)
             sum_ratios_neighbor_to_total += ratio_neighbor_to_total
             nb_iterations += 1
@@ -2326,7 +2330,7 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
     if benchmark:
         print('No poll stats')
         print('No neighbor/total exploration ratio')
-    else:
+    elif poll_lengths:
         poll_lengths.sort()
         min_len = poll_lengths[0]
         max_len = poll_lengths[-1]
@@ -2336,6 +2340,9 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
             median_len = (poll_lengths[nb_abstract // 2 - 1] + poll_lengths[nb_abstract // 2]) / 2
         average_len = sum(poll_lengths) / (nb_abstract - 1)
         print('Poll stats (min/average/median/max): ', min_len, '/', average_len, '/', median_len, '/', max_len)
+        print('Average neighbor/total exploration ratio', average_ratio_neighbor_to_total)
+    else:
+        print('Poll stats (min/average/median/max): Zero polls')
         print('Average neighbor/total exploration ratio', average_ratio_neighbor_to_total)
     print('Unique (s,u) explored: ', unique_state_u_pairs_explored)
     print('Total (s,u) explored: ', total_state_u_pairs_explored)
