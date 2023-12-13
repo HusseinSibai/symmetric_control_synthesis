@@ -1418,7 +1418,7 @@ def add_concrete_state_to_symmetry_abstract_state(curr_concrete_state_idx, abstr
 
 def get_concrete_transition(s_idx, u_idx, concrete_edges, neighbor_map, #concrete_to_abstract,
                             sym_x, symbol_step, abstract_reachable_sets,
-                            obstacles_rects, obstacle_indices, targets_rects, target_indices, X_low, X_up, first_exploration):
+                            obstacles_rects, obstacle_indices, targets_rects, target_indices, X_low, X_up):
     if (s_idx, u_idx) in concrete_edges:
         neighbors = concrete_edges[(s_idx, u_idx)]
         indices_to_delete = []
@@ -1428,16 +1428,14 @@ def get_concrete_transition(s_idx, u_idx, concrete_edges, neighbor_map, #concret
             
         if len(indices_to_delete) == len(neighbors):
             concrete_edges[(s_idx, u_idx)] = [-1]
-            return [-1]
+            return [-1], False
 
         if indices_to_delete:
             neighbors = np.delete(np.array(neighbors), np.array(indices_to_delete).astype(int)).tolist()
             neighbors.append(-1)
 
         concrete_edges[(s_idx, u_idx)] = copy.deepcopy(neighbors)
-        return set(neighbors)
-    
-    first_exploration += 1
+        return set(neighbors), False
 
     s_subscript = np.array(np.unravel_index(s_idx, tuple((sym_x[0, :]).astype(int))))
     s_rect: np.array = np.row_stack((s_subscript * symbol_step + X_low,
@@ -1452,11 +1450,11 @@ def get_concrete_transition(s_idx, u_idx, concrete_edges, neighbor_map, #concret
         if np.any(concrete_succ[1, :2] > X_up[:2]) or np.any(concrete_succ[0, :2] < X_low[:2]):
                 #or np.any(concrete_succ[0, :] == concrete_succ[1, :]):
             concrete_edges[(s_idx, u_idx)] = [-2]
-            return [-2]  # unsafe
+            return [-2], True  # unsafe
         for obstacle_rect in obstacles_rects:
             if do_rects_inter(obstacle_rect, concrete_succ):
                 concrete_edges[(s_idx, u_idx)] = [-2]
-                return [-2]  # unsafe
+                return [-2], True  # unsafe
     reachable_rect = np.column_stack(pc.bounding_box(abstract_reachable_sets[u_idx][-1])).T
     concrete_succ = transform_to_frames(reachable_rect[0, :],
                                         reachable_rect[1, :],
@@ -1474,21 +1472,21 @@ def get_concrete_transition(s_idx, u_idx, concrete_edges, neighbor_map, #concret
     for idx, succ_idx in enumerate(neighbors):
         if succ_idx in obstacle_indices:
             concrete_edges[(s_idx, u_idx)] = [-2]
-            return [-2]
+            return [-2], True
         if succ_idx in target_indices:
             indices_to_delete.append(idx)
         
 
     if len(indices_to_delete) == len(neighbors):
         concrete_edges[(s_idx, u_idx)] = [-1]
-        return [-1]
+        return [-1], True
 
     if indices_to_delete:
         neighbors = np.delete(np.array(neighbors), np.array(indices_to_delete).astype(int)).tolist()
         neighbors.append(-1)
 
     concrete_edges[(s_idx, u_idx)] = copy.deepcopy(neighbors)
-    return set(neighbors)
+    return set(neighbors), True
 
 
 # add quantized target and reachable set of u_idx
@@ -1878,10 +1876,12 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
             valid_vote = None
             for v, u_idx in abstract_state_to_u_idx_poll[abstract_state_idx]: #enumerate
 
-                next_concrete_state_indices = get_concrete_transition(concrete_state_idx, u_idx, concrete_edges, neighbor_map,
+                next_concrete_state_indices, is_new_entry = get_concrete_transition(concrete_state_idx, u_idx, concrete_edges, neighbor_map,
                                                                     sym_x, symbol_step, abstract_reachable_sets,
                                                                     obstacles_rects, obstacle_indices, targets_rects,
-                                                                    controllable_concrete_states, X_low, X_up, unique_state_u_pairs_explored)
+                                                                    controllable_concrete_states, X_low, X_up)
+                if is_new_entry:
+                    unique_state_u_pairs_explored += 1
                 total_state_u_pairs_explored += 1
                 
                 is_controlled = (next_concrete_state_indices == [-1])
@@ -1963,10 +1963,13 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                                         is_obstructed_u_idx[hit_object] = False
                                 if not is_obstructed_u_idx[hit_object]:'''
                 
-                                next_concrete_state_indices = get_concrete_transition(concrete_state_idx, hit_object, concrete_edges, neighbor_map,
+                                next_concrete_state_indices, is_new_entry = \
+                                    get_concrete_transition(concrete_state_idx, hit_object, concrete_edges, neighbor_map,
                                                                 sym_x, symbol_step, abstract_reachable_sets,
                                                                 obstacles_rects, obstacle_indices, targets_rects,
-                                                                controllable_concrete_states, X_low, X_up, unique_state_u_pairs_explored)
+                                                                controllable_concrete_states, X_low, X_up)
+                                if is_new_entry:
+                                    unique_state_u_pairs_explored += 1
                                 total_state_u_pairs_explored += 1
             
                                 is_controlled = (next_concrete_state_indices == [-1])
@@ -2112,11 +2115,13 @@ def symmetry_synthesis_helper(concrete_states_to_explore,
             if len(hits):
                 for hit in hits:
         
-                    next_concrete_state_indices = get_concrete_transition(concrete_state_idx, hit,
+                    next_concrete_state_indices, is_new_entry = get_concrete_transition(concrete_state_idx, hit,
                                                     concrete_edges, neighbor_map,
                                                     sym_x, symbol_step, abstract_reachable_sets,
                                                     obstacles_rects, obstacle_indices, targets_rects,
-                                                    controllable_concrete_states, X_low, X_up, unique_state_u_pairs_explored)
+                                                    controllable_concrete_states, X_low, X_up)
+                    if is_new_entry:
+                        unique_state_u_pairs_explored += 1
                     total_state_u_pairs_explored += 1
 
                     is_controlled = (next_concrete_state_indices == [-1])
