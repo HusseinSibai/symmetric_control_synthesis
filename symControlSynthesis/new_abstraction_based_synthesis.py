@@ -2507,7 +2507,7 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
     wait_cond = SharedMemoryDict(name='lock', size=128)
 
     #signal
-    wait_cond[int(test_to_run)] = 0
+    wait_cond[int(os.getpid())] = 0
 
     #wait
     time_start_wait = time.time()
