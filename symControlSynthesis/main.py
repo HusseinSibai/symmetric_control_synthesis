@@ -5,6 +5,8 @@ import math
 import os
 import pwd
 
+import sys, getopt
+
 import matplotlib
 
 matplotlib.use("macOSX")
@@ -64,10 +66,16 @@ Obstacle_up = np.array([[2.5, 3, 100], [5.5, 9.5, 100], [0, 9.5, 100], [13, 0, 1
 Obstacle_low = np.array([[2, -3, -100], [5, 3.5, -100], [-3, -3, -100], [-3, -3, -100],
                          [-3, 6.5, -100], [10, -3, -100]])
 
-sym_x = 25 * np.ones((1, n_x))
-sym_x[0, 2] = 25
 
-sym_u = 9 * np.ones((1, n_u))
+sym_x = 15 * np.ones((1, n_x))
+sym_x[0, 2] = 20
+'''
+sym_x = np.ones((1, n_x))
+sym_x[0, 0] = 80
+sym_x[0, 1] = 100
+sym_x[0, 2] = 50
+'''
+sym_u = 7 * np.ones((1, n_u))
 
 time_step = np.linspace(0, 3, 3).reshape((1, 3))  # np.array([0,0.5,1,2,3]) #
 
@@ -201,9 +209,9 @@ U_discrete = np.array(U_discrete)
 
 N = 30
 M = 5
-abstract_synthesis(U_discrete, time_step, W_low, W_up,
+'''abstract_synthesis(U_discrete, time_step, W_low, W_up,
                    Symbolic_reduced, sym_x, sym_u, state_dimensions,
-                   Target_low, Target_up, Obstacle_low, Obstacle_up, X_low, X_up, eng)
+                   Target_low, Target_up, Obstacle_low, Obstacle_up, X_low, X_up, eng)'''
 # abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Target_up,
 #                   Obstacle_low, Obstacle_up, X_low, X_up)
 # synthesize(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Target_up,
@@ -211,3 +219,15 @@ abstract_synthesis(U_discrete, time_step, W_low, W_up,
 # initial_set = np.array([[4.5, 0.5, 0.5], [5, 1, 1]]) Controller = reach_avoid_synthesis_sets_forward_pass(
 # initial_set, Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Target_up, Obstacle_low, Obstacle_up,
 # X_low, X_up, U_low, U_up)
+
+
+if __name__ == "__main__":
+    args = sys.argv[1:]
+    if args:
+        abstraction_file = args[0]
+    else:
+        abstraction_file = None
+
+    abstract_synthesis(U_discrete, time_step, W_low, W_up,
+                            Symbolic_reduced, sym_x, sym_u, state_dimensions,
+                            Target_low, Target_up, Obstacle_low, Obstacle_up, X_low, X_up, eng, abstraction_file)

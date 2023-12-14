@@ -981,12 +981,12 @@ def nearest_point_to_the_origin(poly):
 
 
 benchmark = False #baseline
-strategy_1 = False #polls - all
+strategy_1 = True #polls - all
 strategy_2 = False #polls - 400
 strategy_3 = False #polls + no closest
 strategy_4 = False #polls -full + neighbors
 strategy_5 = False #polls -400 + neighbors
-strategy_6 = True #polls + no closest + neighbors // was it "polls-full"?
+strategy_6 = False #polls + no closest + neighbors // was it "polls-full"?
 strategy_list = [strategy_1, strategy_2, strategy_3, strategy_4, strategy_5, strategy_6, benchmark]
 
 def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, obstacles, sym_x, X_low, X_up,
@@ -1619,8 +1619,7 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                     #or concrete_state_idx in visited_concrete_states:
                 #debug_status[0] += 1
                 continue'''
-            if not concrete_state_idx in concrete_to_abstract or \
-                concrete_state_idx in concrete_to_abstract and concrete_to_abstract[concrete_state_idx] == 0:
+            if (not concrete_state_idx in concrete_to_abstract) or concrete_to_abstract[concrete_state_idx] == 0:
                 continue
 
             abstract_state_idx = concrete_to_abstract[concrete_state_idx]
@@ -1881,7 +1880,8 @@ def symmetry_synthesis_helper(concrete_states_to_explore,
         
         for concrete_state_idx in concrete_states_to_explore:
 
-            #if controlable or obstacle then continue
+            if concrete_state_idx  or obstacle:
+                continue
                     
             hits = list(range(len(abstract_reachable_sets)))
             
@@ -2121,9 +2121,44 @@ def compute_reachable_set_tira(eng, time_step, rect_low, rect_up, u, W_low, W_up
     return reachtube  # np.concatenate((succ_low, succ_up), axis=0)
 
 
+def save_abstraction(symbols_to_explore, symbol_step, targets, obstacles, sym_x, X_low, X_up,
+                        reachability_rtree_idx3d, abstract_reachable_sets):
+
+    t_start = time.time()
+
+    symmetry_transformed_targets_and_obstacles, concrete_to_abstract, abstract_to_concrete, \
+        symmetry_abstract_states, nearest_target_of_concrete, valid_hit_idx_of_concrete = \
+            create_symmetry_abstract_states(
+            symbols_to_explore,
+            symbol_step, targets,
+            obstacles, sym_x, X_low, X_up,
+            reachability_rtree_idx3d, abstract_reachable_sets)
+
+
+    t_abstraction = time.time() - t_start
+    print(['Construction of symmetry-based abstraction took: ', t_abstraction, ' seconds'])
+
+    save_file = {
+        "symmetry_transformed_targets_and_obstacles": symmetry_transformed_targets_and_obstacles, 
+        "concrete_to_abstract": concrete_to_abstract, 
+        "abstract_to_concrete": abstract_to_concrete,
+        "symmetry_abstract_states": symmetry_abstract_states, 
+        "nearest_target_of_concrete": nearest_target_of_concrete,
+        "valid_hit_idx_of_concrete": valid_hit_idx_of_concrete,
+        "t_abstraction": t_abstraction
+    }
+
+    np.save("abstraction_data.npy", save_file)
+
+    return symmetry_transformed_targets_and_obstacles, concrete_to_abstract, abstract_to_concrete, \
+        symmetry_abstract_states, nearest_target_of_concrete, valid_hit_idx_of_concrete, t_abstraction
+
+    
+
 def abstract_synthesis(U_discrete, time_step, W_low, W_up,
                        Symbolic_reduced, sym_x, sym_u, state_dimensions,
-                       Target_low, Target_up, Obstacle_low, Obstacle_up, X_low, X_up, eng):
+                       Target_low, Target_up, Obstacle_low, Obstacle_up, X_low, X_up, eng,
+                       abstraction_data=None):
 
     xor_strategy = (sum([ int(strategy) for strategy in strategy_list]) == 1)
     if not xor_strategy:
@@ -2214,24 +2249,36 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
     symbols_to_explore = symbols_to_explore.difference(obstacle_indices)
 
     # intersection_radius_threshold = intersection_radius_threshold * 10
-    if not benchmark:
-        symmetry_transformed_targets_and_obstacles, concrete_to_abstract, abstract_to_concrete, \
-            symmetry_abstract_states, nearest_target_of_concrete, valid_hit_idx_of_concrete = \
-                create_symmetry_abstract_states(
-                symbols_to_explore,
-                symbol_step, targets,
-                obstacles, sym_x, X_low, X_up,
-                reachability_rtree_idx3d, abstract_reachable_sets)
-        nb_abstract_obstacle = len(abstract_to_concrete[0])
+
+    if abstraction_data is None:
+        if not benchmark:
+            symmetry_transformed_targets_and_obstacles, concrete_to_abstract, abstract_to_concrete, \
+            symmetry_abstract_states, nearest_target_of_concrete, valid_hit_idx_of_concrete, t_abstraction = \
+                save_abstraction(symbols_to_explore, symbol_step, targets, obstacles, sym_x, X_low, X_up,
+                            reachability_rtree_idx3d, abstract_reachable_sets)
+            
+            nb_abstract_obstacle = len(abstract_to_concrete[0])
+        else:
+            abstract_to_concrete = []
+            nb_abstract_obstacle = 0
+            t_abstraction = time.time() - t_start
+        
     else:
-        abstract_to_concrete = []
-        nb_abstract_obstacle = 0
+        saved_data = np.load(abstraction_data)
+
+        symmetry_transformed_targets_and_obstacles, concrete_to_abstract, abstract_to_concrete, \
+        symmetry_abstract_states, nearest_target_of_concrete, valid_hit_idx_of_concrete, t_abstraction = \
+            saved_data["symmetry_transformed_targets_and_obstacles"], saved_data["concrete_to_abstract"], saved_data["abstract_to_concrete"], \
+            saved_data["symmetry_abstract_states"], saved_data["nearest_target_of_concrete"], saved_data["valid_hit_idx_of_concrete"], saved_data["t_abstraction"]
+        
+        print(['Construction of symmetry-based abstraction took: ', t_abstraction, ' seconds'])
+
 
     nb_abstract = len(abstract_to_concrete)
 
 
-    t_abstraction = time.time() - t_start
-    print(['Construction of symmetry-based abstraction took: ', t_abstraction, ' seconds'])
+    
+    
 
     #plot
     #plot_abstract_states(symmetry_abstract_states, [], abstract_reachable_sets, state_to_paths_idx, abstract_to_concrete)
