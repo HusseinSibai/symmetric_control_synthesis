@@ -1011,7 +1011,7 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ta
     if strategy_5 or strategy_2:
         threshold_num_results = 376
     elif strategy_1 or strategy_4:
-        threshold_num_results = len(abstract_reachable_sets)
+        threshold_num_results = len(abstract_reachable_sets) + 1
     else:
         threshold_num_results = 4
 
@@ -1089,7 +1089,7 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ta
         added_to_existing_state = False
         while curr_num_results < threshold_num_results:
             
-            if strategy_3 or strategy_6:
+            if strategy_3 or strategy_6 or curr_num_results == len(abstract_reachable_sets):
                 hits = list(range(len(abstract_reachable_sets)))
                 '''elif (strategy_2 or strategy_5) and curr_num_results == threshold_num_results - 1:
                     hit_count = 0
@@ -1629,7 +1629,7 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                     #or concrete_state_idx in visited_concrete_states:
                 #debug_status[0] += 1
                 continue'''
-            if (not concrete_state_idx in concrete_to_abstract): #or concrete_to_abstract[concrete_state_idx] == 0:
+            if (not concrete_state_idx in concrete_to_abstract) or concrete_to_abstract[concrete_state_idx] == 0:
                 continue
 
             abstract_state_idx = concrete_to_abstract[concrete_state_idx]
