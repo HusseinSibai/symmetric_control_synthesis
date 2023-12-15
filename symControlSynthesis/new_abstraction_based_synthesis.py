@@ -1311,8 +1311,6 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ta
 
     next_abstract_state_id['next_abstract_state_id'] = 1
 
-    threshold_num_results = len(abstract_reachable_sets)
-
     if strategy_5 or strategy_2:
         threshold_num_results = 376
     elif strategy_1 or strategy_4:
