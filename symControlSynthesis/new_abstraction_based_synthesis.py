@@ -2663,7 +2663,7 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
 
 
     
-    exit(0)
+    #exit(0)
 
     #plot
     #plot_abstract_states(symmetry_abstract_states, [], abstract_reachable_sets, state_to_paths_idx, abstract_to_concrete)
