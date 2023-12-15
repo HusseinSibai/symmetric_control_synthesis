@@ -1207,7 +1207,7 @@ def get_concrete_transition(s_idx, u_idx, concrete_edges, neighbor_map, #concret
                             sym_x, symbol_step, abstract_reachable_sets,
                             obstacles_rects, obstacle_indices, targets_rects, target_indices, X_low, X_up, benchmark):
     if benchmark and (s_idx, u_idx) in concrete_edges:
-        return [-2]
+        return [-2], False
     elif (s_idx, u_idx) in concrete_edges:
         neighbors = concrete_edges[(s_idx, u_idx)]
         indices_to_delete = []
