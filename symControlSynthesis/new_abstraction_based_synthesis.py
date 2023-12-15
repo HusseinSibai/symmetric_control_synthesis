@@ -1180,7 +1180,7 @@ def create_symmetry_abstract_states_threaded(lock_one, lock_two, symbols_to_expl
         is_obstructed_u_idx = {}
         added_to_existing_state = False
         while curr_num_results < threshold_num_results:
-            
+
             if strategy_3 or strategy_6 or curr_num_results == len(abstract_reachable_sets):
                 hits = list(range(len(abstract_reachable_sets)))
                 '''elif (strategy_2 or strategy_5) and curr_num_results == threshold_num_results - 1:
@@ -1220,7 +1220,7 @@ def create_symmetry_abstract_states_threaded(lock_one, lock_two, symbols_to_expl
                         next_concrete_state_indices, _ = get_concrete_transition(s, hit_object, concrete_edges, neighbor_map,
                                                                 sym_x, symbol_step, abstract_reachable_sets,
                                                                 obstacles_rects, obstacle_indices, targets_rects,
-                                                                target_indices, X_low, X_up)
+                                                                target_indices, X_low, X_up, benchmark)
                         get_concrete_transition_calls += 1
 
                         is_obstructed_u_idx[hit_object] = (next_concrete_state_indices == [-2])
@@ -1492,7 +1492,7 @@ def get_concrete_transition_threaded(s_idx, u_idx, concrete_edges, neighbor_map,
     neighbors = rect_to_indices(concrete_succ, symbol_step, X_low, sym_x[0, :],
                                 over_approximate=True).tolist()
     
-    neighbor_map[(s_idx, u_idx)] = neighbors
+    #neighbor_map[(s_idx, u_idx)] = neighbors
 
     indices_to_delete = []
     for idx, succ_idx in enumerate(neighbors):
@@ -1517,8 +1517,10 @@ def get_concrete_transition_threaded(s_idx, u_idx, concrete_edges, neighbor_map,
 
 def get_concrete_transition(s_idx, u_idx, concrete_edges, neighbor_map, #concrete_to_abstract,
                             sym_x, symbol_step, abstract_reachable_sets,
-                            obstacles_rects, obstacle_indices, targets_rects, target_indices, X_low, X_up):
-    if (s_idx, u_idx) in concrete_edges:
+                            obstacles_rects, obstacle_indices, targets_rects, target_indices, X_low, X_up, benchmark):
+    if benchmark and (s_idx, u_idx) in concrete_edges:
+        return [-2], False
+    elif (s_idx, u_idx) in concrete_edges:
         neighbors = concrete_edges[(s_idx, u_idx)]
         indices_to_delete = []
         for idx, succ_idx in enumerate(neighbors):
@@ -1565,7 +1567,7 @@ def get_concrete_transition(s_idx, u_idx, concrete_edges, neighbor_map, #concret
     neighbors = rect_to_indices(concrete_succ, symbol_step, X_low, sym_x[0, :],
                                 over_approximate=True).tolist()
     
-    neighbor_map[(s_idx, u_idx)] = neighbors
+    #neighbor_map[(s_idx, u_idx)] = neighbors
 
     indices_to_delete = []
     for idx, succ_idx in enumerate(neighbors):
@@ -1577,14 +1579,16 @@ def get_concrete_transition(s_idx, u_idx, concrete_edges, neighbor_map, #concret
         
 
     if len(indices_to_delete) == len(neighbors):
-        concrete_edges[(s_idx, u_idx)] = [-1]
+        if not benchmark:
+            concrete_edges[(s_idx, u_idx)] = [-1]
         return [-1], True
 
     if indices_to_delete:
         neighbors = np.delete(np.array(neighbors), np.array(indices_to_delete).astype(int)).tolist()
         neighbors.append(-1)
 
-    concrete_edges[(s_idx, u_idx)] = copy.deepcopy(neighbors)
+    if not benchmark:
+        concrete_edges[(s_idx, u_idx)] = copy.deepcopy(neighbors)
     return set(neighbors), True
 
 
@@ -1982,7 +1986,7 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                 next_concrete_state_indices, is_new_entry = get_concrete_transition(concrete_state_idx, u_idx, concrete_edges, neighbor_map,
                                                                     sym_x, symbol_step, abstract_reachable_sets,
                                                                     obstacles_rects, obstacle_indices, targets_rects,
-                                                                    controllable_concrete_states, X_low, X_up)
+                                                                    controllable_concrete_states, X_low, X_up, benchmark)
                 if is_new_entry:
                     unique_state_u_pairs_explored += 1
                 total_state_u_pairs_explored += 1
@@ -2070,7 +2074,7 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                                     get_concrete_transition(concrete_state_idx, hit_object, concrete_edges, neighbor_map,
                                                                 sym_x, symbol_step, abstract_reachable_sets,
                                                                 obstacles_rects, obstacle_indices, targets_rects,
-                                                                controllable_concrete_states, X_low, X_up)
+                                                                controllable_concrete_states, X_low, X_up, benchmark)
                                 if is_new_entry:
                                     unique_state_u_pairs_explored += 1
                                 total_state_u_pairs_explored += 1
@@ -2222,7 +2226,7 @@ def symmetry_synthesis_helper(concrete_states_to_explore,
                                                     concrete_edges, neighbor_map,
                                                     sym_x, symbol_step, abstract_reachable_sets,
                                                     obstacles_rects, obstacle_indices, targets_rects,
-                                                    controllable_concrete_states, X_low, X_up)
+                                                    controllable_concrete_states, X_low, X_up, benchmark)
                     if is_new_entry:
                         unique_state_u_pairs_explored += 1
                     total_state_u_pairs_explored += 1
