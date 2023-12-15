@@ -1015,7 +1015,7 @@ def nearest_point_to_the_origin(poly):
 
 
 benchmark = False #baseline
-strategy_1 = True #polls - all
+strategy_1 = False #polls - all
 strategy_2 = False #polls - 400
 strategy_3 = False #polls + no closest
 strategy_4 = False #polls -full + neighbors
