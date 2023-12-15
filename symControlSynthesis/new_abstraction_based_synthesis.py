@@ -1903,8 +1903,18 @@ def symmetry_synthesis_helper(concrete_states_to_explore,
         num_new_symbols = 0
         
         for concrete_state_idx in concrete_states_to_explore:
-
-                    
+            '''
+            hit_count = 0
+            random_hits = set()
+            while hit_count <= 400:
+                hit_candidate = np.random.randint(len(abstract_reachable_sets))
+                if hit_candidate in random_hits:
+                    continue
+                random_hits.add(hit_candidate)
+                hit_count += 1
+            hits = random_hits
+            '''
+            
             hits = list(range(len(abstract_reachable_sets)))
             
             if len(hits):
