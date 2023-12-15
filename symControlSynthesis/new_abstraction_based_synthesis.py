@@ -1932,7 +1932,7 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                     #or concrete_state_idx in visited_concrete_states:
                 #debug_status[0] += 1
                 continue'''
-            if (not concrete_state_idx in concrete_to_abstract): #or concrete_to_abstract[concrete_state_idx] == 0:
+            if (not concrete_state_idx in concrete_to_abstract) or concrete_to_abstract[concrete_state_idx] == 0:
                 continue
 
             abstract_state_idx = concrete_to_abstract[concrete_state_idx]
@@ -2446,8 +2446,9 @@ def save_abstraction(symbols_to_explore, symbol_step, targets, targets_rects, ta
     t_start = time.time()
 
     symmetry_transformed_targets_and_obstacles, concrete_to_abstract, abstract_to_concrete, \
-        symmetry_abstract_states, nearest_target_of_concrete, valid_hit_idx_of_concrete, concrete_edges, neighbor_map = \
-            create_symmetry_abstract_states(
+    symmetry_abstract_states, nearest_target_of_concrete, valid_hit_idx_of_concrete, \
+    concrete_edges, neighbor_map, get_concrete_transition_calls = \
+        create_symmetry_abstract_states(
             symbols_to_explore,
             symbol_step, targets, targets_rects, target_indices, 
             obstacles, obstacles_rects, obstacle_indices, sym_x, X_low, X_up,
@@ -2468,7 +2469,7 @@ def save_abstraction(symbols_to_explore, symbol_step, targets, targets_rects, ta
         "t_abstraction": t_abstraction
     }'''
 
-    np.savez("abstraction_data", 
+    '''np.savez("abstraction_data", 
              symmetry_transformed_targets_and_obstacles=symmetry_transformed_targets_and_obstacles,
              concrete_to_abstract=concrete_to_abstract, 
             abstract_to_concrete=abstract_to_concrete,
@@ -2476,10 +2477,10 @@ def save_abstraction(symbols_to_explore, symbol_step, targets, targets_rects, ta
             nearest_target_of_concrete=nearest_target_of_concrete,
             valid_hit_idx_of_concrete=valid_hit_idx_of_concrete,
             t_abstraction=[t_abstraction]
-             )
+             )'''
 
     return symmetry_transformed_targets_and_obstacles, concrete_to_abstract, abstract_to_concrete, \
-        symmetry_abstract_states, nearest_target_of_concrete, valid_hit_idx_of_concrete, concrete_edges, neighbor_map, t_abstraction
+        symmetry_abstract_states, nearest_target_of_concrete, valid_hit_idx_of_concrete, concrete_edges, neighbor_map, t_abstraction, get_concrete_transition_calls
 
     
 
@@ -2608,7 +2609,8 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
     if abstraction_data is None:
         if not benchmark:
             symmetry_transformed_targets_and_obstacles, concrete_to_abstract, abstract_to_concrete, \
-            symmetry_abstract_states, nearest_target_of_concrete, valid_hit_idx_of_concrete, concrete_edges, neighbor_map, t_abstraction = \
+            symmetry_abstract_states, nearest_target_of_concrete, valid_hit_idx_of_concrete, \
+                concrete_edges, neighbor_map, t_abstraction, get_concrete_transition_calls = \
                 save_abstraction(symbols_to_explore, symbol_step, targets, targets_rects, target_indices, 
                                 obstacles, obstacles_rects, obstacle_indices, sym_x, X_low, X_up,
                                 reachability_rtree_idx3d, abstract_reachable_sets)
@@ -2618,6 +2620,7 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
             abstract_to_concrete = []
             concrete_edges = {}
             neighbor_map = {}
+            get_concrete_transition_calls = 0
             nb_abstract_obstacle = 0
             t_abstraction = time.time() - t_start
         
@@ -2764,8 +2767,8 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
     else:
         print('Poll stats (min/average/median/max): Zero polls')
         print('Average neighbor/total exploration ratio', average_ratio_neighbor_to_total)
-    print('Unique (s,u) explored: ', unique_state_u_pairs_explored)
-    print('Total (s,u) explored: ', total_state_u_pairs_explored)
+    print('Unique (s,u) explored: ', get_concrete_transition_calls + unique_state_u_pairs_explored)
+    print('Total (s,u) explored: ', get_concrete_transition_calls + total_state_u_pairs_explored)
     print('Average path length: ', average_path_length)
     print('Number of synthesis iterations: ', nb_synthesis)
     print('Abstraction time: ', t_abstraction)
