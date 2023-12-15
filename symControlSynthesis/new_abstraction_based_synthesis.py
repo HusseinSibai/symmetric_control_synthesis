@@ -1038,6 +1038,8 @@ def create_symmetry_abstract_states_threaded(lock_one, lock_two, symbols_to_expl
     reachability_rtree_idx3d = index.Index('3d_index_abstract',
                                            properties=p)
 
+    get_concrete_transition_calls = 0
+
     #grab indices for work
     first_index = int(len(symbols_to_explore)/cpu_count) * thread_index
     second_index = (int(len(symbols_to_explore)/cpu_count) * (thread_index+1)) - 1 if thread_index+1 != cpu_count else int(len(symbols_to_explore))
@@ -1266,7 +1268,7 @@ def create_symmetry_abstract_states_threaded(lock_one, lock_two, symbols_to_expl
         
     #print("Process " + str(thread_index) + ": Done....")
     #print("Process Identifier: ", thread_index, " -> First thing processed: ", first_index, " | Last thing processed: ", current_index)
-    Q.put([symmetry_transformed_targets_and_obstacles, work_processed, concrete_edges])
+    Q.put([symmetry_transformed_targets_and_obstacles, work_processed, concrete_edges, get_concrete_transition_calls])
     #print("Process " + str(thread_index) + ": Data Submitted....")
     exit(0)
 
@@ -1295,6 +1297,7 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ta
     obstacle_state = ThreadedAbstractState(0, None, None, [], [], set(), manager)
     symmetry_abstract_states.append(obstacle_state)
     abstract_to_concrete[0] = manager.list()
+    get_concrete_transition_calls = 0
 
     next_abstract_state_id['next_abstract_state_id'] = 1
 
@@ -1356,6 +1359,7 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ta
         counter_threads += 1
         symmetry_transformed_targets_and_obstacles.update(result[0])
         concrete_edges.update(result[2])
+        get_concrete_transition_calls += result[3]
 
         
         #spawn new thread again
@@ -1411,7 +1415,7 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ta
     #overwrite
     abstract_to_concrete = copy.deepcopy(abstract_to_concrete_single)
 
-    return symmetry_transformed_targets_and_obstacles, concrete_to_abstract, abstract_to_concrete, symmetry_abstract_states, nearest_target_of_concrete, valid_hit_idx_of_concrete, concrete_edges, neighbor_map
+    return symmetry_transformed_targets_and_obstacles, concrete_to_abstract, abstract_to_concrete, symmetry_abstract_states, nearest_target_of_concrete, valid_hit_idx_of_concrete, concrete_edges, neighbor_map, get_concrete_transition_calls
 
 
 def add_concrete_state_to_symmetry_abstract_state(curr_concrete_state_idx, abstract_state_id, symmetry_transformed_obstacles_curr,
