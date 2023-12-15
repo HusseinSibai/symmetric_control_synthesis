@@ -1180,9 +1180,19 @@ def create_symmetry_abstract_states_threaded(lock_one, lock_two, symbols_to_expl
         is_obstructed_u_idx = {}
         added_to_existing_state = False
         while curr_num_results < threshold_num_results:
-
+            
             if strategy_3 or strategy_6 or curr_num_results == len(abstract_reachable_sets):
                 hits = list(range(len(abstract_reachable_sets)))
+                '''elif (strategy_2 or strategy_5) and curr_num_results == threshold_num_results - 1:
+                    hit_count = 0
+                    random_hits = []
+                    while hit_count < 75:
+                        hit_candidate = np.random.randint(len(abstract_reachable_sets))
+                        if (hit_candidate in is_obstructed_u_idx and is_obstructed_u_idx[hit_candidate]) or hit_candidate in random_hits:
+                            continue
+                        random_hits.append(hit_candidate)
+                        hit_count += 1
+                    hits = random_hits'''
             else:
                 rtree_hits = list(reachability_rtree_idx3d.nearest(
                     (nearest_point[0], nearest_point[1], nearest_point[2],
@@ -1207,11 +1217,11 @@ def create_symmetry_abstract_states_threaded(lock_one, lock_two, symbols_to_expl
                                 break
                         if not hit_object in is_obstructed_u_idx:
                             is_obstructed_u_idx[hit_object] = False'''
-
                         next_concrete_state_indices, _ = get_concrete_transition(s, hit_object, concrete_edges, neighbor_map,
                                                                 sym_x, symbol_step, abstract_reachable_sets,
                                                                 obstacles_rects, obstacle_indices, targets_rects,
                                                                 target_indices, X_low, X_up)
+                        get_concrete_transition_calls += 1
 
                         is_obstructed_u_idx[hit_object] = (next_concrete_state_indices == [-2])
                         
@@ -2651,7 +2661,7 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
 
 
     
-    
+    exit(0)
 
     #plot
     #plot_abstract_states(symmetry_abstract_states, [], abstract_reachable_sets, state_to_paths_idx, abstract_to_concrete)
