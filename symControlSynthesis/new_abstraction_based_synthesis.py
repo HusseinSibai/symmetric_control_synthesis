@@ -1906,6 +1906,7 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
 
     total_state_u_pairs_explored = 0
     unique_state_u_pairs_explored = 0
+    total_states_explored = 0
 
     while True: # one iteration of this loop will try current abstraction to find controllable states
         
@@ -1929,6 +1930,8 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                 continue'''
             if (not concrete_state_idx in concrete_to_abstract) or concrete_to_abstract[concrete_state_idx] == 0:
                 continue
+
+            total_states_explored += 1
 
             abstract_state_idx = concrete_to_abstract[concrete_state_idx]
 
@@ -2127,6 +2130,7 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                         rect_to_indices(neighborhood_rect, symbol_step, X_low,
                                         sym_x[0, :], over_approximate=True))
                 concrete_states_to_explore = concrete_states_to_explore.difference(controllable_concrete_states)
+                concrete_states_to_explore = concrete_states_to_explore.difference(obstacle_indices)
             else:
                 concrete_states_to_explore = concrete_states_to_explore.difference(temp_controllable_concrete_states)
 
@@ -2167,7 +2171,7 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
     else:
         average_path_length = 'No controllable state found'
 
-    return concrete_controller, refinement_candidates, poll_lengths, average_ratio_neighbor_to_total, neighbor_map, unique_state_u_pairs_explored, total_state_u_pairs_explored, average_path_length, nb_iterations
+    return concrete_controller, refinement_candidates, poll_lengths, average_ratio_neighbor_to_total, neighbor_map, unique_state_u_pairs_explored, total_state_u_pairs_explored, total_states_explored, average_path_length, nb_iterations
 
 def symmetry_synthesis_helper(concrete_states_to_explore,
                               concrete_edges,
@@ -2188,15 +2192,27 @@ def symmetry_synthesis_helper(concrete_states_to_explore,
 
     total_state_u_pairs_explored = 0
     unique_state_u_pairs_explored = 0
+    total_states_explored = 0
 
     while True:
         temp_controllable_concrete_states = set()
         num_new_symbols = 0
         
         for concrete_state_idx in concrete_states_to_explore:
-
-                    
+            '''
+            hit_count = 0
+            random_hits = set()
+            while hit_count <= 400:
+                hit_candidate = np.random.randint(len(abstract_reachable_sets))
+                if hit_candidate in random_hits:
+                    continue
+                random_hits.add(hit_candidate)
+                hit_count += 1
+            hits = random_hits
+            '''
+            
             hits = list(range(len(abstract_reachable_sets)))
+            total_states_explored += 1
             
             if len(hits):
                 for hit in hits:
@@ -2245,7 +2261,7 @@ def symmetry_synthesis_helper(concrete_states_to_explore,
     else:
         average_path_length = 'No controllable state found'
 
-    return concrete_controller, neighbor_map, unique_state_u_pairs_explored, total_state_u_pairs_explored, average_path_length, nb_iterations
+    return concrete_controller, neighbor_map, unique_state_u_pairs_explored, total_state_u_pairs_explored, total_states_explored, average_path_length, nb_iterations
 
 
 def get_decomposed_angle_intervals(original_angle_interval):
@@ -2484,6 +2500,7 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
                        Target_low, Target_up, Obstacle_low, Obstacle_up, X_low, X_up, eng, test_to_run,
                        abstraction_data=None):
 
+
     #handle tests to run
     global strategy_1
     global strategy_2
@@ -2630,19 +2647,17 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
         
         print(['Construction of symmetry-based abstraction took: ', t_abstraction, ' seconds'])
 
-    #each new execution requires new opening of the rtree files
+
+    nb_abstract = len(abstract_to_concrete)
+
     p = index.Property()
     p.dimension = 3
     p.dat_extension = 'data'
     p.idx_extension = 'index'
     reachability_rtree_idx3d = index.Index('3d_index_abstract',
                                            properties=p)
-
-    nb_abstract = len(abstract_to_concrete)
-
-
     
-    #exit(0)
+    
 
     #plot
     #plot_abstract_states(symmetry_abstract_states, [], abstract_reachable_sets, state_to_paths_idx, abstract_to_concrete)
@@ -2682,7 +2697,7 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
 
     if benchmark:
         concrete_controller, neighbor_map, unique_state_u_pairs_explored, \
-            total_state_u_pairs_explored, average_path_length, nb_synthesis = symmetry_synthesis_helper(
+            total_state_u_pairs_explored, total_states_explored, average_path_length, nb_synthesis = symmetry_synthesis_helper(
             concrete_states_to_explore,
             concrete_edges,
             neighbor_map,
@@ -2697,7 +2712,7 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
         obstacle_indices = obstacle_indices.union(set(abstract_to_concrete[0]))
 
         concrete_controller, refinement_candidates, poll_lengths, average_ratio_neighbor_to_total, \
-            neighbor_map, unique_state_u_pairs_explored, total_state_u_pairs_explored, \
+            neighbor_map, unique_state_u_pairs_explored, total_state_u_pairs_explored, total_states_explored, \
                 average_path_length, nb_synthesis = symmetry_abstract_synthesis_helper(
             concrete_states_to_explore,
             concrete_edges,
@@ -2764,6 +2779,7 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
         print('Average neighbor/total exploration ratio', average_ratio_neighbor_to_total)
     print('Unique (s,u) explored: ', get_concrete_transition_calls + unique_state_u_pairs_explored)
     print('Total (s,u) explored: ', get_concrete_transition_calls + total_state_u_pairs_explored)
+    print('Total s explored: ', total_states_explored)
     print('Average path length: ', average_path_length)
     print('Number of synthesis iterations: ', nb_synthesis)
     print('Abstraction time: ', t_abstraction)
