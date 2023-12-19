@@ -1036,7 +1036,6 @@ def create_symmetry_abstract_states_threaded(lock_one, lock_two, symbols_to_expl
                                     abstract_to_concrete, symmetry_abstract_states, u_idx_to_abstract_states_indices, nearest_target_of_concrete, valid_hit_idx_of_concrete,
                                     next_abstract_state_id, threshold_num_results, Q, thread_index, manager, stolen_work, steal_send_lock, steal_receive_lock, stealQueue, sendQueue,
                                     obstacles_rects, obstacle_indices, targets_rects, target_indices, concrete_edges, neighbor_map):
-####################################
 
     #each new execution requires new opening of the rtree files
     p = index.Property()
@@ -1119,7 +1118,6 @@ def create_symmetry_abstract_states_threaded(lock_one, lock_two, symbols_to_expl
 
                     sendQueue.put((stolen_first_index, stolen_second_index))
 
-        ###S#######
         s_subscript = np.array(np.unravel_index(s, tuple((sym_x[0, :]).astype(int))))
         s_rect: np.array = np.row_stack((s_subscript * symbol_step + X_low,
                                          s_subscript * symbol_step + symbol_step + X_low))
@@ -1191,16 +1189,6 @@ def create_symmetry_abstract_states_threaded(lock_one, lock_two, symbols_to_expl
 
             if strategy_3 or strategy_6 or curr_num_results == len(abstract_reachable_sets):
                 hits = list(range(len(abstract_reachable_sets)))
-                '''elif (strategy_2 or strategy_5) and curr_num_results == threshold_num_results - 1:
-                    hit_count = 0
-                    random_hits = []
-                    while hit_count < 75:
-                        hit_candidate = np.random.randint(len(abstract_reachable_sets))
-                        if (hit_candidate in is_obstructed_u_idx and is_obstructed_u_idx[hit_candidate]) or hit_candidate in random_hits:
-                            continue
-                        random_hits.append(hit_candidate)
-                        hit_count += 1
-                    hits = random_hits'''
             else:
                 rtree_hits = list(reachability_rtree_idx3d.nearest(
                     (nearest_point[0], nearest_point[1], nearest_point[2],
@@ -1212,19 +1200,6 @@ def create_symmetry_abstract_states_threaded(lock_one, lock_two, symbols_to_expl
             if len(hits):
                 for idx, hit_object in enumerate(hits):
                     if not hit_object in is_obstructed_u_idx:
-                        '''for p_idx in range(len(abstract_reachable_sets[hit_object]), 0, -1):
-                            if type(symmetry_transformed_targets_and_obstacles[s].abstract_obstacles) == pc.Region:
-                                list_obstacles = symmetry_transformed_targets_and_obstacles[s].abstract_obstacles.list_poly
-                            else:
-                                list_obstacles = [symmetry_transformed_targets_and_obstacles[s].abstract_obstacles]
-                            for obstacle in list_obstacles:
-                                if not pc.is_empty(pc.intersect(abstract_reachable_sets[hit_object][p_idx-1], obstacle)):
-                                    is_obstructed_u_idx[hit_object] = True
-                                    break
-                            if hit_object in is_obstructed_u_idx:
-                                break
-                        if not hit_object in is_obstructed_u_idx:
-                            is_obstructed_u_idx[hit_object] = False'''
                         next_concrete_state_indices, _ = get_concrete_transition(s, hit_object, concrete_edges, neighbor_map,
                                                                 sym_x, symbol_step, abstract_reachable_sets,
                                                                 obstacles_rects, obstacle_indices, targets_rects,
@@ -1236,7 +1211,6 @@ def create_symmetry_abstract_states_threaded(lock_one, lock_two, symbols_to_expl
                     if not is_obstructed_u_idx[hit_object]:
                         with lock_one:
                             if not hit_object in u_idx_to_abstract_states_indices:
-                                # print(abstract_reachable_sets[hit_object][-1])
                                 rect = get_bounding_box(abstract_reachable_sets[hit_object][-1])
                                 new_abstract_state = ThreadedAbstractState(next_abstract_state_id['next_abstract_state_id'],
                                                         np.average(rect, axis=0),
@@ -1284,10 +1258,7 @@ def create_symmetry_abstract_states_threaded(lock_one, lock_two, symbols_to_expl
 
         work_processed += 1
         
-    #print("Process " + str(thread_index) + ": Done....")
-    #print("Process Identifier: ", thread_index, " -> First thing processed: ", first_index, " | Last thing processed: ", current_index)
     Q.put([symmetry_transformed_targets_and_obstacles, work_processed, concrete_edges, get_concrete_transition_calls])
-    #print("Process " + str(thread_index) + ": Data Submitted....")
     exit(0)
 
 def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, targets_rects, target_indices, obstacles,  obstacles_rects, obstacle_indices,
@@ -1299,11 +1270,11 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ta
     manager = Manager()
 
     #make all managed dictionaries
-    symmetry_transformed_targets_and_obstacles = {}  # [None] * int(matrix_dim_full[0])
-    concrete_to_abstract = manager.dict()  # [None] * int(matrix_dim_full[0])
+    symmetry_transformed_targets_and_obstacles = {}
+    concrete_to_abstract = manager.dict()
     abstract_to_concrete = manager.dict()
     symmetry_abstract_states = manager.list()
-    u_idx_to_abstract_states_indices = manager.dict() # list of abstract states sharing same quantized target, does it ever happen?
+    u_idx_to_abstract_states_indices = manager.dict()
     nearest_target_of_concrete = manager.dict()
     valid_hit_idx_of_concrete = manager.dict()
     next_abstract_state_id = manager.dict()
