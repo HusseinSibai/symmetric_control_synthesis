@@ -33,14 +33,22 @@ import bisect
 import csv
 
 #multiprocessing stuff
+import platform
 
 #cpu-only
-from multiprocess import Process, Queue, shared_memory, Manager
-import SharedArray as sa
-import multiprocess
-import concurrent.futures
-import signal
-from shared_memory_dict import SharedMemoryDict
+if platform.system() == 'Darwin':
+
+    from multiprocess import Process, Queue, shared_memory, Manager
+    import multiprocess
+    import concurrent.futures
+    import signal
+
+else:
+    
+    from multiprocessing import Process, Queue, shared_memory, Manager
+    import multiprocessing as multiprocess
+    import concurrent.futures
+    import signal
 
 # Use 'multiprocessing.cpu_count()' to determine the number of available CPU cores.
 cpu_count = multiprocess.cpu_count()
