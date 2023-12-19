@@ -1836,6 +1836,7 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                         rect_to_indices(neighborhood_rect, symbol_step, X_low,
                                         sym_x[0, :], over_approximate=True))
                 concrete_states_to_explore = concrete_states_to_explore.difference(controllable_concrete_states)
+                concrete_states_to_explore = concrete_states_to_explore.difference(obstacle_indices)
             else:
                 concrete_states_to_explore = concrete_states_to_explore.difference(temp_controllable_concrete_states)
 
