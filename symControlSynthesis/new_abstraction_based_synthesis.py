@@ -1267,16 +1267,16 @@ def get_concrete_transition(s_idx, u_idx, concrete_edges, neighbor_map, #concret
         
 
     if len(indices_to_delete) == len(neighbors):
-        if not benchmark:
-            concrete_edges[(s_idx, u_idx)] = [-1]
+        # if not benchmark:
+        concrete_edges[(s_idx, u_idx)] = [-1]
         return [-1], True
 
     if indices_to_delete:
         neighbors = np.delete(np.array(neighbors), np.array(indices_to_delete).astype(int)).tolist()
         neighbors.append(-1)
 
-    if not benchmark:
-        concrete_edges[(s_idx, u_idx)] = copy.deepcopy(neighbors)
+    # if not benchmark:
+    concrete_edges[(s_idx, u_idx)] = copy.deepcopy(neighbors)
     return set(neighbors), True
 
 
