@@ -43,7 +43,7 @@ for i in argv_split:
     target_list.append(possible_targets[int(i)])
 
 #target tests
-targets = ["5"]#, "2", "3", "4", "5", "6"]
+targets = ["1", "2", "3", "4", "5", "6"]
 
 last_pid = 0
 

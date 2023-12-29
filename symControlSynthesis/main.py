@@ -22,7 +22,7 @@ second_val = int(argv_spit[2])
 third_val = int(argv_spit[3])
 
 try:
-    argv_split[4]
+    argv_spit[4]
 
 except:
     #set the wait condition to nothing so we can still run unclustered
