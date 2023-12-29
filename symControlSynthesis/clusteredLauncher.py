@@ -18,13 +18,32 @@ from subprocess import Popen, PIPE
 from shared_memory_dict import SharedMemoryDict
 import time
 
+try: 
+    sys.argv[1]
+
+except:
+    print("You must pass desired tests indices: ")
+    print("possible configurations: [[25,25,9], [30,30,9], [40,40,9], [50,50,9]]")
+    print("example (run only 25, 25, 9 and 30, 30 ,9): python3 executable.py '0 1' ")
+    exit(0)
+
 #lock
 wait_cond = SharedMemoryDict(name='lock', size=128)
 wait_cond[-1] = 0
 
-#get target tests
-target_list = [[25,25,9], [30,30,9], [40,40,9], [50,50,9]]
-targets = ["1", "2", "3", "4", "5", "6"]
+#possible configurations
+possible_targets = [[25,25,9], [30,30,9], [40,40,9], [50,50,9]]
+target_list = []
+
+#get desired tests
+argv_split = sys.argv[1].split()
+
+#grab targets and add them to the list
+for i in argv_split:
+    target_list.append(possible_targets[int(i)])
+
+#target tests
+targets = ["5"]#, "2", "3", "4", "5", "6"]
 
 last_pid = 0
 
@@ -49,7 +68,7 @@ for j in target_list:
 
         #spawn test in dir
         f = open("output.txt", "w")
-        p = subprocess.Popen(["python3", wd + "/main.py", str(i) + " " + str(j[0]) + " " + str(j[1]) + " " + str(j[2])], stdout=f)
+        p = subprocess.Popen(["python3", wd + "/main.py", str(i) + " " + str(j[0]) + " " + str(j[1]) + " " + str(j[2]) + " -"], stdout=f)
         last_pid = p.pid
 
         #head back to repeat

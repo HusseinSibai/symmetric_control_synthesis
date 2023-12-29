@@ -21,6 +21,15 @@ first_val = int(argv_spit[1])
 second_val = int(argv_spit[2])
 third_val = int(argv_spit[3])
 
+try:
+    argv_split[4]
+
+except:
+    #set the wait condition to nothing so we can still run unclustered
+    from shared_memory_dict import SharedMemoryDict
+    wait_cond = SharedMemoryDict(name='lock', size=128)
+    wait_cond[-1] = 1
+
 if __name__ == '__main__':
 
     username = pwd.getpwuid(os.getuid())[0]
@@ -74,10 +83,11 @@ if __name__ == '__main__':
     Obstacle_low = np.array([[2, -3, -100], [5, 3.5, -100], [-3, -3, -100], [-3, -3, -100],
                             [-3, 6.5, -100], [10, -3, -100]])
 
+
     sym_x = first_val * np.ones((1, n_x))
     sym_x[0, 2] = second_val
-    #sym_x[0,0] = 80
-    #sym_x[0,1] = 100
+    #sym_x[0,0] = 60
+    #sym_x[0,1] = 70
     #sym_x[0, 2] = 50
 
     sym_u = third_val * np.ones((1, n_u))
@@ -216,7 +226,7 @@ if __name__ == '__main__':
     M = 5
     abstract_synthesis(U_discrete, time_step, W_low, W_up,
                     Symbolic_reduced, sym_x, sym_u, state_dimensions,
-                    Target_low, Target_up, Obstacle_low, Obstacle_up, X_low, X_up, eng, test_to_run)
+                    Target_low, Target_up, Obstacle_low, Obstacle_up, X_low, X_up, eng, int(test_to_run) + 1)
     # abstract_synthesis(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Target_up,
     #                   Obstacle_low, Obstacle_up, X_low, X_up)
     # synthesize(Symbolic_reduced, sym_x, sym_u, state_dimensions, Target_low, Target_up,

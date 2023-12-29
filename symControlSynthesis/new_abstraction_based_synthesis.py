@@ -50,6 +50,10 @@ else:
     import concurrent.futures
     import signal
 
+#lock
+from shared_memory_dict import SharedMemoryDict
+wait_cond = SharedMemoryDict(name='lock', size=128)
+
 # Use 'multiprocessing.cpu_count()' to determine the number of available CPU cores.
 cpu_count = multiprocess.cpu_count()
 
@@ -1421,78 +1425,6 @@ def add_concrete_state_to_symmetry_abstract_state(curr_concrete_state_idx, abstr
         
     return
 
-def get_concrete_transition_threaded(s_idx, u_idx, concrete_edges, neighbor_map, #concrete_to_abstract,
-                            sym_x, symbol_step, abstract_reachable_sets,
-                            obstacles_rects, obstacle_indices, targets_rects, target_indices, X_low, X_up, manager):
-    if (s_idx, u_idx) in concrete_edges:
-        neighbors = concrete_edges[(s_idx, u_idx)]
-        indices_to_delete = []
-        for idx, succ_idx in enumerate(neighbors):
-            if succ_idx == -1 or succ_idx in target_indices:
-                indices_to_delete.append(idx)
-            
-        if len(indices_to_delete) == len(neighbors):
-            concrete_edges[(s_idx, u_idx)] = manager.list([-1])
-            return [-1], False
-
-        if indices_to_delete:
-            neighbors = np.delete(np.array(neighbors), np.array(indices_to_delete).astype(int)).tolist()
-            neighbors.append(-1)
-
-        concrete_edges[(s_idx, u_idx)] = manager.list(copy.deepcopy(neighbors))
-        return set(neighbors), False
-
-    s_subscript = np.array(np.unravel_index(s_idx, tuple((sym_x[0, :]).astype(int))))
-    s_rect: np.array = np.row_stack((s_subscript * symbol_step + X_low,
-                                     s_subscript * symbol_step + symbol_step + X_low))
-    s_rect[0, :] = np.maximum(X_low, s_rect[0, :])
-    s_rect[1, :] = np.minimum(X_up, s_rect[1, :])
-    for t_idx in range(len(abstract_reachable_sets[u_idx])):
-        reachable_rect = np.column_stack(pc.bounding_box(abstract_reachable_sets[u_idx][t_idx])).T
-        concrete_succ = transform_to_frames(reachable_rect[0, :],
-                                            reachable_rect[1, :],
-                                            s_rect[0, :], s_rect[1, :])
-        if np.any(concrete_succ[1, :2] > X_up[:2]) or np.any(concrete_succ[0, :2] < X_low[:2]):
-                #or np.any(concrete_succ[0, :] == concrete_succ[1, :]):
-            concrete_edges[(s_idx, u_idx)] = manager.list([-2])
-            return [-2], True  # unsafe
-        for obstacle_rect in obstacles_rects:
-            if do_rects_inter(obstacle_rect, concrete_succ):
-                concrete_edges[(s_idx, u_idx)] = manager.list([-2])
-                return [-2], True  # unsafe
-    reachable_rect = np.column_stack(pc.bounding_box(abstract_reachable_sets[u_idx][-1])).T
-    concrete_succ = transform_to_frames(reachable_rect[0, :],
-                                        reachable_rect[1, :],
-                                        s_rect[0, :], s_rect[1, :])
-    '''for rect in targets_rects:
-        if does_rect_contain(concrete_succ, rect):
-            concrete_edges[(s_idx, u_idx)] = [-1]
-            return [-1]  # reached target'''
-    neighbors = rect_to_indices(concrete_succ, symbol_step, X_low, sym_x[0, :],
-                                over_approximate=True).tolist()
-    
-    #neighbor_map[(s_idx, u_idx)] = neighbors
-
-    indices_to_delete = []
-    for idx, succ_idx in enumerate(neighbors):
-        if succ_idx in obstacle_indices:
-            concrete_edges[(s_idx, u_idx)] = manager.list([-2])
-            return [-2], True
-        if succ_idx in target_indices:
-            indices_to_delete.append(idx)
-        
-
-    if len(indices_to_delete) == len(neighbors):
-        concrete_edges[(s_idx, u_idx)] = manager.list([-1])
-        return [-1], True
-
-    if indices_to_delete:
-        neighbors = np.delete(np.array(neighbors), np.array(indices_to_delete).astype(int)).tolist()
-        neighbors.append(-1)
-
-    concrete_edges[(s_idx, u_idx)] = manager.list(copy.deepcopy(neighbors))
-    return set(neighbors), True
-
 
 def get_concrete_transition(s_idx, u_idx, concrete_edges, neighbor_map, #concrete_to_abstract,
                             sym_x, symbol_step, abstract_reachable_sets,
@@ -1558,16 +1490,16 @@ def get_concrete_transition(s_idx, u_idx, concrete_edges, neighbor_map, #concret
         
 
     if len(indices_to_delete) == len(neighbors):
-        if not benchmark:
-            concrete_edges[(s_idx, u_idx)] = [-1]
+        # if not benchmark:
+        concrete_edges[(s_idx, u_idx)] = [-1]
         return [-1], True
 
     if indices_to_delete:
         neighbors = np.delete(np.array(neighbors), np.array(indices_to_delete).astype(int)).tolist()
         neighbors.append(-1)
 
-    if not benchmark:
-        concrete_edges[(s_idx, u_idx)] = copy.deepcopy(neighbors)
+    # if not benchmark:
+    concrete_edges[(s_idx, u_idx)] = copy.deepcopy(neighbors)
     return set(neighbors), True
 
 
@@ -2511,6 +2443,8 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
     global benchmark
     global strategy_list
 
+    print(test_to_run)
+
     #set desired test to true
     match(int(test_to_run)):
         case 1:
@@ -2657,15 +2591,20 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
     reachability_rtree_idx3d = index.Index('3d_index_abstract',
                                            properties=p)
     
-    
+    #===================================================
+    #if we are meant to run clustered, wait here
+    #===================================================
 
-    #plot
-    #plot_abstract_states(symmetry_abstract_states, [], abstract_reachable_sets, state_to_paths_idx, abstract_to_concrete)
+    #signal completion
+    wait_cond[os.getpid()] = 0
 
-    
+    #keep track how long we have been here and spin
+    time_spinning = time.time()
+    while (wait_cond[-1] == 0):
+        time.sleep(100)
+    time_spinning = time.time() - time_spinning
 
-
-    controller = {}  # [-1] * len(abstract_to_concrete)
+    controller = {}
     t_synthesis_start = time.time()
     t_refine = 0
     t_synthesis = 0
@@ -2784,11 +2723,16 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
     print('Number of synthesis iterations: ', nb_synthesis)
     print('Abstraction time: ', t_abstraction)
     print('Synthesis time: ', t_synthesis)
-    print('Total time: ', time.time() - t_start)
+    print('Total time: ', (time.time() - t_start) - time_spinning)
     
-
-
+    #write out to csv file
+    csvOut = open("results.csv", "w")
+    csvOut.write(str(nb_concrete) + "," + str(nb_explore) + "," + str(nb_abstract) + "," + str(nb_abstract_obstacle) + "," + str(len(concrete_controller)) + "," + str(min_len) + '/' + str(average_len) + '/' + str(median_len) + '/' + str(max_len) + "," + str(average_ratio_neighbor_to_total) + "," + str(get_concrete_transition_calls + unique_state_u_pairs_explored) + "," + str(get_concrete_transition_calls + total_state_u_pairs_explored) + "," + str(average_path_length) + "," + str(nb_synthesis) + "," + str(t_abstraction) + "," + str(t_synthesis) + "," + str((time.time() - t_start) - time_spinning))
+    csvOut.close()
     
+    #signal full program run
+    wait_cond[os.getpid()] = 1
+
     exit(0)
 
 
