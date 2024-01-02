@@ -1,4 +1,5 @@
 import pdb
+import platform
 
 #ignore conversion warnings (uncomment for genuine errors)
 import warnings
@@ -24,7 +25,9 @@ import matlab.engine
 
 import matplotlib
 
-matplotlib.use("macOSX")
+if platform.system() == 'Darwin':
+    matplotlib.use("macOSX")
+
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle, Polygon
 
@@ -33,7 +36,6 @@ import bisect
 import csv
 
 #multiprocessing stuff
-import platform
 
 #cpu-only
 if platform.system() == 'Darwin':
@@ -62,6 +64,9 @@ future_pool = [None] * (cpu_count * 10)
 
 #time we spend spinning
 time_spinning = 0
+
+#function name
+create_symmetry_abstract_states = None
 
 class ThreadedAbstractState:
 
@@ -1265,7 +1270,7 @@ def create_symmetry_abstract_states_threaded(lock_one, lock_two, symbols_to_expl
     Q.put([symmetry_transformed_targets_and_obstacles, work_processed, concrete_edges, get_concrete_transition_calls])
     exit(0)
 
-def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, targets_rects, target_indices, obstacles,  obstacles_rects, obstacle_indices,
+def create_symmetry_abstract_states_parallel(symbols_to_explore, symbol_step, targets, targets_rects, target_indices, obstacles,  obstacles_rects, obstacle_indices,
                                     sym_x, X_low, X_up, reachability_rtree_idx3d, abstract_reachable_sets):
     t_start = time.time()
     print('\n%s\tStart of the symmetry abstraction \n', time.time() - t_start)
@@ -2429,7 +2434,7 @@ def save_abstraction(symbols_to_explore, symbol_step, targets, targets_rects, ta
 
 def abstract_synthesis(U_discrete, time_step, W_low, W_up,
                        Symbolic_reduced, sym_x, sym_u, state_dimensions,
-                       Target_low, Target_up, Obstacle_low, Obstacle_up, X_low, X_up, eng, test_to_run,
+                       Target_low, Target_up, Obstacle_low, Obstacle_up, X_low, X_up, eng, test_to_run, parallel,
                        abstraction_data=None):
 
 
@@ -2442,8 +2447,7 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
     global strategy_6
     global benchmark
     global strategy_list
-
-    print(test_to_run)
+    global create_symmetry_abstract_states
 
     #set desired test to true
     match(int(test_to_run)):
@@ -2465,6 +2469,10 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
     xor_strategy = (sum([ int(strategy) for strategy in strategy_list]) == 1)
     if not xor_strategy:
         raise("Zero or multiple strategies were selected, please only select one")
+
+    #handle parallelism 
+    if parallel:
+        create_symmetry_abstract_states = create_symmetry_abstract_states_parallel
 
     t_start = time.time()
     n = state_dimensions.shape[1]
