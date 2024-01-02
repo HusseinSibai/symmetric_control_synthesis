@@ -436,3 +436,8 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ta
 
     return symmetry_transformed_targets_and_obstacles, concrete_to_abstract, abstract_to_concrete, symmetry_abstract_states, nearest_target_of_concrete, valid_hit_idx_of_concrete, concrete_edges, neighbor_map, get_concrete_transition_calls
 
+def open_file():
+    pass
+
+def close_file():
+    pass
