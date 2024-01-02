@@ -22,8 +22,8 @@ first_val = int(argv_split[1])
 second_val = int(argv_split[2])
 third_val = int(argv_split[3])
 
-#take any second parameter as a desire to run in parallel
-if len(sys.argv) == 3:
+#take any second parameter as a desire to run in sequential
+if len(sys.argv) != 3:
     parallel = True
 
 #avoid block if parallel non-clustered
