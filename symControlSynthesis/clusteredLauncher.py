@@ -5,6 +5,9 @@ Simple launching utility which launches all 6 tests and allows each one to handl
 before starting each synthesis so that we do not have any context switch slowdown as all should
 be single threaded by the end
 
+Does not handle context switching in the event that the system interrupts or that the system executing
+this code has fewer than 6 physical cores for each process to sufficiently run on
+
 '''
 #########################################################################################################
 
@@ -39,24 +42,24 @@ target_list = []
 argv_split = sys.argv[1].split()
 
 #grab targets and add them to the list
-for i in argv_split:
-    target_list.append(possible_targets[int(i)])
+for target in argv_split:
+    target_list.append(possible_targets[int(target)])
 
 #target tests
 targets = ["1", "2", "3", "4", "5", "6"]
 
 last_pid = 0
 
-for j in target_list:
-    for i in targets:
+for configurations in target_list:
+    for target in targets:
 
-        i = int(i) - 1
+        target = int(target) - 1
 
         #set file name
-        file_names = str(j[0]) + "-" + str(j[1]) + "-" + str(j[2])
+        file_names = str(configurations[0]) + "-" + str(configurations[1]) + "-" + str(configurations[2])
 
         #current folder to work with
-        current_folder = ("./" + file_names + "-" + str(i + 1))
+        current_folder = ("./" + file_names + "-" + str(target + 1))
 
         #see if the dirs we want are present
         if not os.path.exists(current_folder):
@@ -68,7 +71,7 @@ for j in target_list:
 
         #spawn test in dir
         f = open("output.txt", "w")
-        p = subprocess.Popen(["python3", wd + "/main.py", str(i) + " " + str(j[0]) + " " + str(j[1]) + " " + str(j[2]) + " -"], stdout=f)
+        p = subprocess.Popen(["python3", wd + "/main.py", str(target) + " " + str(configurations[0]) + " " + str(configurations[1]) + " " + str(configurations[2]) + " -"], stdout=f)
         last_pid = p.pid
 
         #head back to repeat
@@ -78,12 +81,10 @@ for j in target_list:
         wait_cond[p.pid] = -1
         while wait_cond[p.pid] == -1:
             time.sleep(100)
-            pass
 
     #wait for last process to be finished with parallel execution
     while wait_cond[int(last_pid)] == -1:
         time.sleep(100)
-        pass
 
 #allow all processes to proceed
 wait_cond[-1] = 1
@@ -91,7 +92,6 @@ wait_cond[-1] = 1
 #wait for all processes to finish
 while(sum(wait_cond.values()) < (len(targets) * len(target_list)) + 1):
     time.sleep(1000)
-    pass
 
 #exit
 exit(0)
