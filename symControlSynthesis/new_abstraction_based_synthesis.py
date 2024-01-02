@@ -645,7 +645,6 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ta
     valid_hit_idx_of_concrete = {}
 
     concrete_edges = {}
-    neighbor_map = {}
 
     get_concrete_transition_calls = 0
 
@@ -725,7 +724,7 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ta
                 for idx, hit_object in enumerate(hits):
                     if not hit_object in is_obstructed_u_idx:
                         
-                        next_concrete_state_indices, _ = get_concrete_transition(s, hit_object, concrete_edges, neighbor_map,
+                        next_concrete_state_indices, _ = get_concrete_transition(s, hit_object, concrete_edges,
                                                                 sym_x, symbol_step, abstract_reachable_sets,
                                                                 obstacles_rects, obstacle_indices, targets_rects,
                                                                 target_indices, X_low, X_up, benchmark)
@@ -780,7 +779,7 @@ def create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, ta
     print("concrete_to_abstract: ", len(concrete_to_abstract))
     print("abstract_to_concrete: ", len(abstract_to_concrete))
     print("concrete states deemed 'obstacle': ", len(symmetry_abstract_states[0].concrete_state_indices))
-    return symmetry_transformed_targets_and_obstacles, concrete_to_abstract, abstract_to_concrete, symmetry_abstract_states, nearest_target_of_concrete, valid_hit_idx_of_concrete, concrete_edges, neighbor_map, get_concrete_transition_calls
+    return symmetry_transformed_targets_and_obstacles, concrete_to_abstract, abstract_to_concrete, symmetry_abstract_states, nearest_target_of_concrete, valid_hit_idx_of_concrete, concrete_edges, get_concrete_transition_calls
 
 
 def add_concrete_state_to_symmetry_abstract_state(curr_concrete_state_idx, abstract_state_id, symmetry_transformed_obstacles_curr,
@@ -800,7 +799,7 @@ def add_concrete_state_to_symmetry_abstract_state(curr_concrete_state_idx, abstr
     return
 
 
-def get_concrete_transition(s_idx, u_idx, concrete_edges, neighbor_map,
+def get_concrete_transition(s_idx, u_idx, concrete_edges,
                             sym_x, symbol_step, abstract_reachable_sets,
                             obstacles_rects, obstacle_indices, targets_rects, target_indices, X_low, X_up, benchmark):
     if benchmark and (s_idx, u_idx) in concrete_edges:
@@ -858,16 +857,16 @@ def get_concrete_transition(s_idx, u_idx, concrete_edges, neighbor_map,
         
 
     if len(indices_to_delete) == len(neighbors):
-        if not benchmark:
-            concrete_edges[(s_idx, u_idx)] = [-1]
+        
+        concrete_edges[(s_idx, u_idx)] = [-1]
         return [-1], True
 
     if indices_to_delete:
         neighbors = np.delete(np.array(neighbors), np.array(indices_to_delete).astype(int)).tolist()
         neighbors.append(-1)
 
-    if not benchmark:
-        concrete_edges[(s_idx, u_idx)] = copy.deepcopy(neighbors)
+    
+    concrete_edges[(s_idx, u_idx)] = copy.deepcopy(neighbors)
     return set(neighbors), True
 
 
@@ -1066,7 +1065,6 @@ def concrete_index_to_rect(concrete_state_idx, sym_x, symbol_step, X_low, X_up):
 
 def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                                        concrete_edges,
-                                       neighbor_map,
                                        abstract_to_concrete,
                                        concrete_to_abstract,
                                        symmetry_transformed_targets_and_obstacles,
@@ -1105,6 +1103,7 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
 
     total_state_u_pairs_explored = 0
     unique_state_u_pairs_explored = 0
+    total_states_explored = 0
 
     while True:
         
@@ -1116,6 +1115,8 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
             
             if (not concrete_state_idx in concrete_to_abstract) or concrete_to_abstract[concrete_state_idx] == 0:
                 continue
+
+            total_states_explored += 1
 
             abstract_state_idx = concrete_to_abstract[concrete_state_idx]
 
@@ -1132,7 +1133,7 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
             valid_vote = None
             for v, u_idx in abstract_state_to_u_idx_poll[abstract_state_idx]:
 
-                next_concrete_state_indices, is_new_entry = get_concrete_transition(concrete_state_idx, u_idx, concrete_edges, neighbor_map,
+                next_concrete_state_indices, is_new_entry = get_concrete_transition(concrete_state_idx, u_idx, concrete_edges,
                                                                     sym_x, symbol_step, abstract_reachable_sets,
                                                                     obstacles_rects, obstacle_indices, targets_rects,
                                                                     controllable_concrete_states, X_low, X_up, benchmark)
@@ -1194,7 +1195,7 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                             if not hit_object in visited_u_idx:
                 
                                 next_concrete_state_indices, is_new_entry = \
-                                    get_concrete_transition(concrete_state_idx, hit_object, concrete_edges, neighbor_map,
+                                    get_concrete_transition(concrete_state_idx, hit_object, concrete_edges,
                                                                 sym_x, symbol_step, abstract_reachable_sets,
                                                                 obstacles_rects, obstacle_indices, targets_rects,
                                                                 controllable_concrete_states, X_low, X_up, benchmark)
@@ -1253,6 +1254,7 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                         rect_to_indices(neighborhood_rect, symbol_step, X_low,
                                         sym_x[0, :], over_approximate=True))
                 concrete_states_to_explore = concrete_states_to_explore.difference(controllable_concrete_states)
+                concrete_states_to_explore = concrete_states_to_explore.difference(obstacle_indices)
             else:
                 concrete_states_to_explore = concrete_states_to_explore.difference(temp_controllable_concrete_states)
 
@@ -1293,12 +1295,11 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
     else:
         average_path_length = 'No controllable state found'
 
-    return concrete_controller, refinement_candidates, poll_lengths, average_ratio_neighbor_to_total, neighbor_map, unique_state_u_pairs_explored, total_state_u_pairs_explored, average_path_length, nb_iterations
+    return concrete_controller, refinement_candidates, poll_lengths, average_ratio_neighbor_to_total, unique_state_u_pairs_explored, total_state_u_pairs_explored, total_states_explored, average_path_length, nb_iterations
 
 
 def symmetry_synthesis_helper(concrete_states_to_explore,
                               concrete_edges,
-                              neighbor_map,
                               abstract_reachable_sets,
                               controllable_concrete_states,
                               concrete_controller,
@@ -1311,10 +1312,10 @@ def symmetry_synthesis_helper(concrete_states_to_explore,
     nb_iterations = 0
     running_sum_path_lengths = 0
 
-    neighbor_map = {}
 
     total_state_u_pairs_explored = 0
     unique_state_u_pairs_explored = 0
+    total_states_explored = 0
 
     while True:
         temp_controllable_concrete_states = set()
@@ -1324,12 +1325,13 @@ def symmetry_synthesis_helper(concrete_states_to_explore,
 
                     
             hits = list(range(len(abstract_reachable_sets)))
+            total_states_explored += 1
             
             if len(hits):
                 for hit in hits:
         
                     next_concrete_state_indices, is_new_entry = get_concrete_transition(concrete_state_idx, hit,
-                                                    concrete_edges, neighbor_map,
+                                                    concrete_edges,
                                                     sym_x, symbol_step, abstract_reachable_sets,
                                                     obstacles_rects, obstacle_indices, targets_rects,
                                                     controllable_concrete_states, X_low, X_up, benchmark)
@@ -1372,7 +1374,7 @@ def symmetry_synthesis_helper(concrete_states_to_explore,
     else:
         average_path_length = 'No controllable state found'
 
-    return concrete_controller, neighbor_map, unique_state_u_pairs_explored, total_state_u_pairs_explored, average_path_length, nb_iterations
+    return concrete_controller, unique_state_u_pairs_explored, total_state_u_pairs_explored, total_states_explored, average_path_length, nb_iterations
 
 
 def get_decomposed_angle_intervals(original_angle_interval):
@@ -1400,7 +1402,7 @@ def save_abstraction(symbols_to_explore, symbol_step, targets, targets_rects, ta
 
     symmetry_transformed_targets_and_obstacles, concrete_to_abstract, abstract_to_concrete, \
     symmetry_abstract_states, nearest_target_of_concrete, valid_hit_idx_of_concrete, \
-    concrete_edges, neighbor_map, get_concrete_transition_calls = \
+    concrete_edges, get_concrete_transition_calls = \
         create_symmetry_abstract_states(
             symbols_to_explore,
             symbol_step, targets, targets_rects, target_indices, 
@@ -1412,7 +1414,7 @@ def save_abstraction(symbols_to_explore, symbol_step, targets, targets_rects, ta
     print(['Construction of symmetry-based abstraction took: ', t_abstraction, ' seconds'])
 
     return symmetry_transformed_targets_and_obstacles, concrete_to_abstract, abstract_to_concrete, \
-        symmetry_abstract_states, nearest_target_of_concrete, valid_hit_idx_of_concrete, concrete_edges, neighbor_map, t_abstraction, get_concrete_transition_calls
+        symmetry_abstract_states, nearest_target_of_concrete, valid_hit_idx_of_concrete, concrete_edges, t_abstraction, get_concrete_transition_calls
 
 
 def abstract_synthesis(U_discrete, time_step, W_low, W_up,
@@ -1492,7 +1494,7 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
         if not benchmark:
             symmetry_transformed_targets_and_obstacles, concrete_to_abstract, abstract_to_concrete, \
             symmetry_abstract_states, nearest_target_of_concrete, valid_hit_idx_of_concrete, \
-                concrete_edges, neighbor_map, t_abstraction, get_concrete_transition_calls = \
+                concrete_edges, t_abstraction, get_concrete_transition_calls = \
                 save_abstraction(symbols_to_explore, symbol_step, targets, targets_rects, target_indices, 
                                 obstacles, obstacles_rects, obstacle_indices, sym_x, X_low, X_up,
                                 reachability_rtree_idx3d, abstract_reachable_sets)
@@ -1501,7 +1503,6 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
         else:
             abstract_to_concrete = []
             concrete_edges = {}
-            neighbor_map = {}
             get_concrete_transition_calls = 0
             nb_abstract_obstacle = 0
             t_abstraction = time.time() - t_start
@@ -1510,10 +1511,10 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
         saved_data = np.load(abstraction_data, allow_pickle=True)
 
         symmetry_transformed_targets_and_obstacles, concrete_to_abstract, abstract_to_concrete, \
-        symmetry_abstract_states, nearest_target_of_concrete, valid_hit_idx_of_concrete, concrete_edges, neighbor_map, t_abstraction = \
+        symmetry_abstract_states, nearest_target_of_concrete, valid_hit_idx_of_concrete, concrete_edges, t_abstraction = \
             saved_data['symmetry_transformed_targets_and_obstacles'], saved_data['concrete_to_abstract'], saved_data['abstract_to_concrete'], \
             saved_data['symmetry_abstract_states'], saved_data['nearest_target_of_concrete'], saved_data['valid_hit_idx_of_concrete'], \
-                saved_data['concrete_edges'], saved_data['neighbor_map'],  saved_data['t_abstraction'][0]
+                saved_data['concrete_edges'],  saved_data['t_abstraction'][0]
         
         print(['Construction of symmetry-based abstraction took: ', t_abstraction, ' seconds'])
 
@@ -1537,11 +1538,10 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
     nb_explore = len(concrete_states_to_explore)
 
     if benchmark:
-        concrete_controller, neighbor_map, unique_state_u_pairs_explored, \
-            total_state_u_pairs_explored, average_path_length, nb_synthesis = symmetry_synthesis_helper(
+        concrete_controller, unique_state_u_pairs_explored, \
+            total_state_u_pairs_explored, total_states_explored, average_path_length, nb_synthesis = symmetry_synthesis_helper(
             concrete_states_to_explore,
             concrete_edges,
-            neighbor_map,
             abstract_reachable_sets,
             controllable_concrete_states,
             concrete_controller,
@@ -1553,11 +1553,10 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
         obstacle_indices = obstacle_indices.union(set(abstract_to_concrete[0]))
 
         concrete_controller, refinement_candidates, poll_lengths, average_ratio_neighbor_to_total, \
-            neighbor_map, unique_state_u_pairs_explored, total_state_u_pairs_explored, \
-                average_path_length, nb_synthesis = symmetry_abstract_synthesis_helper(
+            unique_state_u_pairs_explored, total_state_u_pairs_explored, \
+                total_states_explored, average_path_length, nb_synthesis = symmetry_abstract_synthesis_helper(
             concrete_states_to_explore,
             concrete_edges,
-            neighbor_map,
             abstract_to_concrete,
             concrete_to_abstract,
             symmetry_transformed_targets_and_obstacles,
@@ -1576,7 +1575,6 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
     t_synthesis += time.time() - temp_t_synthesis
 
     np.save('concrete_controller.npy', concrete_controller)
-    np.save('neighbor_map.npy', neighbor_map)
 
     if strategy_1:
         print("Strategy: polls - all")
@@ -1618,6 +1616,7 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
         print('Average neighbor/total exploration ratio', average_ratio_neighbor_to_total)
     print('Unique (s,u) explored: ', get_concrete_transition_calls + unique_state_u_pairs_explored)
     print('Total (s,u) explored: ', get_concrete_transition_calls + total_state_u_pairs_explored)
+    print('Total s explored: ', total_states_explored)
     print('Average path length: ', average_path_length)
     print('Number of synthesis iterations: ', nb_synthesis)
     print('Abstraction time: ', t_abstraction)
