@@ -9,6 +9,7 @@ from shared_memory_dict import SharedMemoryDict
 import time
 
 possible_targets = [[25,25,9], [30,30,9], [40,40,9], [50,50,9]]
+parallel = False
 
 #determine if clustered or not 
 print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
@@ -41,8 +42,7 @@ if tests.lower() == "y":
     target_list = []
     target_strategies = []
     test_list = ""
-    parallel = False
-
+    
     #grab targets and add them to the list
     for test in tests:
         try: 
