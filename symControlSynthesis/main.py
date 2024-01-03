@@ -22,12 +22,18 @@ first_val = int(argv_split[1])
 second_val = int(argv_split[2])
 third_val = int(argv_split[3])
 
-#take any second parameter as a desire to run in sequential
-if len(sys.argv) != 3:
-    parallel = True
+bypass = True
+parallel = True
+
+#determine if we are running sequentially or without clustering
+if len(argv_split) > 4:
+    if int(argv_split[-1]) == -1 or int(argv_split[-2]) == -1:
+        parallel = False
+    if int(argv_split[-1]) == -2 or int(argv_split[-2]) == -2:
+        bypass = False
 
 #avoid block if parallel non-clustered
-if parallel and len(argv_split) < 5:
+if bypass:
 
     #set the wait condition to nothing so we can still run unclustered
     from shared_memory_dict import SharedMemoryDict

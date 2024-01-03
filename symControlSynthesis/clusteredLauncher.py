@@ -34,6 +34,9 @@ except:
 wait_cond = SharedMemoryDict(name='lock', size=128)
 wait_cond[-1] = 0
 
+#sequential bool
+sequential = False
+
 #possible configurations
 possible_targets = [[25,25,9], [30,30,9], [40,40,9], [50,50,9]]
 target_list = []
@@ -43,7 +46,10 @@ argv_split = sys.argv[1].split()
 
 #grab targets and add them to the list
 for target in argv_split:
-    target_list.append(possible_targets[int(target)])
+    if target != "-1":
+        target_list.append(possible_targets[int(target)])
+    else:
+        sequential = True
 
 #target tests
 targets = ["1", "2", "3", "4", "5", "6"]
@@ -71,7 +77,7 @@ for configurations in target_list:
 
         #spawn test in dir
         f = open("output.txt", "w")
-        p = subprocess.Popen(["python3", wd + "/main.py", str(target) + " " + str(configurations[0]) + " " + str(configurations[1]) + " " + str(configurations[2]) + " -"], stdout=f)
+        p = subprocess.Popen(["python3", wd + "/main.py", str(target) + " " + str(configurations[0]) + " " + str(configurations[1]) + " " + str(configurations[2]) + " -2"], stdout=f)
         last_pid = p.pid
 
         #head back to repeat

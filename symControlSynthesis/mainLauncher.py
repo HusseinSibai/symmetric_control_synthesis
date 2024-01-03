@@ -35,7 +35,7 @@ if tests.lower() == "y":
     print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n")
 
     tests = input()
-    tests = test.split()
+    tests = tests.split()
 
     #possible configurations
     target_list = []
@@ -51,6 +51,14 @@ if tests.lower() == "y":
         except:
             print("Bad selection entered... Exiting.")
             exit(-1)
+
+    print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+    print("Run the abstractions with multicore enabled? (Y/N)")
+    print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n")
+    tests = input()
+
+    if tests.lower() == "y":
+        test_list += ("-1")
 
     print("Running tests......")
     print("Terminal will exit when tests finish....")
@@ -133,11 +141,17 @@ if not os.path.exists(current_folder):
 wd = os.getcwd()
 os.chdir(current_folder)
 
+#build command line 
+if (parallel):
+    command_line = str(int(strategy_to_run)-1) + " " + str(configurations[0]) + " " + str(configurations[1]) + " " + str(configurations[2])
+else:
+    command_line = str(int(strategy_to_run)-1) + " " + str(configurations[0]) + " " + str(configurations[1]) + " " + str(configurations[2]) + " -1"
+
 print("Running tests......")
 print("Terminal will exit when tests finish....")
 
 #spawn test in dir
 f = open("output.txt", "w")
-p = subprocess.Popen(["python3", wd + "/main.py", str(int(strategy_to_run)-1) + " " + str(configurations[0]) + " " + str(configurations[1]) + " " + str(configurations[2])], stdout=f)
+p = subprocess.Popen(["python3", wd + "/main.py", command_line], stdout=f)
 p.wait()
 exit(0)
