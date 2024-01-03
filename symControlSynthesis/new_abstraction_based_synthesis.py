@@ -1415,7 +1415,22 @@ def create_symmetry_abstract_states_parallel(symbols_to_explore, symbol_step, ta
 
 def sequential_create_symmetry_abstract_states(symbols_to_explore, symbol_step, targets, targets_rects, target_indices, 
                                     obstacles, obstacles_rects, obstacle_indices, sym_x, X_low, X_up,
-                                    reachability_rtree_idx3d, abstract_reachable_sets, strategy_arr):
+                                    reachability_rtree_idx3d, abstract_reachable_sets):
+
+    #rebuild strategy_arr
+    global strategy_1
+    global strategy_2
+    global strategy_3
+    global strategy_4
+    global strategy_5
+    global strategy_6
+    global benchmark
+    global strategy_list
+
+    strategy_arr = [strategy_1, strategy_2, strategy_3, strategy_4, strategy_5, strategy_6, benchmark]
+
+    #back to normal
+
     t_start = time.time()
     print('\n%s\tStart of the symmetry abstraction \n', time.time() - t_start)
     symmetry_transformed_targets_and_obstacles = {}
