@@ -91,6 +91,9 @@ for configurations in target_list:
         if not sequential:
             while wait_cond[p.pid] == -1:
                 time.sleep(100)
+        
+        else:
+            time.sleep(5)
 
     #wait for last process to be finished with parallel execution
     if not sequential:
