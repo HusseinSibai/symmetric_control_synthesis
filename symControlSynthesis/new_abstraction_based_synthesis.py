@@ -1428,6 +1428,7 @@ def sequential_create_symmetry_abstract_states(symbols_to_explore, symbol_step, 
     global strategy_list
 
     strategy_arr = [strategy_1, strategy_2, strategy_3, strategy_4, strategy_5, strategy_6, benchmark]
+    neighbor_map = {}
 
     #back to normal
 
@@ -1536,7 +1537,7 @@ def sequential_create_symmetry_abstract_states(symbols_to_explore, symbol_step, 
                 for idx, hit_object in enumerate(hits):
                     if not hit_object in is_obstructed_u_idx:
                         
-                        next_concrete_state_indices, _ = get_concrete_transition(s, hit_object, concrete_edges,
+                        next_concrete_state_indices, _ = get_concrete_transition(s, hit_object, concrete_edges, neighbor_map,
                                                                 sym_x, symbol_step, abstract_reachable_sets,
                                                                 obstacles_rects, obstacle_indices, targets_rects,
                                                                 target_indices, X_low, X_up, strategy_arr[0])
@@ -1591,7 +1592,7 @@ def sequential_create_symmetry_abstract_states(symbols_to_explore, symbol_step, 
     print("concrete_to_abstract: ", len(concrete_to_abstract))
     print("abstract_to_concrete: ", len(abstract_to_concrete))
     print("concrete states deemed 'obstacle': ", len(symmetry_abstract_states[0].concrete_state_indices))
-    return symmetry_transformed_targets_and_obstacles, concrete_to_abstract, abstract_to_concrete, symmetry_abstract_states, nearest_target_of_concrete, valid_hit_idx_of_concrete, concrete_edges, get_concrete_transition_calls
+    return symmetry_transformed_targets_and_obstacles, concrete_to_abstract, abstract_to_concrete, symmetry_abstract_states, nearest_target_of_concrete, valid_hit_idx_of_concrete, concrete_edges, neighbor_map, get_concrete_transition_calls
 
 
 def add_concrete_state_to_symmetry_abstract_state(curr_concrete_state_idx, abstract_state_id, symmetry_transformed_obstacles_curr,
@@ -2795,6 +2796,9 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
         while (wait_cond[-1] == 0):
             time.sleep(100)
         time_spinning = time.time() - time_spinning
+
+    else:
+        time_spinning = 0
 
     controller = {}
     t_synthesis_start = time.time()
