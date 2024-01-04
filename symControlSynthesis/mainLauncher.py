@@ -57,7 +57,7 @@ if tests.lower() == "y":
     print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n")
     tests = input()
 
-    if tests.lower() == "y":
+    if tests.lower() == "n":
         test_list += ("-1")
 
     print("Running tests......")

@@ -36,6 +36,7 @@ wait_cond[-1] = 0
 
 #sequential bool
 sequential = False
+sequential_addon = " -2"
 
 #possible configurations
 possible_targets = [[25,25,9], [30,30,9], [40,40,9], [50,50,9]]
@@ -46,10 +47,12 @@ argv_split = sys.argv[1].split()
 
 #grab targets and add them to the list
 for target in argv_split:
-    if target != "-1":
+    if int(target) != -1:
         target_list.append(possible_targets[int(target)])
     else:
         sequential = True
+        sequential_addon = " -1 -2"
+        print("Sequential Launch")
 
 #target tests
 targets = ["1", "2", "3", "4", "5", "6"]
@@ -77,7 +80,7 @@ for configurations in target_list:
 
         #spawn test in dir
         f = open("output.txt", "w")
-        p = subprocess.Popen(["python3", wd + "/main.py", str(target) + " " + str(configurations[0]) + " " + str(configurations[1]) + " " + str(configurations[2]) + " -2"], stdout=f)
+        p = subprocess.Popen(["python3", wd + "/main.py", str(target) + " " + str(configurations[0]) + " " + str(configurations[1]) + " " + str(configurations[2]) + sequential_addon], stdout=f)
         last_pid = p.pid
 
         #head back to repeat
@@ -85,12 +88,15 @@ for configurations in target_list:
 
         #set flag and wait
         wait_cond[p.pid] = -1
-        while wait_cond[p.pid] == -1:
-            time.sleep(100)
+
+        if not sequential:
+            while wait_cond[p.pid] == -1:
+                time.sleep(100)
 
     #wait for last process to be finished with parallel execution
-    while wait_cond[int(last_pid)] == -1:
-        time.sleep(100)
+    if not sequential:
+        while wait_cond[int(last_pid)] == -1:
+            time.sleep(100)
 
 #allow all processes to proceed
 wait_cond[-1] = 1

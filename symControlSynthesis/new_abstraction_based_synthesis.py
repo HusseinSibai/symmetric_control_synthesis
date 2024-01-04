@@ -2788,9 +2788,11 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
         #if we are meant to run clustered, wait here
         #===================================================
 
-        #signal completion
-        wait_cond[os.getpid()] = 0
+    #signal completion
+    wait_cond[os.getpid()] = 0
 
+    if parallel:
+        
         #keep track how long we have been here and spin
         time_spinning = time.time()
         while (wait_cond[-1] == 0):
