@@ -52,7 +52,6 @@ for target in argv_split:
     else:
         sequential = True
         sequential_addon = " -1 -2"
-        print("Sequential Launch")
 
 #target tests
 targets = ["1", "2", "3", "4", "5", "6"]
