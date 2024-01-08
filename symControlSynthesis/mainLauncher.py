@@ -8,8 +8,55 @@ from subprocess import Popen, PIPE
 from shared_memory_dict import SharedMemoryDict
 import time
 
-possible_targets = [[25,25,9], [30,30,9], [40,40,9], [50,50,9]]
+possible_targets = [[25,25,9], [30,30,9], [40,40,9], [50,50,9], [60, 70, 50], [80, 100, 50]]
 parallel = False
+
+#determine if clustered or not 
+print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+print("Would you like to run these tests shown in the paper? (Y/N)\n")
+print("This means that tests [30 30 9], [50 50, 9] will run")
+print("strategies 1, 2, 3, 4, 5, 6 before finishing. Tests \n")
+print("[80 100 50 9] and [60, 70, 50, 9] will run strategies 5 and ")
+print("benchmark")
+print("")
+print("Select 'N' to run specific tests")
+print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n")
+
+tests = input()
+
+#launch the clustering launcher
+if tests.lower() == "y":
+
+    #possible configurations
+    target_list = []
+    target_strategies = []
+    test_list = ""
+    test = "2 4 5 6"
+    
+    #grab targets and add them to the list
+    for test in tests:
+        try: 
+            target_list.append(possible_targets[int(test) - 1])
+            test_list += str(int(test) - 1) + " "
+        except:
+            print("Bad selection entered... Exiting.")
+            exit(-1)
+
+    print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+    print("Run the abstractions with multicore enabled? (Y/N)")
+    print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n")
+    tests = input()
+
+    if tests.lower() == "n":
+        test_list += ("-1")
+
+    print("Running tests......")
+    print("Terminal will exit when tests finish....")
+
+    wd = os.getcwd()
+    p = subprocess.Popen(["python3", wd + "/clusteredLauncher.py", test_list])
+    p.wait()
+    exit(0)
 
 #determine if clustered or not 
 print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
