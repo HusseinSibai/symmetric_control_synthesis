@@ -64,10 +64,17 @@ if __name__ == '__main__':
     Obstacle_low = np.array([[2, -3, -100], [5, 3.5, -100], [-3, -3, -100], [-3, -3, -100],
                             [-3, 6.5, -100], [10, -3, -100]])
 
+    #check to see if we are running a special case
+    if first_val == second_val:
+        sym_x = first_val * np.ones((1, n_x))
+        sym_x[0, 2] = second_val
+        sym_u = third_val * np.ones((1, n_u))
 
-    sym_x = first_val * np.ones((1, n_x))
-    sym_x[0, 2] = second_val
-    sym_u = third_val * np.ones((1, n_u))
+    else:
+        sym_x[0, 0] = first_val
+        sym_x[0, 1] = second_val
+        sym_x[0, 2] = third_val
+        sym_u = 9 * np.ones((1, n_u))
 
     time_step = np.linspace(0, 3, 3).reshape((1, 3))
 

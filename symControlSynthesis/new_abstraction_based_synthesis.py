@@ -60,7 +60,7 @@ wait_cond = SharedMemoryDict(name='lock', size=128)
 cpu_count = multiprocess.cpu_count()
 
 #make a future pool
-future_pool = [None] * (cpu_count * 10)
+future_pool = []
 
 #time we spend spinning
 time_spinning = 0
@@ -1272,6 +1272,7 @@ def create_symmetry_abstract_states_threaded(lock_one, lock_two, symbols_to_expl
 
 def create_symmetry_abstract_states_parallel(symbols_to_explore, symbol_step, targets, targets_rects, target_indices, obstacles,  obstacles_rects, obstacle_indices,
                                     sym_x, X_low, X_up, reachability_rtree_idx3d, abstract_reachable_sets):
+
     t_start = time.time()
     print('\n%s\tStart of the symmetry abstraction \n', time.time() - t_start)
 
@@ -1330,11 +1331,11 @@ def create_symmetry_abstract_states_parallel(symbols_to_explore, symbol_step, ta
 
     #create our pool
     for i in range(process_count):
-        future_pool[i] = Process(target=create_symmetry_abstract_states_threaded, args=(lock_one, lock_two, list(symbols_to_explore), symbol_step, targets, obstacles, sym_x, X_low, X_up,
+        future_pool.append(Process(target=create_symmetry_abstract_states_threaded, args=(lock_one, lock_two, list(symbols_to_explore), symbol_step, targets, obstacles, sym_x, X_low, X_up,
                                     reachability_rtree_idx3d, abstract_reachable_sets, symmetry_transformed_targets_and_obstacles, concrete_to_abstract,
                                     abstract_to_concrete, symmetry_abstract_states, u_idx_to_abstract_states_indices, nearest_target_of_concrete, valid_hit_idx_of_concrete,
                                     next_abstract_state_id, threshold_num_results, Q, i, manager, False, steal_send_lock, steal_receive_lock, stealQueue, sendQueue,
-                                    obstacles_rects, obstacle_indices, targets_rects, target_indices, concrete_edges, neighbor_map))
+                                    obstacles_rects, obstacle_indices, targets_rects, target_indices, concrete_edges, neighbor_map)))
     #start them
     for i in range(process_count):
         future_pool[i].start()
@@ -1359,13 +1360,13 @@ def create_symmetry_abstract_states_parallel(symbols_to_explore, symbol_step, ta
 
         
         #spawn new thread again
-        future_pool[current_thread_index_counter] = Process(target=create_symmetry_abstract_states_threaded, args=(lock_one, lock_two, list(symbols_to_explore), symbol_step, targets, obstacles, sym_x, X_low, X_up,
+        future_pool.append(Process(target=create_symmetry_abstract_states_threaded, args=(lock_one, lock_two, list(symbols_to_explore), symbol_step, targets, obstacles, sym_x, X_low, X_up,
                                     reachability_rtree_idx3d, abstract_reachable_sets, symmetry_transformed_targets_and_obstacles, concrete_to_abstract,
                                     abstract_to_concrete, symmetry_abstract_states, u_idx_to_abstract_states_indices, nearest_target_of_concrete, valid_hit_idx_of_concrete,
                                     next_abstract_state_id, threshold_num_results, Q, current_thread_index_counter, manager, True, steal_send_lock, steal_receive_lock, stealQueue, sendQueue,
-                                    obstacles_rects, obstacle_indices, targets_rects, target_indices, concrete_edges, neighbor_map))
+                                    obstacles_rects, obstacle_indices, targets_rects, target_indices, concrete_edges, neighbor_map)))
 
-        future_pool[current_thread_index_counter].start()
+        future_pool[-1].start()
 
         current_thread_index_counter += 1
 
@@ -2644,6 +2645,8 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
             strategy_5 = True
         case 6:
             strategy_6 = True
+        case 7:
+            benchmark = True
         
     strategy_list = [strategy_1, strategy_2, strategy_3, strategy_4, strategy_5, strategy_6, benchmark]
 
@@ -2775,7 +2778,7 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
 
     nb_abstract = len(abstract_to_concrete)
 
-    if parallel:
+    if parallel and not benchmark:
 
         p = index.Property()
         p.dimension = 3

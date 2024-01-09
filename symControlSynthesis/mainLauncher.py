@@ -16,8 +16,8 @@ print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
 print("Would you like to run these tests shown in the paper? (Y/N)\n")
 print("This means that tests [30 30 9], [50 50, 9] will run")
 print("strategies 1, 2, 3, 4, 5, 6 before finishing. Tests \n")
-print("[80 100 50 9] and [60, 70, 50, 9] will run strategies 5 and ")
-print("benchmark")
+print("[80 100 50 9] and [60, 70, 50, 9] will run strategy 5. ")
+print("All tests will run their baselines as well")
 print("")
 print("Select 'N' to run specific tests")
 print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n")
@@ -31,38 +31,24 @@ if tests.lower() == "y":
     target_list = []
     target_strategies = []
     test_list = ""
-    test = "2 4 5 6"
-    
-    #grab targets and add them to the list
-    for test in tests:
-        try: 
-            target_list.append(possible_targets[int(test) - 1])
-            test_list += str(int(test) - 1) + " "
-        except:
-            print("Bad selection entered... Exiting.")
-            exit(-1)
-
-    print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
-    print("Run the abstractions with multicore enabled? (Y/N)")
-    print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n")
-    tests = input()
-
-    if tests.lower() == "n":
-        test_list += ("-1")
+    tests = "1 3 4 5"
 
     print("Running tests......")
     print("Terminal will exit when tests finish....")
 
-    wd = os.getcwd()
-    p = subprocess.Popen(["python3", wd + "/clusteredLauncher.py", test_list])
-    p.wait()
+    #launch each target set
+    for target in tests:
+        test_list = str(int(test) - 1) + " "
+        wd = os.getcwd()
+        p = subprocess.Popen(["python3", wd + "/clusteredLauncher.py", test_list])
+        p.wait()
     exit(0)
 
 #determine if clustered or not 
 print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
 print("Would you like to run these tests clustered? (Y/N)\n")
 print("This means that any selected tests will run strategies")
-print("1, 2, 3, 4, 5, 6 before finishing.\n")
+print("1, 2, 3, 4, 5, 6 and the baseline before finishing.\n")
 print("To run specfic strategies only, enter 'N'")
 print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n")
 

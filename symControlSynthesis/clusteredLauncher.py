@@ -34,12 +34,15 @@ except:
 wait_cond = SharedMemoryDict(name='lock', size=128)
 wait_cond[-1] = 0
 
+#bool for special tests
+special = False
+
 #sequential bool
 sequential = False
 sequential_addon = " -2"
 
 #possible configurations
-possible_targets = [[25,25,9], [30,30,9], [40,40,9], [50,50,9]]
+possible_targets = [[25,25,9], [30,30,9], [40,40,9], [50,50,9], [80, 50, 100], [60, 70, 50]]
 target_list = []
 
 #get desired tests
@@ -49,12 +52,23 @@ argv_split = sys.argv[1].split()
 for target in argv_split:
     if int(target) != -1:
         target_list.append(possible_targets[int(target)])
+
+        if int(target) == 5 or int(target) == 4: 
+            special = True
+
     else:
         sequential = True
         sequential_addon = " -1 -2"
 
 #target tests
-targets = ["1", "2", "3", "4", "5", "6"]
+
+#bypass other strategies if running large test
+if special:
+    targets = ["5", "7"]
+
+#otherwise run all
+else:
+    targets = ["1", "2", "3", "4", "5", "6", "7"]
 
 last_pid = 0
 
@@ -67,7 +81,10 @@ for configurations in target_list:
         file_names = str(configurations[0]) + "-" + str(configurations[1]) + "-" + str(configurations[2])
 
         #current folder to work with
-        current_folder = ("./" + file_names + "-" + str(target + 1))
+        if target == 6:
+            current_folder = ("./" + file_names + "-baseline")
+        else:
+            current_folder = ("./" + file_names + "-" + str(target + 1))
 
         #see if the dirs we want are present
         if not os.path.exists(current_folder):
@@ -104,8 +121,8 @@ for configurations in target_list:
 wait_cond[-1] = 1
 
 #wait for all processes to finish
-while(sum(wait_cond.values()) < (len(targets) * len(target_list)) + 1):
-    time.sleep(1000)
+while(sum(wait_cond.values()) < (len(wait_cond.keys())) + 1):
+    time.sleep(600)
 
 #exit
 exit(0)
