@@ -2929,7 +2929,7 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
     #write out to csv file
     csvOut = open("results.csv", "w")
 
-    if not baseline:
+    if poll_lengths:
         csvOut.write(str(nb_concrete) + "," + str(nb_explore) + "," + str(nb_abstract) + "," + str(nb_abstract_obstacle) + "," + str(len(concrete_controller)) + "," + str(min_len) + '/' + str(average_len) + '/' + str(median_len) + '/' + str(max_len) + "," + str(average_ratio_neighbor_to_total) + "," + str(get_concrete_transition_calls + unique_state_u_pairs_explored) + "," + str(get_concrete_transition_calls + total_state_u_pairs_explored) + "," + str(average_path_length) + "," + str(nb_synthesis) + "," + str(t_abstraction) + "," + str(t_synthesis) + "," + str((time.time() - t_start) - time_spinning))
     
     else:
