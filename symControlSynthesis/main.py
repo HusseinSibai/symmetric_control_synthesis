@@ -71,10 +71,12 @@ if __name__ == '__main__':
         sym_u = third_val * np.ones((1, n_u))
 
     else:
+        sym_x = np.ones((1, n_x))
         sym_x[0, 0] = first_val
         sym_x[0, 1] = second_val
         sym_x[0, 2] = third_val
         sym_u = 9 * np.ones((1, n_u))
+
 
     time_step = np.linspace(0, 3, 3).reshape((1, 3))
 
