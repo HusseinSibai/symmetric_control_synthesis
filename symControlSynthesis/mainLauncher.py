@@ -11,20 +11,15 @@ import time
 possible_targets = [[25,25,9], [30,30,9], [40,40,9], [50,50,9], [60, 70, 50], [80, 100, 50]]
 parallel = False
 
-#determine if clustered or not 
+#determine if running based on paper or not
 print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
-print("Would you like to run these tests shown in the paper? (Y/N)\n")
-print("This means that tests [30 30 9], [50 50, 9] will run")
-print("strategies 1, 2, 3, 4, 5, 6 before finishing. Tests \n")
-print("[80 100 50 9] and [60, 70, 50, 9] will run strategy 5. ")
-print("All tests will run their baselines as well")
-print("")
-print("Select 'N' to run specific tests")
+print("Would you like to run the tests shown in the paper? (Y/N)\n")
+print("Select 'N' to run tests in a clustered form")
 print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n")
 
 tests = input()
 
-#launch the clustering launcher
+#setup the desired config for the launcher
 if tests.lower() == "y":
 
     #possible configurations
@@ -33,23 +28,98 @@ if tests.lower() == "y":
     test_list = ""
     tests = "1 3 4 5"
 
+    print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+    print("Please enter the number of the row from 'Table 1' in the\n")
+    print("paper that you would like to run\n")
+    print("(Selection between 1 and 20)")
+    print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n")
+
+    while(True):
+        test_to_run = input()
+        try: 
+            if int(test_to_run) > 20 or int(test_to_run) < 1:
+                print("Invalid Input. Enter a valid row number from the paper.")
+            else:
+                break
+        except:
+            pass
+
+    #set up the desired test
+    if int(test_to_run) >= 1 and int(test_to_run) <= 8:
+        test_to_run = 1
+        strategy_to_run = int(test_to_run - 2)
+        if strategy_to_run <= 0:
+            strategy_to_run = 7
+
+    else if int(test_to_run) >= 9 and int(test_to_run) <= 16:
+        test_to_run = 3
+        strategy_to_run = int(test_to_run - 10)
+        if strategy_to_run <= 0:
+            strategy_to_run = 7
+
+    else if int(test_to_run) >= 17 and int(test_to_run) <= 18:
+        test_to_run = 4
+        if test_to_run == 17:
+            strategy_to_run = 7
+        else:
+            strategy_to_run = 5
+
+    else:
+        test_to_run = 5
+        if test_to_run == 17:
+            strategy_to_run = 7
+        else:
+            strategy_to_run = 5
+
+    configurations = possible_targets[int(test_to_run)]
+
+    print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
+    print("Enter a folder name to store the results in:")
+    print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n")
+    tests = input()
+
+    #start the test
+    #set file name
+    file_names = tests
+
+    #current folder to work with
+    current_folder = "./" + file_names
+
+    #see if the dirs we want are present
+    if not os.path.exists(current_folder):
+        os.mkdir(current_folder)
+
+    #navigate to new dir
+    wd = os.getcwd()
+    os.chdir(current_folder)
+
+    #build command line 
+    if (parallel):
+        command_line = str(int(strategy_to_run)-1) + " " + str(configurations[0]) + " " + str(configurations[1]) + " " + str(configurations[2])
+    else:
+        command_line = str(int(strategy_to_run)-1) + " " + str(configurations[0]) + " " + str(configurations[1]) + " " + str(configurations[2]) + " -1"
+
     print("Running tests......")
     print("Terminal will exit when tests finish....")
 
-    #launch each target set
-    for target in tests:
-        test_list = str(int(test) - 1) + " "
-        wd = os.getcwd()
-        p = subprocess.Popen(["python3", wd + "/clusteredLauncher.py", test_list])
-        p.wait()
+    #spawn test in dir
+    f = open("output.txt", "w")
+    p = subprocess.Popen(["python3", wd + "/main.py", command_line], stdout=f)
+    p.wait()
     exit(0)
 
 #determine if clustered or not 
 print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
-print("Would you like to run these tests clustered? (Y/N)\n")
+print("Would you like to run tests clustered? (Y/N)\n")
 print("This means that any selected tests will run strategies")
 print("1, 2, 3, 4, 5, 6 and the baseline before finishing.\n")
-print("To run specfic strategies only, enter 'N'")
+print("")
+print("WARNING: BE SURE YOU HAVE ENOUGH RAM TO DO THIS\n")
+print("each 30-30-9 test uses about 6gb of ram while each")
+print("50-50-9 test uses about 15gb of ram. To ensure you can")
+print("complete these tests clustered, we suggest 128gb of ram.")
+print("")
+print("To run a specific test only, select 'N' ")
 print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n")
 
 tests = input()
