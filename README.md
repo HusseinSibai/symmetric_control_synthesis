@@ -1,6 +1,6 @@
 # Symmetric Control Synthesis
 
-## Run main_archive.py
+## Setup
 
 ### On Apple M2 Pro
 
@@ -18,5 +18,11 @@
     - Signal Processing Toolbox
     - Statistics and Machine Learning Toolbox
 - Include IFAC20 in your Download folder (temporary setup)
-- Python packages: z3-solver, rtree, matlab, matlabengine
-- When running main_archive.py do it from a folder where all output plots will be stored
+- Python version: anything above 3.9 should work, be sure to use the base python installation and not use python through anaconda
+- Python packages: rtree, matlab, matlabengine, polytope, multiprocess, shared_memory_dict, qpsolvers\[clarabel\]
+
+## Running the experiments
+
+### Replicating the paper's results
+
+- Using mainLauncher.py you are prompted for which test to run

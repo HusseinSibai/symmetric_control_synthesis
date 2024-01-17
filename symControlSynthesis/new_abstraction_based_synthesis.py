@@ -85,6 +85,10 @@ class RelCoordState:
 
 
 def transform_poly_to_abstract(reg: pc.Region, state: np.array, project_to_pos=False):
+    # this function takes a polytope in the state space and transforms it to the abstract coordinates.
+    # this should be provided by the user as it depends on the symmetries
+    # Hussein: unlike the work in SceneChecker, we here rotate then translate, non-ideal, I prefer translation
+    # then rotation but this requires changing find_frame which would take time.
     if project_to_pos:
         translation_vector = np.array([-1 * state[0], -1 * state[1]])
         new_reg = project_region_to_position_coordinates(copy.deepcopy(reg))
@@ -263,6 +267,7 @@ def get_poly_union(poly_1: pc.Region, poly_2: pc.Region, check_convex=False):
     return pc.union(poly_1, poly_2, check_convex=check_convex)
 
 
+# https://stackoverflow.com/questions/11406189/determine-if-angle-lies-between-2-other-angles
 def is_within_range(angle, a, b):
     a, b = fix_angle_interval(a, b)
     ang = fix_angle(angle)
@@ -377,19 +382,28 @@ def rotatedRectWithMaxArea(w, h, angle):
     width_is_longer = w >= h
     side_long, side_short = (w, h) if width_is_longer else (h, w)
 
+    # since the solutions for angle, -angle and 180-angle are all the same,
+    # if suffices to look at the first quadrant and the absolute values of sin,cos:
     sin_a, cos_a = abs(math.sin(angle)), abs(math.cos(angle))
     if side_short <= 2. * sin_a * cos_a * side_long or abs(sin_a - cos_a) < 1e-10:
+        # half constrained case: two crop corners touch the longer side,
+        #   the other two corners are on the mid-line parallel to the longer line
         x = 0.5 * side_short
         wr, hr = (x / sin_a, x / cos_a) if width_is_longer else (x / cos_a, x / sin_a)
     else:
+        # fully constrained case: crop touches all 4 sides
         cos_2a = cos_a * cos_a - sin_a * sin_a
         wr, hr = (w * cos_a - h * sin_a) / cos_2a, (h * cos_a - w * sin_a) / cos_2a
 
     return wr, hr
 
 
+# translated and adapted  from a Javascript code
+# from https://codegrepr.com/question/calculate-largest-inscribed-rectangle-in-a-rotated-rectangle/
+# A function that rotates a rectangle by angle alpha (the xy-coordinate system by angle -alpha) and translates
+# the third coordinate accordingly.
 def transform_to_frame(rect: np.array, state: np.array, overapproximate=True):
-    ang = state[2] 
+    ang = state[2] # psi = 0 is North, psi = pi/2 is east
 
     while ang < 0:
         ang += 2 * math.pi
@@ -590,12 +604,16 @@ def subtract_rectangles(rect1, rect2):
     Partially Generated using ChatGPT
     Subtract rect2 from rect1 and return the resulting rectangles
     """
+
+    # Find the overlapping region between rect1 and rect2
     min_overlap = np.maximum(rect1[0, :], rect2[0, :])
     max_overlap = np.minimum(rect1[1, :], rect2[1, :])
 
+    # If there is no overlapping region, return rect2
     if np.any(max_overlap <= min_overlap):
         return [rect1]
 
+    # Split rect2 into multiple rectangles based on the overlapping region
     rects = []
     for dim in range(rect1.shape[1]):
         if min_overlap[dim] > rect1[0, dim]:
@@ -1050,6 +1068,7 @@ def create_symmetry_abstract_states_sequential(symbols_to_explore, symbol_step, 
         s_rect[0, :] = np.maximum(X_low, s_rect[0, :])
         s_rect[1, :] = np.minimum(X_up, s_rect[1, :])
 
+        # transforming the targets and obstacles to a new coordinate system relative to the states in s.
         abstract_targets_polys = []
         abstract_targets_rects = []
         abstract_targets_polys_over_approx = []
@@ -1197,9 +1216,6 @@ def add_concrete_state_to_symmetry_abstract_state(curr_concrete_state_idx, abstr
 def get_concrete_transition(s_idx, u_idx, concrete_edges,
                             sym_x, symbol_step, abstract_reachable_sets,
                             obstacles_rects, obstacle_indices, targets_rects, target_indices, X_low, X_up, benchmark):
-    '''if benchmark and (s_idx, u_idx) in concrete_edges:
-        return [-2], False
-    el'''
     if (s_idx, u_idx) in concrete_edges:
         neighbors = concrete_edges[(s_idx, u_idx)]
         indices_to_delete = []
@@ -1253,9 +1269,6 @@ def get_concrete_transition(s_idx, u_idx, concrete_edges,
         
 
     if len(indices_to_delete) == len(neighbors):
-        
-        '''if not benchmark:
-            '''
         concrete_edges[(s_idx, u_idx)] = [-1]
         return [-1], True
 
@@ -1263,8 +1276,6 @@ def get_concrete_transition(s_idx, u_idx, concrete_edges,
         neighbors = np.delete(np.array(neighbors), np.array(indices_to_delete).astype(int)).tolist()
         neighbors.append(-1)
 
-    '''if not benchmark:
-        '''
     concrete_edges[(s_idx, u_idx)] = copy.deepcopy(neighbors)
     return set(neighbors), True
 

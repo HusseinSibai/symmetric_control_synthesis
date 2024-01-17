@@ -1,12 +1,5 @@
-import random
-from datetime import datetime
-import sys
 import os
-from multiprocessing import shared_memory
 import subprocess
-from subprocess import Popen, PIPE
-from shared_memory_dict import SharedMemoryDict
-import time
 
 possible_targets = [[25,25,9], [30,30,9], [40,40,9], [50,50,9], [60, 70, 50], [80, 100, 50]]
 parallel = False
