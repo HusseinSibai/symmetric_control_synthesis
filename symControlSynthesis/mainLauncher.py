@@ -35,9 +35,9 @@ if tests.lower() == "y":
     print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n")
 
     while(True):
-        test_to_run = input()
+        selected_row = input()
         try: 
-            if int(test_to_run) > 20 or int(test_to_run) < 1:
+            if int(selected_row) > 20 or int(selected_row) < 1:
                 print("Invalid Input. Enter a valid row number from the paper.")
             else:
                 break
@@ -45,28 +45,28 @@ if tests.lower() == "y":
             pass
 
     #set up the desired test
-    if int(test_to_run) >= 1 and int(test_to_run) <= 8:
+    if int(selected_row) >= 1 and int(selected_row) <= 8:
         test_to_run = 1
-        strategy_to_run = int(test_to_run - 2)
+        strategy_to_run = int(selected_row - 2)
         if strategy_to_run <= 0:
             strategy_to_run = 7
 
-    else if int(test_to_run) >= 9 and int(test_to_run) <= 16:
+    elif int(selected_row) >= 9 and int(selected_row) <= 16:
         test_to_run = 3
-        strategy_to_run = int(test_to_run - 10)
+        strategy_to_run = int(selected_row - 10)
         if strategy_to_run <= 0:
             strategy_to_run = 7
 
-    else if int(test_to_run) >= 17 and int(test_to_run) <= 18:
+    elif int(selected_row) >= 17 and int(selected_row) <= 18:
         test_to_run = 4
-        if test_to_run == 17:
+        if selected_row == 17:
             strategy_to_run = 7
         else:
             strategy_to_run = 5
 
     else:
         test_to_run = 5
-        if test_to_run == 17:
+        if selected_row == 19:
             strategy_to_run = 7
         else:
             strategy_to_run = 5
