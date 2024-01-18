@@ -25,4 +25,9 @@
 
 ### Replicating the paper's results
 
-- Using mainLauncher.py you are prompted for which test to run
+- Using symControlSynthesis as a working directory start the launcher with
+```python3 mainLauncher.py```
+You will be prompted to which tests you want to replicate and give a folder name to store the results
+- Some results might not exactly match the numbers given in the paper. The reasons for this are:
+  - The way neighboring cells are computed each iteration of the synthesis depends on the order in which controllable states are discovered, which varies with poll assignment and parallelization
+  - The results for the benchmark of the largest experiments in the paper were computed on a slightly different version of the synthesis

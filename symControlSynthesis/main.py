@@ -173,4 +173,4 @@ if __name__ == '__main__':
     M = 5
     abstract_synthesis(U_discrete, time_step, W_low, W_up,
                     Symbolic_reduced, sym_x, sym_u, state_dimensions,
-                    Target_low, Target_up, Obstacle_low, Obstacle_up, X_low, X_up, eng, int(test_to_run) + 1, parallel)
+                    Target_low, Target_up, Obstacle_low, Obstacle_up, X_low, X_up, int(test_to_run) + 1, parallel)

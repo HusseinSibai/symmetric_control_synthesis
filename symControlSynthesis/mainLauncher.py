@@ -28,9 +28,9 @@ if tests.lower() == "y":
     print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n")
 
     while(True):
-        test_to_run = input()
+        test_to_run = int(input())
         try: 
-            if int(test_to_run) > 20 or int(test_to_run) < 1:
+            if test_to_run > 20 or test_to_run < 1:
                 print("Invalid Input. Enter a valid row number from the paper.")
             else:
                 break
@@ -38,19 +38,19 @@ if tests.lower() == "y":
             pass
 
     #set up the desired test
-    if int(test_to_run) >= 1 and int(test_to_run) <= 8:
+    if test_to_run >= 1 and test_to_run <= 8:
         resolution = 1
-        strategy_to_run = int(test_to_run - 2)
+        strategy_to_run = test_to_run - 2
         if strategy_to_run <= 0:
             strategy_to_run = 7
 
-    elif int(test_to_run) >= 9 and int(test_to_run) <= 16:
+    elif test_to_run >= 9 and test_to_run <= 16:
         resolution = 3
         strategy_to_run = int(test_to_run - 10)
         if strategy_to_run <= 0:
             strategy_to_run = 7
 
-    elif int(test_to_run) >= 17 and int(test_to_run) <= 18:
+    elif test_to_run >= 17 and test_to_run <= 18:
         resolution = 4
         if test_to_run == 17:
             strategy_to_run = 7
@@ -178,7 +178,7 @@ print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n")
 while(True):
     test_to_run = input()
     try: 
-        if int(test_to_run) < 1 or int(test_to_run) > 4:
+        if test_to_run < 1 or test_to_run > 4:
             print("Please enter a number from the selection above:")
         else:
             break
@@ -198,7 +198,7 @@ print("6. polls + no closest + neighbors")
 print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n")
 
 while(True):
-    strategy_to_run = input()
+    strategy_to_run = int(input())
     try: 
         if int(strategy_to_run) < 1 or int(strategy_to_run) > 6:
             print("Please enter a number from the selection above:")
@@ -207,7 +207,7 @@ while(True):
     except:
         pass
 
-configurations = possible_targets[int(test_to_run) -1]
+configurations = possible_targets[test_to_run -1]
 
 print("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++")
 print("Run the abstraction with multicore enabled? (Y/N)")
