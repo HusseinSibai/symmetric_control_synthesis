@@ -12,7 +12,6 @@ import copy
 
 import itertools
 from scipy.spatial import ConvexHull
-from scipy.integrate import odeint
 
 from qpsolvers import solve_qp
 
@@ -1358,90 +1357,6 @@ def plot_abstract_states(symmetry_abstract_states, deleted_abstract_states,
     plt.savefig("Abstract reachable sets after synthesis")
 
 
-def physics_model(X, t, u, w):
-    '''
-    Physics model of control.
-    z[0], z[1] Position of rear wheel in stationary coordinates.
-    z[2] theta: Heading. 
-
-    u: input velocity and steering angle
-    w: disturbance
-    '''
-    x = X[0]
-    y = X[1]
-    theta = X[2]
-
-    ux = u[0]
-    uy = u[1]
-    utheta = u[2]
-
-    dxrdt = ux * np.cos(theta) - uy * np.sin(theta) + w[0]
-    dyrdt = ux * np.sin(theta) + uy * np.cos(theta) + w[1]
-    dthetadt = utheta + w[2]
-
-    dXdt = [dxrdt, dyrdt, dthetadt]
-    return dXdt
-
-
-def plot_controller(concrete_controller,
-                    controllable_concrete_states,
-                    U_discrete, sym_x, symbol_step, X_low, X_up, W_low, W_up):
-    
-    discrete_state = np.random.choice(controllable_concrete_states)
-    rect_state = concrete_index_to_rect(discrete_state, sym_x, symbol_step, X_low, X_up)
-    continuous_state = [np.random.uniform(rect_state[0][i], rect_state[1][i]) for i in range(3)]
-    #"random point in discrete_state"
-
-    X0 = continuous_state.copy()
-
-    for i in range(0, 100):
-        u_idx = concrete_controller[discrete_state]
-        u = U_discrete[:, u_idx].reshape((1, 3)).T
-
-        #simulate ODE
-        #modulo 2pi
-        
-        w = [np.random.uniform(W_low[i], W_up[i]) for i in range(3)]
-
-        """This loop solves the ODE for each pair of time points
-        with fixed controller input"""
-        
-        tspan = [3*i, 3*i+3]
-        # solve ODE for next time interval with input u0 from new initial set z0
-        z = odeint(physics_model, X0, tspan, args=(u, w))
-        # store solution (x,y,\theta) for plotting
-        x = np.append(x, X0[1][0])
-        y = np.append(y, X0[1][1])
-        theta = np.append(theta, X0[1][2])
-        xf = np.append(xf, x[-1] + np.cos(theta[-1]))
-        yf = np.append(yf, y[-1] + np.sin(theta[-1]))
-
-        # next initial conditions
-        z0 = z[1]
-        # next controller input
-        
-        if delta == None:
-            print("Can't continue loop")
-            break
-        else:
-            u0 = [delta, v_r]
-
-        #get last state
-
-        #find grid cell with symbol step
-        grid_idx = (x - X_low) / symbol_step
-    
-        #grid cell to concrete_state
-
-        #use rect_to_indices
-        
-
-        #if in target then break
-
-        #else continue
-
-    pass
-
 
 def create_symmetry_abstract_reachable_sets(Symbolic_reduced, n, reachability_rtree_idx2d, reachability_rtree_idx3d):
     reachable_rect_global_cntr = 0
@@ -2054,7 +1969,11 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
 
     t_synthesis += time.time() - temp_t_synthesis
 
-    np.save('concrete_controller.npy', concrete_controller)
+    np.save('concrete_controller.npy', np.array(list(concrete_controller.items())))
+    np.save('target_indices.npy', target_indices)
+    np.save('U_discrete.npy', U_discrete)
+    np.save('parameters.npy', sym_x)
+
 
     if strategy_1:
         print("Strategy: polls - all targets, sorted by distance")
@@ -2105,7 +2024,10 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
     
     #write out to csv file
     csvOut = open("results.csv", "w")
-    csvOut.write(str(nb_concrete) + "," + str(nb_explore) + "," + str(nb_abstract) + "," + str(nb_abstract_obstacle) + "," + str(len(concrete_controller)) + "," + str(min_len) + '/' + str(average_len) + '/' + str(median_len) + '/' + str(max_len) + "," + str(average_ratio_neighbor_to_total) + "," + str(get_concrete_transition_calls + unique_state_u_pairs_explored) + "," + str(get_concrete_transition_calls + total_state_u_pairs_explored) + "," + str(average_path_length) + "," + str(nb_synthesis) + "," + str(t_abstraction) + "," + str(t_synthesis) + "," + str((time.time() - t_start) - time_spinning))
+    if benchmark:
+        csvOut.write(str(nb_concrete) + "," + str(nb_explore) + "," + str(nb_abstract) + "," + str(nb_abstract_obstacle) + "," + str(len(concrete_controller)) + "," + "No polls" + "," + "No exploration ratio" + "," + str(get_concrete_transition_calls + unique_state_u_pairs_explored) + "," + str(get_concrete_transition_calls + total_state_u_pairs_explored) + "," + str(total_states_explored) + "," + str(average_path_length) + "," + str(nb_synthesis) + "," + str(t_abstraction) + "," + str(t_synthesis) + "," + str((time.time() - t_start) - time_spinning))
+    else:
+        csvOut.write(str(nb_concrete) + "," + str(nb_explore) + "," + str(nb_abstract) + "," + str(nb_abstract_obstacle) + "," + str(len(concrete_controller)) + "," + str(min_len) + '/' + str(average_len) + '/' + str(median_len) + '/' + str(max_len) + "," + str(average_ratio_neighbor_to_total) + "," + str(get_concrete_transition_calls + unique_state_u_pairs_explored) + "," + str(get_concrete_transition_calls + total_state_u_pairs_explored) + "," + str(total_states_explored) + "," + str(average_path_length) + "," + str(nb_synthesis) + "," + str(t_abstraction) + "," + str(t_synthesis) + "," + str((time.time() - t_start) - time_spinning))
     csvOut.close()
     
     #signal full program run
