@@ -828,7 +828,7 @@ def create_symmetry_abstract_states_threaded(lock_one, lock_two, symbols_to_expl
                         next_concrete_state_indices, _ = get_concrete_transition(s, hit_object, concrete_edges,
                                                                 sym_x, symbol_step, abstract_reachable_sets,
                                                                 obstacles_rects, obstacle_indices, targets_rects,
-                                                                target_indices, X_low, X_up, strategy_arr[0])
+                                                                target_indices, X_low, X_up)
                         get_concrete_transition_calls += 1
 
                         is_obstructed_u_idx[hit_object] = (next_concrete_state_indices == [-2])
@@ -1140,7 +1140,7 @@ def create_symmetry_abstract_states_sequential(symbols_to_explore, symbol_step, 
                         next_concrete_state_indices, _ = get_concrete_transition(s, hit_object, concrete_edges,
                                                                 sym_x, symbol_step, abstract_reachable_sets,
                                                                 obstacles_rects, obstacle_indices, targets_rects,
-                                                                target_indices, X_low, X_up, strategy_arr[0])
+                                                                target_indices, X_low, X_up)
                         get_concrete_transition_calls += 1
 
                         is_obstructed_u_idx[hit_object] = (next_concrete_state_indices == [-2])
@@ -1214,7 +1214,7 @@ def add_concrete_state_to_symmetry_abstract_state(curr_concrete_state_idx, abstr
 
 def get_concrete_transition(s_idx, u_idx, concrete_edges,
                             sym_x, symbol_step, abstract_reachable_sets,
-                            obstacles_rects, obstacle_indices, targets_rects, target_indices, X_low, X_up, benchmark):
+                            obstacles_rects, obstacle_indices, targets_rects, target_indices, X_low, X_up):
     if (s_idx, u_idx) in concrete_edges:
         neighbors = concrete_edges[(s_idx, u_idx)]
         indices_to_delete = []
@@ -1459,7 +1459,7 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                                        X_low, X_up, sym_x, symbol_step, strategy_arr):
     t_start = time.time()
     num_controllable_states = 0
-    n = X_up.shape[0]
+
     abstract_state_to_u_idx_poll = {} 
     abstract_state_to_u_idx_set = {}
 
@@ -1513,7 +1513,7 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                 next_concrete_state_indices, is_new_entry = get_concrete_transition(concrete_state_idx, u_idx, concrete_edges,
                                                                     sym_x, symbol_step, abstract_reachable_sets,
                                                                     obstacles_rects, obstacle_indices, targets_rects,
-                                                                    controllable_concrete_states, X_low, X_up, strategy_arr[0])
+                                                                    controllable_concrete_states, X_low, X_up)
                 if is_new_entry:
                     unique_state_u_pairs_explored += 1
                 total_state_u_pairs_explored += 1
@@ -1575,7 +1575,7 @@ def symmetry_abstract_synthesis_helper(concrete_states_to_explore,
                                     get_concrete_transition(concrete_state_idx, hit_object, concrete_edges,
                                                                 sym_x, symbol_step, abstract_reachable_sets,
                                                                 obstacles_rects, obstacle_indices, targets_rects,
-                                                                controllable_concrete_states, X_low, X_up, strategy_arr[0])
+                                                                controllable_concrete_states, X_low, X_up)
                                 if is_new_entry:
                                     unique_state_u_pairs_explored += 1
                                 total_state_u_pairs_explored += 1
@@ -1681,7 +1681,7 @@ def symmetry_synthesis_helper(concrete_states_to_explore,
                               controllable_concrete_states,
                               concrete_controller,
                               obstacles_rects, obstacle_indices,
-                              targets_rects, X_low, X_up, sym_x, symbol_step):
+                              targets_rects, X_low, X_up, sym_x, symbol_step, rand=False):
     t_start = time.time()
     num_controllable_states = 0
 
@@ -1699,9 +1699,13 @@ def symmetry_synthesis_helper(concrete_states_to_explore,
         
         for concrete_state_idx in concrete_states_to_explore:
 
-                    
-            hits = list(range(len(abstract_reachable_sets)))
             total_states_explored += 1
+
+            if rand:
+                hits = np.random.sample(list(range(len(abstract_reachable_sets))), 375)
+            else:
+                hits = list(range(len(abstract_reachable_sets)))
+            
             
             if len(hits):
                 for hit in hits:
@@ -1710,7 +1714,7 @@ def symmetry_synthesis_helper(concrete_states_to_explore,
                                                     concrete_edges,
                                                     sym_x, symbol_step, abstract_reachable_sets,
                                                     obstacles_rects, obstacle_indices, targets_rects,
-                                                    controllable_concrete_states, X_low, X_up, True)
+                                                    controllable_concrete_states, X_low, X_up)
                     if is_new_entry:
                         unique_state_u_pairs_explored += 1
                     total_state_u_pairs_explored += 1
@@ -1775,13 +1779,15 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
                        Target_low, Target_up, Obstacle_low, Obstacle_up, X_low, X_up,
                        strategy_num, parallel):
     
-    if strategy_num < 1 or strategy_num > 7:
+    if strategy_num < 1 or strategy_num > 8:
         raise("Invalid strategy number")
     else:
-        benchmark, strategy_1, strategy_2, strategy_3, strategy_4, strategy_5, strategy_6 = \
-            False, False, False, False, False, False, False
+        benchmark, strategy_1, strategy_2, strategy_3, strategy_4, strategy_5, strategy_6, benchmark_rand = \
+            False, False, False, False, False, False, False, False
         if strategy_num == 7:
             benchmark = True
+        elif strategy_num == 8:
+            benchmark_rand = True
         elif strategy_num == 1:
             strategy_1 = True
         elif strategy_num == 2:
@@ -1795,7 +1801,7 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
         elif strategy_num == 6:
             strategy_6 = True
 
-    strategy_arr = [benchmark, strategy_1, strategy_2, strategy_3, strategy_4, strategy_5, strategy_6]
+    strategy_arr = [benchmark, strategy_1, strategy_2, strategy_3, strategy_4, strategy_5, strategy_6, benchmark_rand]
         
     if parallel:
         create_symmetry_abstract_states = create_symmetry_abstract_states_parallel
@@ -1866,7 +1872,7 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
     symbols_to_explore = symbols_to_explore.difference(obstacle_indices)
 
     
-    if not benchmark:
+    if not benchmark and not benchmark_rand:
         t_start = time.time()
 
         symmetry_transformed_targets_and_obstacles, concrete_to_abstract, abstract_to_concrete, \
@@ -1934,7 +1940,7 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
 
     nb_explore = len(concrete_states_to_explore)
 
-    if benchmark:
+    if benchmark or benchmark_rand:
         concrete_controller, unique_state_u_pairs_explored, \
             total_state_u_pairs_explored, total_states_explored, average_path_length, nb_synthesis = symmetry_synthesis_helper(
             concrete_states_to_explore,
@@ -1943,8 +1949,7 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
             controllable_concrete_states,
             concrete_controller,
             obstacles_rects, obstacle_indices,
-            targets_rects, X_low, X_up, sym_x, symbol_step)
-        
+            targets_rects, X_low, X_up, sym_x, symbol_step, rand=benchmark_rand)
     else:
         obstacle_indices = obstacle_indices.union(set(abstract_to_concrete[0]))
 
@@ -1987,8 +1992,10 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
         print("Strategy: polls - only the 400 nearest targets - neighbors exploration")
     elif strategy_6:
         print("Strategy: polls - all targets, unsorted - neighbors exploration")
-    else:
+    elif benchmark:
         print("Strategy: baseline - no abstraction - exhaustive search")
+    else:
+        print("Strategy: baseline - no abstraction - random search (400 samples)")
 
 
     print('Total number of concrete states: ', nb_concrete)
@@ -1996,7 +2003,7 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
     print('Number of abstract states: ', nb_abstract)
     print('States in the abstract obstacle: ', nb_abstract_obstacle)
     print('Number of controllable states: ', len(concrete_controller))
-    if benchmark:
+    if benchmark or benchmark_rand:
         print('No poll stats')
         print('No neighbor/total exploration ratio')
     elif poll_lengths:
@@ -2024,7 +2031,7 @@ def abstract_synthesis(U_discrete, time_step, W_low, W_up,
     
     #write out to csv file
     csvOut = open("results.csv", "w")
-    if benchmark:
+    if benchmark or benchmark_rand:
         csvOut.write(str(nb_concrete) + "," + str(nb_explore) + "," + str(nb_abstract) + "," + str(nb_abstract_obstacle) + "," + str(len(concrete_controller)) + "," + "No polls" + "," + "No exploration ratio" + "," + str(get_concrete_transition_calls + unique_state_u_pairs_explored) + "," + str(get_concrete_transition_calls + total_state_u_pairs_explored) + "," + str(total_states_explored) + "," + str(average_path_length) + "," + str(nb_synthesis) + "," + str(t_abstraction) + "," + str(t_synthesis) + "," + str((time.time() - t_start) - time_spinning))
     else:
         csvOut.write(str(nb_concrete) + "," + str(nb_explore) + "," + str(nb_abstract) + "," + str(nb_abstract_obstacle) + "," + str(len(concrete_controller)) + "," + str(min_len) + '/' + str(average_len) + '/' + str(median_len) + '/' + str(max_len) + "," + str(average_ratio_neighbor_to_total) + "," + str(get_concrete_transition_calls + unique_state_u_pairs_explored) + "," + str(get_concrete_transition_calls + total_state_u_pairs_explored) + "," + str(total_states_explored) + "," + str(average_path_length) + "," + str(nb_synthesis) + "," + str(t_abstraction) + "," + str(t_synthesis) + "," + str((time.time() - t_start) - time_spinning))
