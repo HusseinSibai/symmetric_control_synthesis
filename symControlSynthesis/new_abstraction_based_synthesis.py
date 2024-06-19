@@ -1702,7 +1702,7 @@ def symmetry_synthesis_helper(concrete_states_to_explore,
             total_states_explored += 1
 
             if rand:
-                hits = np.random.sample(list(range(len(abstract_reachable_sets))), 375)
+                hits = np.random.choice(list(range(len(abstract_reachable_sets))), size=375, replace=False)
             else:
                 hits = list(range(len(abstract_reachable_sets)))
             
